@@ -1,0 +1,33 @@
+{
+    "name": "CYFramework.Gameplay.DOTS",
+    "rootNamespace": "CYFramework.Runtime.Gameplay.DOTS",
+    "references": [
+        "CYFramework.Core",
+        "Unity.Entities",
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections"
+    ],
+    "includePlatforms": [
+        "Editor",
+        "WindowsStandalone64",
+        "macOSStandalone",
+        "LinuxStandalone64",
+        "iOS",
+        "Android"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.entities",
+            "expression": "1.0.0",
+            "define": "ENABLE_DOTS"
+        }
+    ],
+    "noEngineReferences": false
+}

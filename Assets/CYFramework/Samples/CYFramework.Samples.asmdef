@@ -1,0 +1,16 @@
+{
+    "name": "CYFramework.Samples",
+    "rootNamespace": "CYFramework.Samples",
+    "references": [
+        "CYFramework.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
