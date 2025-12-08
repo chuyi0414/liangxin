@@ -1,1073 +1,1023 @@
-# CYFramework API 参考文档
+# CYFramework 2.2 API 参考文档
 
 ## 目录
 
-1. [框架入口](#1-框架入口)
-2. [核心模块](#2-核心模块)
-   - [LogModule 日志模块](#21-logmodule-日志模块)
-   - [EventModule 事件模块](#22-eventmodule-事件模块)
-   - [TimerModule 定时器模块](#23-timermodule-定时器模块)
-   - [ObjectPoolModule 对象池模块](#24-objectpoolmodule-对象池模块)
-   - [ResourceModule 资源模块](#25-resourcemodule-资源模块)
-   - [StorageModule 存储模块](#26-storagemodule-存储模块)
-   - [SoundModule 声音模块](#27-soundmodule-声音模块)
-   - [UIModule UI模块](#28-uimodule-ui模块)
-   - [ProcedureModule 流程模块](#29-proceduremodule-流程模块)
-   - [SchedulerModule 分帧调度模块](#210-schedulermodule-分帧调度模块)
-3. [玩法世界](#3-玩法世界)
-   - [IGameplayWorld 接口](#31-igameplayworld-接口)
-   - [GameplayWorldOOP 实现](#32-gameplayworldoop-实现)
-   - [GameplayWorldDots 实现](#33-gameplayworlddots-实现)
-4. [数据结构](#4-数据结构)
-5. [平台服务](#5-平台服务)
+- [1. 快速入门](#1-快速入门)
+- [2. 基础设施层](#2-基础设施层)
+  - [2.1 ServiceLocator](#21-servicelocator)
+  - [2.2 生命周期接口](#22-生命周期接口)
+  - [2.3 CYBootstrap](#23-cybootstrap)
+- [3. 核心服务层](#3-核心服务层)
+  - [3.1 EventBus](#31-eventbus)
+  - [3.2 CYLog](#32-cylog)
+  - [3.3 ObjectPool](#33-objectpool)
+  - [3.4 ConfigLoader](#34-configloader)
+  - [3.5 ResourceLoader](#35-resourceloader)
+  - [3.6 NetworkService](#36-networkservice)
+  - [3.7 SaveService](#37-saveservice)
+  - [3.8 AudioService](#38-audioservice)
+  - [3.9 HotUpdateService](#39-hotupdateservice)
+- [4. 玩法核心层](#4-玩法核心层)
+  - [4.1 IGameplayWorld](#41-igameplayworld)
+  - [4.2 InputBuffer](#42-inputbuffer)
+  - [4.3 RenderProxy](#43-renderproxy)
+  - [4.4 状态机与AI](#44-状态机与ai)
+- [5. 调试工具](#5-调试工具)
+- [6. 平台适配](#6-平台适配)
 
 ---
 
-## 1. 框架入口
+## 1. 快速入门
 
-### CYFW 快捷访问（推荐）
+### 1.1 安装
 
-全局静态类，简化模块访问。
+1. 将 `CYFramework` 文件夹放入 `Assets/` 目录
+2. 在场景中创建空 GameObject，命名为 `[CYFramework]`
+3. 添加 `CYBootstrap` 组件
+4. 运行即可
+
+### 1.2 第一个示例
 
 ```csharp
-// 直接使用，无需获取实例
-CYFW.Timer.Delay(1f, () => Debug.Log("1秒后"));
-CYFW.Sound.PlaySFX("Audio/Click");
-CYFW.UI.OpenPanel<SettingsPanel>();
-CYFW.Storage.SetInt("Score", 100);
-CYFW.Event.Publish(new GameStartEvent());
+using CYFramework.Infrastructure;
+using CYFramework.Core.Event;
+using UnityEngine;
 
-// 检查框架是否就绪
-if (CYFW.IsReady)
+public class MyGameManager : MonoBehaviour
 {
-    // 框架已初始化
+    void Start()
+    {
+        // 获取服务
+        var eventBus = ServiceLocator.Get<EventBus>();
+        
+        // 订阅事件
+        eventBus.Subscribe<GameStartEvent>(OnGameStart, this);
+        
+        // 发布事件
+        var evt = new GameStartEvent { Level = 1 };
+        eventBus.Post(ref evt);
+    }
+    
+    void OnGameStart(GameStartEvent e)
+    {
+        CYLog.Info($"游戏开始，关卡: {e.Level}");
+    }
+}
+
+public struct GameStartEvent
+{
+    public int Level;
 }
 ```
 
-**完整列表**：
+### 1.3 平台宏定义
 
-| 快捷方式 | 模块 |
-|----------|------|
-| `CYFW.Log` | 日志模块 |
-| `CYFW.Event` | 事件模块 |
-| `CYFW.Timer` | 定时器模块 |
-| `CYFW.Pool` | 对象池模块 |
-| `CYFW.Resource` | 资源模块 |
-| `CYFW.Storage` | 存储模块 |
-| `CYFW.Sound` | 声音模块 |
-| `CYFW.UI` | UI模块 |
-| `CYFW.Procedure` | 流程模块 |
-| `CYFW.Scheduler` | 分帧调度模块 |
-| `CYFW.World` | 玩法世界 |
-| `CYFW.IsReady` | 框架是否就绪 |
+在 `Player Settings > Scripting Define Symbols` 中添加：
+
+| 宏 | 说明 |
+|-----|------|
+| `CY_WECHAT` | 微信小游戏平台 |
+| `CY_PC` | PC 平台（启用高级特性） |
+| `ENABLE_DOTS` | 启用 Hybrid DOTS 模式 |
 
 ---
 
-### CYFrameworkEntry
+## 2. 基础设施层
 
-框架的主入口，挂载在 GameObject 上驱动整个框架。
+### 2.1 ServiceLocator
 
-**Inspector 配置**：
+服务定位器，用于依赖注入和服务管理。
 
-| 分类 | 配置项 | 说明 |
-|------|--------|------|
-| 日志 | Log Level | 日志级别（Debug/Info/Warning/Error/Off） |
-| 日志 | Log Show Timestamp | 是否显示时间戳 |
-| 日志 | Log Show Module | 是否显示模块名 |
-| 对象池 | Pool Default Capacity | 每种类型默认最大容量 |
-| 对象池 | Pool Auto Expand | 是否自动扩容 |
-| 资源 | Resource Loader Type | 加载方式（Resources/AssetBundle/Addressables） |
-| 资源 | Resources Path Prefix | Resources 路径前缀 |
-| 资源 | Asset Bundle Path | AssetBundle 存放路径 |
-| 存储 | Storage Prefix | 存储键名前缀 |
-| 存储 | Storage Auto Save | 是否自动保存 |
-| 声音 | BGM/SFX Volume | 音量（0-1） |
-| 声音 | Mute BGM/SFX | 是否静音 |
-| UI | UI Panel Path Prefix | 面板预制体路径前缀 |
-| UI | UI Click Sound Path | UI 点击音效路径 |
-| 调度器 | Max Time Per Frame | 每帧最大执行时间(ms) |
-| 玩法世界 | Use Dots Implementation | 是否使用 DOTS 实现 |
-| 玩法世界 | Debug Mode / Time Scale 等 | 玩法世界参数 |
+#### 注册服务
 
 ```csharp
-// 获取框架实例（也可以用 CYFW.Instance）
-var fw = CYFrameworkEntry.Instance;
+// 方式 1: 接口 + 实现类（推荐）
+ServiceLocator.Register<IMyService, MyServiceImpl>();
 
-// 检查是否初始化
-if (fw.IsInitialized)
+// 方式 2: 工厂方法
+ServiceLocator.Register<MyService>(() => new MyService("config"));
+
+// 方式 3: 直接注册实例
+var instance = new MyService();
+ServiceLocator.RegisterInstance<IMyService>(instance);
+```
+
+#### 服务生命周期
+
+```csharp
+// Singleton（默认）：全局单例
+ServiceLocator.Register<IMyService, MyService>(ServiceScope.Singleton);
+
+// Scoped：场景级别，切场景时清理
+ServiceLocator.Register<IMyService, MyService>(ServiceScope.Scoped);
+
+// Transient：每次获取都创建新实例
+ServiceLocator.Register<IMyService, MyService>(ServiceScope.Transient);
+```
+
+#### 获取服务
+
+```csharp
+// 直接获取（服务不存在会抛异常）
+var service = ServiceLocator.Get<IMyService>();
+
+// 安全获取
+if (ServiceLocator.TryGet<IMyService>(out var service))
 {
-    // 框架已就绪
+    service.DoSomething();
+}
+```
+
+#### API 列表
+
+| 方法 | 说明 |
+|------|------|
+| `Register<TInterface, TImpl>()` | 注册服务 |
+| `Register<T>(Func<T> factory)` | 工厂注册 |
+| `RegisterInstance<T>(T instance)` | 注册实例 |
+| `Get<T>()` | 获取服务 |
+| `TryGet<T>(out T service)` | 安全获取 |
+| `InitializeAll()` | 初始化所有 IInitializable |
+| `DisposeAll()` | 销毁所有 IDisposableEx |
+| `ClearScoped()` | 清理 Scoped 服务 |
+| `ClearAll()` | 清理所有服务 |
+
+---
+
+### 2.2 生命周期接口
+
+实现这些接口的服务会被 CYBootstrap 自动调度。
+
+```csharp
+// 初始化接口
+public interface IInitializable
+{
+    int InitOrder { get; }  // 初始化顺序（小的先执行）
+    void Initialize();
 }
 
-// 获取模块
-var log = fw.Log;           // 日志模块
-var evt = fw.Event;         // 事件模块
-var timer = fw.Timer;       // 定时器模块
-var pool = fw.Pool;         // 对象池模块
-var res = fw.Resource;      // 资源模块
-var storage = fw.Storage;   // 存储模块
-var sound = fw.Sound;       // 声音模块
-var ui = fw.UI;             // UI模块
-var proc = fw.Procedure;    // 流程模块
-var sched = fw.Scheduler;   // 分帧调度模块
+// 固定帧更新（逻辑帧，30/60Hz）
+public interface ITickable
+{
+    int TickOrder { get; }
+    void Tick(float dt);
+}
 
-// 获取玩法世界
-var world = fw.GameplayWorld;
+// 每帧更新
+public interface IUpdateable
+{
+    int UpdateOrder { get; }
+    void OnUpdate(float dt);
+}
+
+// 暂停/恢复
+public interface IPausable
+{
+    void OnPause();
+    void OnResume(float pauseDuration);
+}
+
+// 销毁接口
+public interface IDisposableEx
+{
+    int DisposeOrder { get; }
+    void Dispose();
+}
+```
+
+#### 示例
+
+```csharp
+public class MySystem : IInitializable, ITickable, IDisposableEx
+{
+    public int InitOrder => 10;
+    public int TickOrder => 10;
+    public int DisposeOrder => 10;
+    
+    public void Initialize()
+    {
+        CYLog.Info("MySystem 初始化");
+    }
+    
+    public void Tick(float dt)
+    {
+        // 逻辑更新
+    }
+    
+    public void Dispose()
+    {
+        CYLog.Info("MySystem 销毁");
+    }
+}
 ```
 
 ---
 
-## 2. 核心模块
+### 2.3 CYBootstrap
 
-### 2.1 LogModule 日志模块
+框架启动器，挂载到场景 GameObject 上。
 
-提供分级日志输出，支持条件编译。
+#### Inspector 配置
 
-```csharp
-var log = CYFrameworkEntry.Instance.Log;
-
-// 调试日志（仅 Editor 和 Development Build）
-log.D("Game", "调试信息");
-
-// 信息日志
-log.I("Game", "普通信息");
-
-// 警告日志
-log.W("Game", "警告信息");
-
-// 错误日志
-log.E("Game", "错误信息");
-log.E("Game", "异常信息", exception);
-
-// 设置日志等级（低于此等级的日志不输出）
-log.CurrentLogLevel = LogLevel.Warning;
-
-// 开关日志
-log.IsEnabled = false;
-
-// 显示/隐藏时间戳
-log.ShowTimestamp = true;
-```
-
-**静态工具类**（无需获取模块实例）：
-
-```csharp
-Log.D("Tag", "调试");
-Log.I("Tag", "信息");
-Log.W("Tag", "警告");
-Log.E("Tag", "错误");
-```
+| 属性 | 说明 | 默认值 |
+|------|------|--------|
+| Log Level | 日志级别 | Debug |
+| Fixed Tick Rate | 逻辑帧率 | 30 |
+| Max Pause Tolerance | 切后台最大容忍时间 | 5s |
 
 ---
 
-### 2.2 EventModule 事件模块
+## 3. 核心服务层
 
-强类型事件系统，无装箱开销。
+### 3.1 EventBus
+
+零 GC 事件系统。
+
+#### 定义事件
 
 ```csharp
-var evt = CYFrameworkEntry.Instance.Event;
-
-// 定义事件（必须是 struct）
+// 使用 struct 避免 GC
 public struct PlayerDiedEvent
 {
     public int PlayerId;
     public Vector3 Position;
+    public string Killer;
 }
-
-// 订阅事件
-void OnPlayerDied(PlayerDiedEvent e)
-{
-    Debug.Log($"玩家 {e.PlayerId} 死亡");
-}
-evt.Subscribe<PlayerDiedEvent>(OnPlayerDied);
-
-// 发布事件
-evt.Publish(new PlayerDiedEvent 
-{ 
-    PlayerId = 1, 
-    Position = Vector3.zero 
-});
-
-// 取消订阅
-evt.Unsubscribe<PlayerDiedEvent>(OnPlayerDied);
-
-// 检查是否有监听者
-bool hasListeners = evt.HasListeners<PlayerDiedEvent>();
-
-// 清除指定类型的所有监听
-evt.Clear<PlayerDiedEvent>();
-
-// 清除所有监听
-evt.Clear();
 ```
 
-**内置事件**：
+#### 订阅事件
 
 ```csharp
-// 游戏开始事件
-public struct GameStartEvent { public int LevelId; public float StartTime; }
+var eventBus = ServiceLocator.Get<EventBus>();
 
-// 游戏结束事件
-public struct GameEndEvent { public bool IsWin; public int Score; }
+// 基本订阅
+eventBus.Subscribe<PlayerDiedEvent>(OnPlayerDied, this);
 
-// 伤害事件
-public struct DamageEvent { public int AttackerId; public int TargetId; public int Damage; public bool IsCritical; }
+// 带优先级（数字大的先执行）
+eventBus.Subscribe<PlayerDiedEvent>(OnPlayerDied, this, priority: 100);
+```
+
+#### 发布事件
+
+```csharp
+// ⚠️ 必须使用 ref 传递，避免装箱
+var evt = new PlayerDiedEvent { PlayerId = 1 };
+eventBus.Post(ref evt);
+```
+
+#### 取消订阅
+
+```csharp
+eventBus.Unsubscribe<PlayerDiedEvent>(OnPlayerDied);
+
+// 或取消某对象的所有订阅
+eventBus.UnsubscribeAll(this);
+```
+
+#### API 列表
+
+| 方法 | 说明 |
+|------|------|
+| `Subscribe<T>(Action<T>, object, int)` | 订阅事件 |
+| `Unsubscribe<T>(Action<T>)` | 取消订阅 |
+| `UnsubscribeAll(object)` | 取消对象所有订阅 |
+| `Post<T>(ref T)` | 发布事件 |
+| `Clear()` | 清空所有订阅 |
+
+---
+
+### 3.2 CYLog
+
+分级日志系统。
+
+#### 日志级别
+
+```csharp
+public enum LogLevel
+{
+    Verbose = 0,  // 详细调试
+    Debug = 1,    // 调试信息
+    Info = 2,     // 一般信息
+    Warning = 3,  // 警告
+    Error = 4,    // 错误
+    Fatal = 5,    // 致命错误
+    Off = 6       // 关闭日志
+}
+```
+
+#### 使用方法
+
+```csharp
+CYLog.Verbose("详细信息");
+CYLog.Debug("调试信息");
+CYLog.Info("一般信息");
+CYLog.Warning("警告");
+CYLog.Error("错误");
+CYLog.Fatal("致命错误");
+
+// 带条件的日志（避免字符串拼接开销）
+CYLog.DebugIf(isDebugMode, () => $"复杂计算结果: {Calculate()}");
+```
+
+#### 配置
+
+```csharp
+// 初始化时设置级别
+CYLog.Initialize(LogLevel.Info);
+
+// 运行时修改
+CYLog.SetLevel(LogLevel.Warning);
 ```
 
 ---
 
-### 2.3 TimerModule 定时器模块
+### 3.3 ObjectPool
 
-支持延时调用和循环调用。
+对象池管理器，支持数据对象和 GameObject。
+
+#### 数据对象池
 
 ```csharp
-var timer = CYFrameworkEntry.Instance.Timer;
+var poolManager = ServiceLocator.Get<PoolManager>();
 
-// 延时调用（3秒后执行一次）
-int id1 = timer.Delay(3f, () => Debug.Log("3秒到了"));
+// 注册池（预热 10 个）
+poolManager.RegisterDataPool<Bullet>(
+    createFunc: () => new Bullet(),
+    prewarm: 10,
+    maxSize: 100
+);
 
-// 循环调用（每1秒执行一次）
-int id2 = timer.Loop(1f, () => Debug.Log("每秒执行"));
+// 获取对象
+var bullet = poolManager.Spawn<Bullet>();
 
-// 使用真实时间（不受 Time.timeScale 影响）
-int id3 = timer.Delay(5f, () => Debug.Log("5秒真实时间"), useUnscaledTime: true);
-
-// 取消定时器
-timer.Cancel(id1);
-
-// 暂停/恢复定时器
-timer.Pause(id2);
-timer.Resume(id2);
-
-// 取消所有定时器
-timer.CancelAll();
-
-// 获取活跃定时器数量
-int count = timer.ActiveTimerCount;
+// 归还对象
+poolManager.Despawn(bullet);
 ```
 
----
-
-### 2.4 ObjectPoolModule 对象池模块
-
-泛型对象池，减少 GC。
+#### GameObject 池
 
 ```csharp
-var pool = CYFrameworkEntry.Instance.Pool;
+// 注册 Prefab 池
+poolManager.RegisterPrefabPool(
+    bulletPrefab,
+    prewarm: 20,
+    maxSize: 200
+);
 
-// 定义可池化的类（需要无参构造函数）
-public class Bullet
+// 生成
+var go = poolManager.SpawnPrefab(bulletPrefab, position, rotation);
+
+// 回收
+poolManager.DespawnPrefab(go);
+```
+
+#### 自动回收接口
+
+```csharp
+public class Bullet : IPoolable
 {
-    public Vector3 Position;
-    public float Speed;
-    
-    public void Reset()
+    public void OnSpawn()
     {
-        Position = Vector3.zero;
-        Speed = 0f;
+        // 从池中取出时调用
+        isActive = true;
+    }
+    
+    public void OnDespawn()
+    {
+        // 归还池时调用
+        isActive = false;
+        velocity = Vector3.zero;
     }
 }
-
-// 从池中获取对象
-Bullet bullet = pool.Get<Bullet>();
-
-// 使用对象
-bullet.Position = new Vector3(0, 1, 0);
-bullet.Speed = 10f;
-
-// 归还到池中
-bullet.Reset();  // 建议归还前重置状态
-pool.Return(bullet);
-
-// 预热对象池（提前创建对象）
-pool.Prewarm<Bullet>(50);
-
-// 清空指定类型的池
-pool.Clear<Bullet>();
-
-// 清空所有池
-pool.ClearAll();
-
-// 获取池统计信息
-string stats = pool.GetStats();
-
-// 获取缓存的池类型数量
-int cachedCount = pool.CachedCount;
-```
-
-**高级用法**（带回调的对象池）：
-
-```csharp
-var bulletPool = pool.GetPool<Bullet>(
-    maxCapacity: 100,
-    onGet: b => b.gameObject.SetActive(true),
-    onReturn: b => b.gameObject.SetActive(false)
-);
 ```
 
 ---
 
-### 2.5 ResourceModule 资源模块
+### 3.4 ConfigLoader
 
-统一的资源加载接口，支持切换加载方式。
+配置加载器。
+
+#### 加载配置
 
 ```csharp
-var res = CYFW.Resource;
+var configLoader = ServiceLocator.Get<IConfigLoader>();
 
 // 同步加载
-Texture2D tex = res.Load<Texture2D>("Textures/Icon");
-AudioClip clip = res.Load<AudioClip>("Audio/BGM/Main");
-
-// 同步加载并实例化
-GameObject obj = res.LoadAndInstantiate("Prefabs/Enemy", parent: transform);
+var weaponConfig = configLoader.Load<WeaponConfig>("Config/Weapons");
 
 // 异步加载
-res.LoadAsync<GameObject>("Prefabs/Boss", prefab =>
-{
-    if (prefab != null)
-    {
-        Instantiate(prefab);
-    }
+var config = await configLoader.LoadAsync<EnemyConfig>("Config/Enemies");
+
+// 批量预加载
+await configLoader.PreloadAsync(new[] {
+    "Config/Weapons",
+    "Config/Enemies",
+    "Config/Skills"
 });
+```
 
-// 异步加载并实例化
-res.LoadAndInstantiateAsync("Prefabs/Effect", obj =>
+#### 配置定义
+
+```csharp
+[CreateAssetMenu(fileName = "WeaponConfig", menuName = "CYFramework/WeaponConfig")]
+public class WeaponConfig : ScriptableObject
 {
-    obj.transform.position = Vector3.zero;
-}, parent: transform);
-
-// 检查是否已缓存
-bool cached = res.IsCached("Textures/Icon");
-
-// 从缓存移除
-res.Unload("Textures/Icon");
-
-// 清空所有缓存
-res.UnloadAll();
-
-// 获取缓存数量
-int count = res.CachedCount;
+    public string weaponName;
+    public int damage;
+    public float attackSpeed;
+}
 ```
 
 ---
 
-### 2.6 StorageModule 存储模块
+### 3.5 ResourceLoader
 
-本地数据持久化。
+资源加载器。
+
+#### 同步加载
 
 ```csharp
-var storage = CYFrameworkEntry.Instance.Storage;
+var loader = ServiceLocator.Get<IResourceLoader>();
 
-// 基础类型存取
-storage.SetInt("HighScore", 1000);
-int score = storage.GetInt("HighScore", defaultValue: 0);
+// 加载 Prefab
+var prefab = loader.Load<GameObject>("Prefabs/Player");
 
-storage.SetFloat("Volume", 0.8f);
-float vol = storage.GetFloat("Volume", defaultValue: 1f);
+// 加载纹理
+var texture = loader.Load<Texture2D>("Textures/UI/Button");
+```
 
-storage.SetString("PlayerName", "张三");
-string name = storage.GetString("PlayerName", defaultValue: "");
+#### 异步加载
 
-// 检查键是否存在
-bool exists = storage.HasKey("HighScore");
+```csharp
+// 单个资源
+var prefab = await loader.LoadAsync<GameObject>("Prefabs/Enemy");
 
-// 删除键
-storage.DeleteKey("HighScore");
+// 带进度回调
+loader.LoadAsync<GameObject>("Prefabs/Boss", progress => {
+    loadingBar.value = progress;
+});
+```
 
-// 删除所有数据
-storage.DeleteAll();
+#### 场景加载
 
-// 立即保存到磁盘
-storage.Save();
+```csharp
+// 异步加载场景
+await loader.LoadSceneAsync("Level1", LoadSceneMode.Single);
 
-// 对象存取（JSON 序列化）
+// 带进度
+await loader.LoadSceneAsync("Level2", LoadSceneMode.Additive, 
+    progress => Debug.Log($"加载进度: {progress:P0}"));
+```
+
+#### 资源释放
+
+```csharp
+// 释放单个资源
+loader.Release("Prefabs/Enemy");
+
+// 释放未使用资源
+loader.UnloadUnusedAssets();
+```
+
+---
+
+### 3.6 NetworkService
+
+网络服务，支持 HTTP 和 WebSocket。
+
+#### HTTP 请求
+
+```csharp
+var network = ServiceLocator.Get<NetworkService>();
+
+// GET 请求
+var response = await network.GetAsync<PlayerData>("/api/player/123");
+
+// POST 请求
+var loginData = new LoginRequest { username = "test", password = "123" };
+var result = await network.PostAsync<LoginResponse>("/api/login", loginData);
+
+// 带请求头
+var headers = new Dictionary<string, string> {
+    { "Authorization", "Bearer xxx" }
+};
+var data = await network.GetAsync<MyData>("/api/data", headers);
+```
+
+#### WebSocket
+
+```csharp
+// 连接
+await network.ConnectWebSocket("wss://game.server.com/ws");
+
+// 发送消息
+network.SendWebSocketMessage(JsonUtility.ToJson(new MoveCommand { x = 1, y = 2 }));
+
+// 注册消息处理
+network.OnWebSocketMessage += (message) => {
+    var data = JsonUtility.FromJson<ServerMessage>(message);
+    ProcessMessage(data);
+};
+
+// 断开
+network.DisconnectWebSocket();
+```
+
+#### 网络状态
+
+```csharp
+// 检查连接
+bool isConnected = network.IsWebSocketConnected;
+
+// 网络状态变化事件
+network.OnNetworkStatusChanged += (status) => {
+    if (status == NetworkStatus.Disconnected) {
+        ShowReconnectDialog();
+    }
+};
+```
+
+---
+
+### 3.7 SaveService
+
+存档服务，支持加密和版本迁移。
+
+#### 保存数据
+
+```csharp
+var saveService = ServiceLocator.Get<SaveService>();
+
+// 定义存档数据
 [Serializable]
-public class PlayerData
+public class PlayerSaveData
 {
-    public int Level;
-    public int Gold;
-    public List<int> Items;
+    public int level;
+    public int gold;
+    public List<int> unlockedSkills;
 }
 
-var data = new PlayerData { Level = 10, Gold = 500, Items = new List<int> { 1, 2, 3 } };
-storage.SetObject("PlayerData", data);
+// 保存
+var data = new PlayerSaveData { level = 10, gold = 5000 };
+await saveService.SaveAsync("player", data);
 
-PlayerData loaded = storage.GetObject<PlayerData>("PlayerData");
+// 快速保存（同步，适合小数据）
+saveService.Save("settings", settingsData);
+```
+
+#### 加载数据
+
+```csharp
+// 异步加载
+var data = await saveService.LoadAsync<PlayerSaveData>("player");
+
+// 同步加载
+var settings = saveService.Load<SettingsData>("settings");
+
+// 带默认值
+var data = saveService.Load<PlayerSaveData>("player", new PlayerSaveData());
+```
+
+#### 检查与删除
+
+```csharp
+// 检查存档是否存在
+if (saveService.Exists("player"))
+{
+    // 加载
+}
+
+// 删除存档
+saveService.Delete("player");
+
+// 删除所有存档
+saveService.DeleteAll();
+```
+
+#### 版本迁移
+
+```csharp
+// 注册迁移器
+saveService.RegisterMigration<PlayerSaveData>(1, 2, oldData => {
+    // v1 -> v2: 添加新字段
+    return new PlayerSaveDataV2 {
+        level = oldData.level,
+        gold = oldData.gold,
+        gems = 0  // 新字段默认值
+    };
+});
 ```
 
 ---
 
-### 2.7 SoundModule 声音模块
+### 3.8 AudioService
 
-BGM 和音效管理。
+音频服务。
+
+#### 播放音乐
 
 ```csharp
-var sound = CYFrameworkEntry.Instance.Sound;
+var audio = ServiceLocator.Get<IAudioService>();
 
-// 播放 BGM（支持淡入淡出）
-sound.PlayBGM("Audio/BGM/Battle", fadeIn: 1f);
+// 播放 BGM
+audio.PlayBGM("bgm_battle", volume: 0.8f, loop: true);
 
-// 停止 BGM
-sound.StopBGM(fadeOut: 0.5f);
+// 停止 BGM（带淡出）
+audio.StopBGM(fadeOut: 1.0f);
 
-// 暂停/恢复 BGM
-sound.PauseBGM();
-sound.ResumeBGM();
+// 暂停/恢复
+audio.PauseBGM();
+audio.ResumeBGM();
+```
 
+#### 播放音效
+
+```csharp
 // 播放音效
-sound.PlaySFX("Audio/SFX/Click");
-sound.PlaySFX("Audio/SFX/Explosion", volume: 0.8f);
+audio.PlaySFX("sfx_explosion");
 
-// 在指定位置播放 3D 音效
-sound.PlaySFXAtPosition("Audio/SFX/Footstep", position);
+// 调整音量
+audio.PlaySFX("sfx_coin", volume: 0.5f);
+```
 
-// 设置音量
-sound.SetBGMVolume(0.5f);
-sound.SetSFXVolume(0.8f);
+#### 音量控制
 
-// 静音控制
-sound.MuteBGM = true;
-sound.MuteSFX = false;
+```csharp
+// 主音量
+audio.SetMasterVolume(0.8f);
 
-// 获取当前音量
-float bgmVol = sound.BGMVolume;
-float sfxVol = sound.SFXVolume;
+// 分类音量
+audio.SetBGMVolume(0.6f);
+audio.SetSFXVolume(1.0f);
+
+// 静音
+audio.Mute(true);
 ```
 
 ---
 
-### 2.8 UIModule UI模块
+### 3.9 HotUpdateService
 
-管理 UI 面板的生命周期。
+热更新服务。
 
-```csharp
-var ui = CYFrameworkEntry.Instance.UI;
-
-// 打开面板
-ui.OpenPanel<SettingsPanel>();
-
-// 带参数打开面板
-ui.OpenPanel<ShopPanel>(new ShopData { Category = "weapons" });
-
-// 关闭面板
-ui.ClosePanel<SettingsPanel>();
-
-// 隐藏面板（不销毁，下次打开更快）
-ui.HidePanel<SettingsPanel>();
-
-// 获取面板实例
-var panel = ui.GetPanel<SettingsPanel>();
-if (panel != null)
-{
-    panel.RefreshData();
-}
-
-// 检查面板是否打开
-bool isOpen = ui.IsPanelOpen<SettingsPanel>();
-
-// 返回上一个面板
-ui.GoBack();
-
-// 关闭所有面板
-ui.CloseAllPanels();
-
-// 获取当前顶部面板
-UIPanel top = ui.GetTopPanel();
-
-// 设置面板预制体路径前缀（默认 "UI/Panels/"）
-ui.SetPanelPathPrefix("UI/Windows/");
-```
-
-**自定义面板**：
+#### 检查更新
 
 ```csharp
-using CYFramework.Runtime.Core.UI;
+var hotUpdate = ServiceLocator.Get<IHotUpdateService>();
 
-public class SettingsPanel : UIPanel
+// 检查更新
+var result = await hotUpdate.CheckForUpdateAsync();
+
+if (result.HasUpdate)
 {
-    // 面板层级（可选，默认 Main）
-    public override UILayer Layer => UILayer.Popup;
-    
-    // 是否缓存（可选，默认 true）
-    public override bool IsCached => true;
-
-    public Slider volumeSlider;
-
-    // 面板加载时（只调用一次）
-    public override void OnLoad()
-    {
-        base.OnLoad();
-        // 初始化组件引用
-    }
-
-    // 面板打开时
-    public override void OnOpen(object param = null)
-    {
-        base.OnOpen(param);
-        // 读取数据
-        volumeSlider.value = CYFrameworkEntry.Instance.Storage.GetFloat("Volume", 1f);
-    }
-
-    // 面板显示时（每次显示都调用）
-    public override void OnShow()
-    {
-        base.OnShow();
-    }
-
-    // 面板隐藏时
-    public override void OnHide()
-    {
-        base.OnHide();
-    }
-
-    // 面板关闭时
-    public override void OnClose()
-    {
-        base.OnClose();
-        // 保存数据
-        CYFrameworkEntry.Instance.Storage.SetFloat("Volume", volumeSlider.value);
-    }
-
-    // 面板销毁时
-    public override void OnUnload()
-    {
-        base.OnUnload();
-    }
-
-    // 关闭按钮
-    public void OnCloseClick()
-    {
-        PlayClickSound();  // 播放点击音效
-        CloseSelf();       // 关闭自己
-    }
+    Debug.Log($"发现新版本: {result.LatestVersion}");
+    Debug.Log($"需要下载: {result.TotalDownloadSize / 1024}KB");
 }
 ```
 
-**UI 层级**：
-
-| 层级 | 值 | 说明 |
-|------|-----|------|
-| Background | 0 | 背景层 |
-| Main | 100 | 主界面 |
-| Popup | 200 | 弹窗 |
-| Toast | 300 | 提示 |
-| Loading | 400 | 加载 |
-| System | 500 | 系统（最顶层） |
-
----
-
-### 2.9 ProcedureModule 流程模块
-
-基于状态机的游戏流程管理。
+#### 执行更新
 
 ```csharp
-var proc = CYFrameworkEntry.Instance.Procedure;
-
-// 定义流程
-public class ProcedureLoading : ProcedureBase
-{
-    private float _progress;
-
-    public override void OnEnter(ProcedureModule owner)
-    {
-        base.OnEnter(owner);
-        _progress = 0f;
-        // 开始加载资源...
-    }
-
-    public override void OnUpdate(ProcedureModule owner, float deltaTime)
-    {
-        _progress += deltaTime * 0.2f;
-        if (_progress >= 1f)
-        {
-            ChangeProcedure<ProcedureMainMenu>();
-        }
-    }
-
-    public override void OnExit(ProcedureModule owner)
-    {
-        base.OnExit(owner);
-        // 清理加载界面...
-    }
-}
-
-// 注册流程
-proc.RegisterProcedure(new ProcedureLoading());
-proc.RegisterProcedure(new ProcedureMainMenu());
-proc.RegisterProcedure(new ProcedureGame());
-
-// 启动初始流程
-proc.StartProcedure<ProcedureLoading>();
-
-// 手动切换流程
-proc.ChangeProcedure<ProcedureGame>();
-
-// 获取当前流程
-ProcedureBase current = proc.CurrentProcedure;
-Type currentType = proc.CurrentProcedureType;
-
-// 检查是否在指定流程
-bool isInGame = proc.IsInProcedure<ProcedureGame>();
-
-// 流程间传递数据
-proc.SetData("LevelId", 5);
-int levelId = proc.GetData<int>("LevelId");
-proc.RemoveData("LevelId");
-proc.ClearData();
-```
-
----
-
-### 2.9 SchedulerModule 分帧调度模块
-
-将大任务拆分到多帧执行。
-
-```csharp
-var sched = CYFrameworkEntry.Instance.Scheduler;
-
-// 设置每帧最大执行时间（毫秒）
-sched.SetMaxFrameTime(2f);
-
-// 调度分帧任务
-var task = sched.Schedule(() => LoadChunks(), priority: 0, onComplete: () =>
-{
-    Debug.Log("加载完成");
+// 开始更新（带进度回调）
+await hotUpdate.DownloadUpdateAsync(progress => {
+    progressBar.value = progress.Progress;
+    progressText.text = $"{progress.DownloadedFiles}/{progress.TotalFiles}";
 });
 
-// 分帧迭代器示例
-IEnumerator<float> LoadChunks()
-{
-    for (int i = 0; i < 100; i++)
-    {
-        // 加载一个区块...
-        LoadChunk(i);
-        
-        // 返回进度（0~1）
-        yield return (float)i / 100f;
-    }
-}
-
-// 批量处理（自动分帧）
-List<Enemy> enemies = GetAllEnemies();
-sched.ScheduleBatch(enemies, enemy =>
-{
-    enemy.UpdateAI();
-}, itemsPerFrame: 10, onComplete: () =>
-{
-    Debug.Log("所有敌人 AI 更新完成");
-});
-
-// 检查任务状态
-if (task.State == ScheduledTaskState.Running)
-{
-    Debug.Log($"进度: {task.Progress:P0}");
-}
-
-// 取消任务
-sched.Cancel(task.Id);
-
-// 取消所有任务
-sched.CancelAll();
-
-// 待执行任务数量
-int pending = sched.PendingCount;
+// 应用更新
+await hotUpdate.ApplyUpdateAsync();
 ```
 
 ---
 
-## 3. 玩法世界
+## 4. 玩法核心层
 
-### 3.1 IGameplayWorld 接口
+### 4.1 IGameplayWorld
 
-玩法世界的统一接口。
+玩法世界抽象接口。
 
 ```csharp
 public interface IGameplayWorld
 {
-    bool IsInitialized { get; }
-    bool IsRunning { get; }
-    bool IsBattleEnded { get; }
+    // 固定逻辑帧（30/60Hz）
+    void FixedTick(float fixedDt);
     
-    void Initialize(GameplayConfig config);
-    void Tick(float deltaTime);
-    void Shutdown();
-    void Pause();
-    void Resume();
-    void Reset();
+    // 处理输入
+    void HandleInput(InputCommand cmd);
     
-    void HandleInput(PlayerInput input);
-    void ExecuteCommand(GameplayCommand command);
-    BattleResult GetBattleResult();
+    // 获取渲染快照
+    ref readonly RenderSnapshot GetRenderSnapshot();
+    
+    // 获取上一帧快照（用于插值）
+    ref readonly RenderSnapshot GetPrevSnapshot();
+    
+    // 重置时间（切后台恢复时调用）
+    void ResetDeltaTime();
 }
 ```
 
-### 3.2 GameplayWorldOOP 实现
-
-OOP 版本的玩法世界（全平台可用）。
+#### 使用示例
 
 ```csharp
-var fw = CYFrameworkEntry.Instance;
-var world = fw.GameplayWorld as GameplayWorldOOP;
-
-// 生成实体
-int playerId = world.SpawnEntity(new EntitySpawnInfo
-{
-    Type = EntityType.Player,
-    ConfigId = 1,
-    CampId = 1,
-    Position = Vector3.zero,
-    Rotation = 0f
-});
-
-int enemyId = world.SpawnEntity(new EntitySpawnInfo
-{
-    Type = EntityType.Enemy,
-    ConfigId = 100,
-    CampId = 2,
-    Position = new Vector3(5, 0, 5),
-    Rotation = 180f,
-    MaxLifeTime = 30f  // 30秒后自动销毁
-});
-
-// 获取实体数据
-if (world.TryGetEntity(playerId, out EntityData data))
-{
-    Debug.Log($"玩家位置: {data.Position}, 血量: {data.Hp}/{data.MaxHp}");
-}
-
-// 获取实体快照（用于 UI）
-EntitySnapshot snapshot = world.GetEntitySnapshot(playerId);
-
-// 移动实体
-world.MoveEntityTo(playerId, new Vector3(10, 0, 10));
-
-// 造成伤害
-world.DamageEntity(enemyId, 50);
-
-// 治疗实体
-world.HealEntity(playerId, 20);
-
-// 销毁实体
-world.DestroyEntity(enemyId);
-
-// 处理输入
-world.HandleInput(new PlayerInput
-{
-    Type = InputType.Move,
-    PlayerId = playerId,
-    TargetPosition = new Vector3(5, 0, 5)
-});
-
-world.HandleInput(new PlayerInput
-{
-    Type = InputType.Attack,
-    PlayerId = playerId,
-    TargetEntityId = enemyId
-});
-
-// 执行命令
-world.ExecuteCommand(new GameplayCommand
-{
-    Type = CommandType.DamageEntity,
-    EntityId = enemyId,
-    IntParam = 100
-});
-
-// 结束战斗
-world.EndBattle(BattleResultType.Victory, score: 1000);
-
-// 获取战斗结果
-BattleResult result = world.GetBattleResult();
-Debug.Log($"结果: {result.ResultType}, 用时: {result.Duration}s, 击杀: {result.KillCount}");
-
-// 获取子系统
-var aiSystem = world.GetSystem<AISystem>();
-aiSystem.AddAI(enemyId);
-
-var combatSystem = world.GetSystem<CombatSystem>();
-combatSystem.RequestAttack(playerId, enemyId, skillId: 1);
-
-var buffSystem = world.GetSystem<BuffSystem>();
-buffSystem.AddBuff(playerId, new BuffAddInfo
-{
-    ConfigId = 1,
-    EffectType = BuffEffectType.AttackUp,
-    EffectValue = 10,
-    Duration = 10f
-});
-
-// 控制玩法世界
-world.Pause();
-world.Resume();
-world.Reset();
-
-// 时间控制
-world.SetTimeScale(2f);  // 2倍速
-float gameTime = world.GetGameTime();
-
-// 获取所有实体
-var entities = world.GetAllEntities();
-foreach (var entity in entities)
-{
-    if (entity.State == EntityState.Active)
-    {
-        // 处理活跃实体...
-    }
-}
-```
-
-### 3.3 GameplayWorldDots 实现
-
-DOTS/ECS 版本的玩法世界（仅 PC/iOS/Android）。
-
-```csharp
-// 启用 DOTS 实现
-var config = new GameplayConfig
-{
-    UseDotsImplementation = true,
-    TimeScale = 1f,
-    MaxEntityCount = 10000
-};
-
-// 工厂会自动选择实现
-var world = GameplayWorldFactory.Create(config);
-
-// API 与 OOP 版本相同
-world.HandleInput(input);
-world.ExecuteCommand(command);
-var result = world.GetBattleResult();
-```
-
----
-
-## 4. 数据结构
-
-### EntityData 实体数据
-
-```csharp
-public struct EntityData
-{
-    public int Id;              // 唯一 ID
-    public EntityType Type;     // 类型（Player/Enemy/Npc/Projectile/Item/Effect）
-    public EntityState State;   // 状态（Invalid/Active/Dead/PendingDestroy）
-    public int ConfigId;        // 配置表 ID
-    public int CampId;          // 阵营 ID
-    public Vector3 Position;    // 位置
-    public float Rotation;      // 朝向（Y 轴欧拉角）
-    public float MoveSpeed;     // 移动速度
-    public Vector3 TargetPosition;  // 目标位置
-    public bool IsMoving;       // 是否移动中
-    public int Hp;              // 当前血量
-    public int MaxHp;           // 最大血量
-    public int Attack;          // 攻击力
-    public int Defense;         // 防御力
-    public float CreateTime;    // 创建时间
-    public float LifeTime;      // 存活时间
-    public float MaxLifeTime;   // 最大存活时间（<=0 表示无限）
-}
-```
-
-### EntitySpawnInfo 生成信息
-
-```csharp
-public struct EntitySpawnInfo
-{
-    public EntityType Type;
-    public int ConfigId;
-    public int CampId;
-    public Vector3 Position;
-    public float Rotation;
-    public float MaxLifeTime;
-}
-```
-
-### PlayerInput 玩家输入
-
-```csharp
-public struct PlayerInput
-{
-    public InputType Type;      // Move/Attack/UseSkill/UseItem/Interact
-    public int PlayerId;        // 玩家实体 ID
-    public Vector3 TargetPosition;   // 目标位置
-    public int TargetEntityId;       // 目标实体 ID
-    public int SkillId;              // 技能 ID
-    public int ItemId;               // 道具 ID
-    public float Timestamp;          // 时间戳
-}
-```
-
-### GameplayCommand 游戏命令
-
-```csharp
-public struct GameplayCommand
-{
-    public CommandType Type;    // SpawnEntity/DestroyEntity/DamageEntity/MoveEntity/EndBattle
-    public int EntityId;
-    public int IntParam;
-    public float FloatParam;
-    public Vector3 VectorParam;
-}
-```
-
-### BattleResult 战斗结果
-
-```csharp
-public struct BattleResult
-{
-    public BattleResultType ResultType;  // None/Victory/Defeat/Draw/Timeout
-    public float Duration;       // 战斗时长
-    public int Score;            // 得分
-    public int KillCount;        // 击杀数
-    public int DeathCount;       // 死亡数
-}
-```
-
-### BuffAddInfo Buff 添加信息
-
-```csharp
-public struct BuffAddInfo
-{
-    public int ConfigId;
-    public int CasterId;
-    public BuffEffectType EffectType;  // AttackUp/DefenseUp/SpeedUp/HealOverTime/DamageOverTime/Stun
-    public int EffectValue;
-    public float Duration;
-    public float TickInterval;
-    public int MaxStack;
-}
-```
-
----
-
-## 5. 平台服务
-
-### ILocalStorage 本地存储
-
-```csharp
-public interface ILocalStorage
-{
-    bool HasKey(string key);
-    string GetString(string key, string defaultValue = "");
-    void SetString(string key, string value);
-    int GetInt(string key, int defaultValue = 0);
-    void SetInt(string key, int value);
-    float GetFloat(string key, float defaultValue = 0f);
-    void SetFloat(string key, float value);
-    void DeleteKey(string key);
-    void DeleteAll();
-    void Save();
-}
-
-// 扩展方法
-storage.GetObject<T>(key, defaultValue);
-storage.SetObject<T>(key, value);
-```
-
-### ITimeService 时间服务
-
-```csharp
-public interface ITimeService
-{
-    float DeltaTime { get; }
-    float UnscaledDeltaTime { get; }
-    float Time { get; }
-    float UnscaledTime { get; }
-    float TimeScale { get; set; }
-    long Timestamp { get; }
-}
-```
-
-### INetworkClient 网络客户端
-
-```csharp
-public interface INetworkClient
-{
-    void Get(string url, Action<bool, string> callback);
-    void Post(string url, string body, Action<bool, string> callback);
-    void Download(string url, string savePath, Action<bool> callback, Action<float> progress = null);
-}
-```
-
-### IDeviceService 设备服务
-
-```csharp
-public interface IDeviceService
-{
-    string DeviceId { get; }
-    string DeviceModel { get; }
-    string SystemVersion { get; }
-    int ScreenWidth { get; }
-    int ScreenHeight { get; }
-    float ScreenDpi { get; }
-    int BatteryLevel { get; }
-    bool IsCharging { get; }
-    void Vibrate(long milliseconds);
-    void CopyToClipboard(string text);
-    string GetFromClipboard();
-}
-```
-
----
-
-## 快速开始
-
-### 1. 场景设置
-
-1. 创建空 GameObject，命名为 `CYFramework`
-2. 挂载 `CYFrameworkEntry` 组件
-3. 运行游戏，框架自动初始化
-
-### 2. 基础使用
-
-```csharp
-using UnityEngine;
-using CYFramework.Runtime.Core;
-using CYFramework.Runtime.Gameplay.Abstraction;
-using CYFramework.Runtime.Gameplay.OOP;
-
 public class GameManager : MonoBehaviour
 {
+    private IGameplayWorld _world;
+    
     void Start()
     {
-        var fw = CYFrameworkEntry.Instance;
+        // 根据平台选择实现
+#if CY_WECHAT || UNITY_WEBGL
+        _world = new OOPGameplayWorld();
+#else
+        _world = new HybridGameplayWorld();
+#endif
         
-        // 使用日志
-        fw.Log.I("Game", "游戏启动");
-        
-        // 订阅事件
-        fw.Event.Subscribe<GameEndEvent>(OnGameEnd);
-        
-        // 设置定时器
-        fw.Timer.Delay(3f, () => StartGame());
-        
-        // 播放 BGM
-        fw.Sound.PlayBGM("Audio/BGM/Title");
+        if (_world is IInitializable init)
+            init.Initialize();
     }
     
-    void StartGame()
+    void FixedUpdate()
     {
-        var world = CYFrameworkEntry.Instance.GameplayWorld as GameplayWorldOOP;
-        
-        // 生成玩家
-        int playerId = world.SpawnEntity(new EntitySpawnInfo
+        _world.FixedTick(Time.fixedDeltaTime);
+    }
+    
+    void Update()
+    {
+        // 收集输入
+        if (Input.GetButtonDown("Jump"))
         {
-            Type = EntityType.Player,
-            ConfigId = 1,
-            CampId = 1,
-            Position = Vector3.zero
-        });
-        
-        CYFrameworkEntry.Instance.Log.I("Game", $"玩家已生成: {playerId}");
-    }
-    
-    void OnGameEnd(GameEndEvent evt)
-    {
-        Debug.Log(evt.IsWin ? "胜利！" : "失败！");
+            _world.HandleInput(new InputCommand {
+                Type = InputType.Jump,
+                Timestamp = Time.time
+            });
+        }
     }
 }
 ```
 
 ---
 
-*文档版本：1.0*  
-*最后更新：2025年*
+### 4.2 InputBuffer
+
+输入缓冲，解决 Update/FixedUpdate 频率不同步问题。
+
+```csharp
+public class InputBuffer
+{
+    // 入队输入
+    public void Enqueue(InputCommand cmd);
+    
+    // 尝试出队
+    public bool TryDequeue(out InputCommand cmd);
+    
+    // 清空缓冲
+    public void Clear();
+    
+    // 缓冲数量
+    public int Count { get; }
+}
+```
+
+#### 使用示例
+
+```csharp
+private InputBuffer _inputBuffer = new InputBuffer();
+
+void Update()
+{
+    // 收集输入（在渲染帧）
+    if (Input.GetButtonDown("Attack"))
+    {
+        _inputBuffer.Enqueue(new InputCommand {
+            Type = InputType.Attack,
+            Timestamp = Time.time
+        });
+    }
+}
+
+void FixedUpdate()
+{
+    // 消费输入（在逻辑帧）
+    while (_inputBuffer.TryDequeue(out var cmd))
+    {
+        ProcessCommand(cmd);
+    }
+}
+```
+
+---
+
+### 4.3 RenderProxy
+
+渲染代理，提供快照插值。
+
+```csharp
+var renderProxy = new RenderProxy(gameplayWorld);
+
+// 每帧更新
+void Update()
+{
+    // 获取插值后的快照
+    var snapshot = renderProxy.GetInterpolatedSnapshot();
+    
+    // 更新渲染对象
+    for (int i = 0; i < snapshot.Count; i++)
+    {
+        var renderer = GetRenderer(snapshot.IDs[i]);
+        renderer.transform.position = snapshot.Positions[i];
+        renderer.transform.rotation = snapshot.Rotations[i];
+    }
+}
+```
+
+---
+
+### 4.4 状态机与AI
+
+#### 简单状态机
+
+```csharp
+public enum EnemyState { Idle, Patrol, Chase, Attack, Dead }
+
+var fsm = new SimpleFSM<EnemyState>(EnemyState.Idle);
+
+// 注册状态
+fsm.RegisterState(EnemyState.Idle,
+    onEnter: () => animator.Play("Idle"),
+    onUpdate: dt => {
+        if (CanSeePlayer()) fsm.ChangeState(EnemyState.Chase);
+    }
+);
+
+fsm.RegisterState(EnemyState.Chase,
+    onEnter: () => animator.Play("Run"),
+    onUpdate: dt => {
+        MoveTowardsPlayer(dt);
+        if (InAttackRange()) fsm.ChangeState(EnemyState.Attack);
+    }
+);
+
+// 每帧更新
+void Update()
+{
+    fsm.Update(Time.deltaTime);
+}
+```
+
+#### AI 控制器
+
+```csharp
+var ai = new SimpleAIController();
+
+// 添加行为（优先级驱动）
+ai.AddBehavior(new AttackBehavior());   // 近距离攻击
+ai.AddBehavior(new ChaseBehavior());    // 追击玩家
+ai.AddBehavior(new PatrolBehavior());   // 巡逻
+
+// 更新
+void Update()
+{
+    var context = new AIContext {
+        SelfPosition = transform.position,
+        TargetPosition = player.position,
+        HP = currentHP
+    };
+    
+    ai.Update(ref context, Time.deltaTime);
+}
+```
+
+---
+
+## 5. 调试工具
+
+### 5.1 RuntimeProfiler
+
+运行时性能面板。
+
+**快捷键**: `F1`
+
+显示信息：
+- FPS / 帧时间
+- 内存占用
+- DrawCall
+- 对象池状态
+- 网络延迟
+
+### 5.2 CheatConsole
+
+命令控制台。
+
+**快捷键**: `` ` `` (波浪键)
+
+#### 内置命令
+
+| 命令 | 说明 |
+|------|------|
+| `help` | 显示所有命令 |
+| `clear` | 清空控制台 |
+| `fps` | 切换 FPS 显示 |
+| `timescale <value>` | 设置时间缩放 |
+| `gc` | 强制 GC |
+| `log <level>` | 设置日志级别 |
+| `quit` | 退出游戏 |
+
+#### 注册自定义命令
+
+```csharp
+var console = FindObjectOfType<CheatConsole>();
+
+console.RegisterCommand("god", "无敌模式", args => {
+    player.isInvincible = true;
+    return "已开启无敌模式";
+});
+
+console.RegisterCommand("gold", "设置金币 <amount>", args => {
+    if (args.Length > 0 && int.TryParse(args[0], out int amount))
+    {
+        player.gold = amount;
+        return $"金币已设置为 {amount}";
+    }
+    return "用法: gold <amount>";
+});
+```
+
+---
+
+## 6. 平台适配
+
+### 6.1 平台检测
+
+```csharp
+#if CY_WECHAT
+    // 微信小游戏专用代码
+#elif UNITY_WEBGL
+    // WebGL 专用代码
+#elif UNITY_ANDROID
+    // Android 专用代码
+#elif UNITY_IOS
+    // iOS 专用代码
+#else
+    // PC 专用代码
+#endif
+```
+
+### 6.2 平台限制
+
+| 技术 | PC | Mobile | WebGL/微信 |
+|------|:--:|:------:|:----------:|
+| Job System | ✅ | ✅ | ❌ |
+| Burst | ✅ | ✅ | ⚠️ |
+| System.IO | ✅ | ✅ | ❌ |
+| 多线程 | ✅ | ✅ | ❌ |
+| WebSocket | ✅ | ✅ | ✅ |
+
+### 6.3 平台适配器
+
+框架自动根据平台选择适配器：
+
+| 服务 | PC/Mobile | 微信/WebGL |
+|------|-----------|------------|
+| 文件存储 | `UnityFileSystem` | `WeChatStorageAdapter` |
+| 音频 | `UnityAudioService` | `WeChatAudioService` |
+| 玩法世界 | `HybridGameplayWorld` | `OOPGameplayWorld` |
+
+---
+
+## 附录
+
+### A. 性能红线
+
+| 指标 | 微信/WebGL | Mobile | PC |
+|------|-----------|--------|----|
+| 帧率 | 45-60 FPS | 60-90 FPS | 60-144 FPS |
+| DrawCall | < 100 | < 300 | < 1000 |
+| 内存 | < 200MB | < 400MB | < 800MB |
+| 每帧 GC | 0 (Release) | 0 (Release) | < 1KB |
+
+### B. 目录结构
+
+```
+Assets/CYFramework/
+├── Runtime/
+│   ├── Infrastructure/     # Bootstrap, ServiceLocator
+│   ├── Platform/           # 平台适配器
+│   ├── Core/               # 核心服务
+│   ├── Gameplay/           # 玩法核心
+│   ├── Modules/            # 功能模块
+│   └── Debug/              # 调试工具
+├── Editor/                 # 编辑器工具
+├── Plugins/WebGL/          # JS 桥接
+└── Tests/                  # 测试
+```
+
+### C. 常见问题
+
+**Q: 微信小游戏存档失败？**
+A: 确保添加了 `CY_WECHAT` 宏定义，框架会自动切换到 `wx.setStorageSync`。
+
+**Q: WebGL 没有声音？**
+A: iOS Safari 需要用户交互才能播放音频，框架已自动处理，确保首次播放在点击事件中。
+
+**Q: Job System 报错？**
+A: WebGL 不支持多线程，检查是否添加了平台宏，框架会自动降级到 OOP 实现。

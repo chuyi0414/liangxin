@@ -2,7 +2,7 @@
     "name": "CYFramework.Editor",
     "rootNamespace": "CYFramework.Editor",
     "references": [
-        "CYFramework.Core"
+        "CYFramework.Runtime"
     ],
     "includePlatforms": [
         "Editor"
