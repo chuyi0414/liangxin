@@ -12,6 +12,7 @@ using CYFramework.Core.Pool;
 using CYFramework.Core.Resource;
 using CYFramework.Core.Save;
 using CYFramework.Modules.Audio;
+using CYFramework.Modules.UI;
 using CYFramework.Platform;
 using CYFramework.Platform.Unity;
 using UnityEngine;
@@ -210,6 +211,9 @@ namespace CYFramework.Infrastructure
 #else
             ServiceLocator.Register<IAudioService, UnityAudioService>();
 #endif
+            
+            // UIManager - UI 管理器
+            ServiceLocator.Register<UIManager, UIManager>();
             
             CYLog.Debug("[CYBootstrap] 核心服务注册完成");
         }

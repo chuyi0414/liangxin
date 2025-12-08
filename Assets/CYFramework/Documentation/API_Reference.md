@@ -1,1023 +1,582 @@
 # CYFramework 2.2 API 参考文档
 
+> 本文档包含框架所有公开 API 的完整说明。
+
+---
+
 ## 目录
 
-- [1. 快速入门](#1-快速入门)
-- [2. 基础设施层](#2-基础设施层)
-  - [2.1 ServiceLocator](#21-servicelocator)
-  - [2.2 生命周期接口](#22-生命周期接口)
-  - [2.3 CYBootstrap](#23-cybootstrap)
-- [3. 核心服务层](#3-核心服务层)
-  - [3.1 EventBus](#31-eventbus)
-  - [3.2 CYLog](#32-cylog)
-  - [3.3 ObjectPool](#33-objectpool)
-  - [3.4 ConfigLoader](#34-configloader)
-  - [3.5 ResourceLoader](#35-resourceloader)
-  - [3.6 NetworkService](#36-networkservice)
-  - [3.7 SaveService](#37-saveservice)
-  - [3.8 AudioService](#38-audioservice)
-  - [3.9 HotUpdateService](#39-hotupdateservice)
-- [4. 玩法核心层](#4-玩法核心层)
-  - [4.1 IGameplayWorld](#41-igameplayworld)
-  - [4.2 InputBuffer](#42-inputbuffer)
-  - [4.3 RenderProxy](#43-renderproxy)
-  - [4.4 状态机与AI](#44-状态机与ai)
-- [5. 调试工具](#5-调试工具)
-- [6. 平台适配](#6-平台适配)
+- [1. 基础设施层 (Infrastructure)](#1-基础设施层)
+- [2. 核心服务层 (Core)](#2-核心服务层)
+- [3. UI 模块 (Modules/UI)](#3-ui-模块)
+- [4. 玩法核心层 (Gameplay)](#4-玩法核心层)
+- [5. 平台适配层 (Platform)](#5-平台适配层)
+- [6. 调试工具 (Debug)](#6-调试工具)
 
 ---
 
-## 1. 快速入门
+## 1. 基础设施层
 
-### 1.1 安装
+### 1.1 ServiceLocator（服务定位器）
 
-1. 将 `CYFramework` 文件夹放入 `Assets/` 目录
-2. 在场景中创建空 GameObject，命名为 `[CYFramework]`
-3. 添加 `CYBootstrap` 组件
-4. 运行即可
+**命名空间**: `CYFramework.Infrastructure`
 
-### 1.2 第一个示例
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Register<TService, TImpl>()` | `ServiceScope scope = Singleton` | `void` | 注册服务（接口+实现类） |
+| `Register<T>(Func<T> factory)` | `Func<T> factory, ServiceScope scope` | `void` | 工厂方法注册 |
+| `RegisterInstance<T>(T instance)` | `T instance` | `void` | 注册已有实例 |
+| `RegisterLazy<TService, TImpl>()` | `ServiceScope scope` | `void` | 懒加载注册 |
+| `Get<T>()` | 无 | `T` | 获取服务（不存在则抛异常） |
+| `TryGet<T>(out T service)` | `out T service` | `bool` | 安全获取服务 |
+| `Get(Type type)` | `Type serviceType` | `object` | 按类型获取 |
+| `IsRegistered<T>()` | 无 | `bool` | 检查是否已注册 |
+| `InitializeAll()` | 无 | `void` | 初始化所有 IInitializable 服务 |
+| `ClearScoped()` | 无 | `void` | 清理 Scoped 作用域服务 |
+| `DisposeAll()` | 无 | `void` | 销毁所有服务 |
+| `ClearAll()` | 无 | `void` | 清空注册表（测试用） |
 
-```csharp
-using CYFramework.Infrastructure;
-using CYFramework.Core.Event;
-using UnityEngine;
-
-public class MyGameManager : MonoBehaviour
-{
-    void Start()
-    {
-        // 获取服务
-        var eventBus = ServiceLocator.Get<EventBus>();
-        
-        // 订阅事件
-        eventBus.Subscribe<GameStartEvent>(OnGameStart, this);
-        
-        // 发布事件
-        var evt = new GameStartEvent { Level = 1 };
-        eventBus.Post(ref evt);
-    }
-    
-    void OnGameStart(GameStartEvent e)
-    {
-        CYLog.Info($"游戏开始，关卡: {e.Level}");
-    }
-}
-
-public struct GameStartEvent
-{
-    public int Level;
-}
-```
-
-### 1.3 平台宏定义
-
-在 `Player Settings > Scripting Define Symbols` 中添加：
-
-| 宏 | 说明 |
-|-----|------|
-| `CY_WECHAT` | 微信小游戏平台 |
-| `CY_PC` | PC 平台（启用高级特性） |
-| `ENABLE_DOTS` | 启用 Hybrid DOTS 模式 |
+**ServiceScope 枚举**:
+| 值 | 说明 |
+|----|------|
+| `Singleton` | 全局单例（默认） |
+| `Scoped` | 场景级别，切场景时清理 |
+| `Transient` | 每次获取创建新实例 |
 
 ---
 
-## 2. 基础设施层
+### 1.2 生命周期接口
 
-### 2.1 ServiceLocator
+**命名空间**: `CYFramework.Infrastructure`
 
-服务定位器，用于依赖注入和服务管理。
-
-#### 注册服务
-
+#### IInitializable
 ```csharp
-// 方式 1: 接口 + 实现类（推荐）
-ServiceLocator.Register<IMyService, MyServiceImpl>();
-
-// 方式 2: 工厂方法
-ServiceLocator.Register<MyService>(() => new MyService("config"));
-
-// 方式 3: 直接注册实例
-var instance = new MyService();
-ServiceLocator.RegisterInstance<IMyService>(instance);
-```
-
-#### 服务生命周期
-
-```csharp
-// Singleton（默认）：全局单例
-ServiceLocator.Register<IMyService, MyService>(ServiceScope.Singleton);
-
-// Scoped：场景级别，切场景时清理
-ServiceLocator.Register<IMyService, MyService>(ServiceScope.Scoped);
-
-// Transient：每次获取都创建新实例
-ServiceLocator.Register<IMyService, MyService>(ServiceScope.Transient);
-```
-
-#### 获取服务
-
-```csharp
-// 直接获取（服务不存在会抛异常）
-var service = ServiceLocator.Get<IMyService>();
-
-// 安全获取
-if (ServiceLocator.TryGet<IMyService>(out var service))
-{
-    service.DoSomething();
-}
-```
-
-#### API 列表
-
-| 方法 | 说明 |
-|------|------|
-| `Register<TInterface, TImpl>()` | 注册服务 |
-| `Register<T>(Func<T> factory)` | 工厂注册 |
-| `RegisterInstance<T>(T instance)` | 注册实例 |
-| `Get<T>()` | 获取服务 |
-| `TryGet<T>(out T service)` | 安全获取 |
-| `InitializeAll()` | 初始化所有 IInitializable |
-| `DisposeAll()` | 销毁所有 IDisposableEx |
-| `ClearScoped()` | 清理 Scoped 服务 |
-| `ClearAll()` | 清理所有服务 |
-
----
-
-### 2.2 生命周期接口
-
-实现这些接口的服务会被 CYBootstrap 自动调度。
-
-```csharp
-// 初始化接口
 public interface IInitializable
 {
-    int InitOrder { get; }  // 初始化顺序（小的先执行）
-    void Initialize();
+    int InitOrder { get; }    // 初始化顺序（数字小的先执行）
+    void Initialize();         // 初始化方法
 }
+```
 
-// 固定帧更新（逻辑帧，30/60Hz）
+#### ITickable
+```csharp
 public interface ITickable
 {
-    int TickOrder { get; }
-    void Tick(float dt);
+    int TickOrder { get; }     // Tick 顺序
+    void Tick(float dt);       // 固定帧更新（FixedUpdate 中调用）
 }
+```
 
-// 每帧更新
+#### IUpdateable
+```csharp
 public interface IUpdateable
 {
-    int UpdateOrder { get; }
-    void OnUpdate(float dt);
+    int UpdateOrder { get; }   // Update 顺序
+    void OnUpdate(float dt);   // 每帧更新（Update 中调用）
 }
+```
 
-// 暂停/恢复
+#### ILateUpdateable
+```csharp
+public interface ILateUpdateable
+{
+    int LateUpdateOrder { get; }
+    void OnLateUpdate(float dt);
+}
+```
+
+#### IPausable
+```csharp
 public interface IPausable
 {
-    void OnPause();
-    void OnResume(float pauseDuration);
-}
-
-// 销毁接口
-public interface IDisposableEx
-{
-    int DisposeOrder { get; }
-    void Dispose();
+    void OnPause();                        // 暂停时调用
+    void OnResume(float pauseDuration);    // 恢复时调用，传入暂停时长
 }
 ```
 
-#### 示例
-
+#### IDisposableEx
 ```csharp
-public class MySystem : IInitializable, ITickable, IDisposableEx
+public interface IDisposableEx : IDisposable
 {
-    public int InitOrder => 10;
-    public int TickOrder => 10;
-    public int DisposeOrder => 10;
-    
-    public void Initialize()
-    {
-        CYLog.Info("MySystem 初始化");
-    }
-    
-    public void Tick(float dt)
-    {
-        // 逻辑更新
-    }
-    
-    public void Dispose()
-    {
-        CYLog.Info("MySystem 销毁");
-    }
+    int DisposeOrder { get; }  // 销毁顺序（数字大的先销毁）
 }
 ```
 
 ---
 
-### 2.3 CYBootstrap
+### 1.3 CYLog（日志系统）
 
-框架启动器，挂载到场景 GameObject 上。
+**命名空间**: `CYFramework.Infrastructure`
 
-#### Inspector 配置
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `Initialize(LogLevel level)` | 日志级别 | 初始化日志系统 |
+| `SetLevel(LogLevel level)` | 日志级别 | 运行时修改级别 |
+| `Verbose(string msg)` | 消息 | 详细日志 |
+| `Debug(string msg)` | 消息 | 调试日志 |
+| `Info(string msg)` | 消息 | 信息日志 |
+| `Warning(string msg)` | 消息 | 警告日志 |
+| `Error(string msg, Exception ex = null)` | 消息, 异常 | 错误日志 |
+| `Fatal(string msg)` | 消息 | 致命错误 |
 
-| 属性 | 说明 | 默认值 |
+**LogLevel 枚举**:
+```csharp
+public enum LogLevel { Verbose = 0, Debug = 1, Info = 2, Warning = 3, Error = 4, Fatal = 5, Off = 6 }
+```
+
+---
+
+### 1.4 CYBootstrap（启动器）
+
+**命名空间**: `CYFramework.Infrastructure`
+
+**Inspector 属性**:
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `_logLevel` | `LogLevel` | `Debug` | 日志级别 |
+| `_fixedTickRate` | `int` | `30` | 逻辑帧率 (Hz) |
+| `_maxPauseTolerance` | `float` | `5f` | 切后台最大容忍时间 (秒) |
+
+**静态属性**:
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `Instance` | `CYBootstrap` | 单例实例 |
+
+**公开方法**:
+| 方法 | 说明 |
+|------|------|
+| `RegisterLifecycle(object obj)` | 注册生命周期对象 |
+| `UnregisterLifecycle(object obj)` | 注销生命周期对象 |
+
+---
+
+## 2. 核心服务层
+
+### 2.1 EventBus（事件总线）
+
+**命名空间**: `CYFramework.Core.Event`
+
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `Subscribe<T>(EventHandler<T> handler, object target, int priority = 0)` | 处理器, 目标对象, 优先级 | 订阅事件 |
+| `Unsubscribe<T>(EventHandler<T> handler)` | 处理器 | 取消订阅 |
+| `UnsubscribeAll(object target)` | 目标对象 | 取消对象的所有订阅 |
+| `Post<T>(ref T evt)` | 事件数据 | 发布事件（必须用 ref） |
+| `PostDelayed<T>(T evt, int frames = 1)` | 事件数据, 延迟帧数 | 延迟发布 |
+
+**EventHandler 委托**:
+```csharp
+public delegate void EventHandler<T>(ref T evt) where T : struct;
+```
+
+---
+
+### 2.2 PoolManager（对象池）
+
+**命名空间**: `CYFramework.Core.Pool`
+
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `CreatePool<T>(Func<T> factory, int prewarm, int max)` | 工厂, 预热数, 最大数 | `void` | 创建数据池 |
+| `CreateGameObjectPool(string key, GameObject prefab, int prewarm)` | 键名, 预制体, 预热数 | `void` | 创建 GameObject 池 |
+| `Spawn<T>()` | 无 | `T` | 从数据池获取 |
+| `SpawnGameObject(string key, Vector3 pos, Quaternion rot)` | 键名, 位置, 旋转 | `GameObject` | 从 GO 池获取 |
+| `Despawn<T>(T obj)` | 对象 | `void` | 归还数据池 |
+| `DespawnGameObject(string key, GameObject go)` | 键名, 对象 | `void` | 归还 GO 池 |
+| `Clear<T>()` | 无 | `void` | 清空指定数据池 |
+| `ClearAll()` | 无 | `void` | 清空所有池 |
+
+**IPoolable 接口**:
+```csharp
+public interface IPoolable
+{
+    void OnSpawn();    // 从池中取出时调用
+    void OnDespawn();  // 归还池时调用
+}
+```
+
+---
+
+### 2.3 ConfigLoader（配置加载器）
+
+**命名空间**: `CYFramework.Core.Config`
+
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Load<T>(string path)` | 资源路径 | `T` | 同步加载 |
+| `LoadAsync<T>(string path)` | 资源路径 | `Task<T>` | 异步加载 |
+| `PreloadAsync(string[] paths)` | 路径数组 | `Task` | 批量预加载 |
+| `Unload(string path)` | 资源路径 | `void` | 卸载配置 |
+
+---
+
+### 2.4 ResourceLoader（资源加载器）
+
+**命名空间**: `CYFramework.Core.Resource`
+
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Load<T>(string path)` | 资源路径 | `T` | 同步加载 |
+| `LoadAsync<T>(string path, Action<float> onProgress = null)` | 路径, 进度回调 | `Task<T>` | 异步加载 |
+| `LoadSceneAsync(string name, LoadSceneMode mode, Action<float> onProgress = null)` | 场景名, 模式, 进度 | `Task` | 加载场景 |
+| `Release(string path)` | 资源路径 | `void` | 释放资源 |
+| `UnloadUnusedAssets()` | 无 | `void` | 卸载未使用资源 |
+
+---
+
+### 2.5 NetworkService（网络服务）
+
+**命名空间**: `CYFramework.Core.Network`
+
+#### HTTP 方法
+| 方法 | 参数 | 返回值 |
 |------|------|--------|
-| Log Level | 日志级别 | Debug |
-| Fixed Tick Rate | 逻辑帧率 | 30 |
-| Max Pause Tolerance | 切后台最大容忍时间 | 5s |
+| `GetAsync<T>(string url, Dictionary<string,string> headers = null)` | URL, 请求头 | `Task<T>` |
+| `PostAsync<T>(string url, object body, Dictionary<string,string> headers = null)` | URL, 请求体, 请求头 | `Task<T>` |
+| `PutAsync<T>(string url, object body, Dictionary<string,string> headers = null)` | URL, 请求体, 请求头 | `Task<T>` |
+| `DeleteAsync<T>(string url, Dictionary<string,string> headers = null)` | URL, 请求头 | `Task<T>` |
+
+#### WebSocket 方法
+| 方法 | 参数 | 返回值 |
+|------|------|--------|
+| `ConnectWebSocket(string url)` | WebSocket URL | `Task` |
+| `DisconnectWebSocket()` | 无 | `void` |
+| `SendWebSocketMessage(string message)` | 消息内容 | `void` |
+
+#### 事件
+| 事件 | 参数 | 说明 |
+|------|------|------|
+| `OnWebSocketMessage` | `string message` | 收到消息 |
+| `OnWebSocketConnected` | 无 | 连接成功 |
+| `OnWebSocketDisconnected` | 无 | 断开连接 |
+| `OnNetworkStatusChanged` | `NetworkStatus status` | 网络状态变化 |
 
 ---
 
-## 3. 核心服务层
+### 2.6 SaveService（存档服务）
 
-### 3.1 EventBus
+**命名空间**: `CYFramework.Core.Save`
 
-零 GC 事件系统。
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Save<T>(string key, T data)` | 键名, 数据 | `void` | 同步保存 |
+| `SaveAsync<T>(string key, T data)` | 键名, 数据 | `Task` | 异步保存 |
+| `Load<T>(string key, T defaultValue = default)` | 键名, 默认值 | `T` | 同步加载 |
+| `LoadAsync<T>(string key)` | 键名 | `Task<T>` | 异步加载 |
+| `Exists(string key)` | 键名 | `bool` | 检查是否存在 |
+| `Delete(string key)` | 键名 | `void` | 删除存档 |
+| `DeleteAll()` | 无 | `void` | 删除所有存档 |
+| `RegisterMigration<T>(int from, int to, Func<T,T> migrator)` | 版本范围, 迁移函数 | `void` | 注册版本迁移 |
 
-#### 定义事件
+---
 
+### 2.7 IAudioService（音频服务）
+
+**命名空间**: `CYFramework.Modules.Audio`
+
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `PlayBGM(string name, float volume = 1f, bool loop = true)` | 音乐名, 音量, 循环 | 播放背景音乐 |
+| `StopBGM(float fadeOut = 0.5f)` | 淡出时间 | 停止背景音乐 |
+| `PauseBGM()` | 无 | 暂停 BGM |
+| `ResumeBGM()` | 无 | 恢复 BGM |
+| `PlaySFX(string name, float volume = 1f)` | 音效名, 音量 | 播放音效 |
+| `SetMasterVolume(float volume)` | 音量 (0-1) | 设置主音量 |
+| `SetBGMVolume(float volume)` | 音量 (0-1) | 设置 BGM 音量 |
+| `SetSFXVolume(float volume)` | 音量 (0-1) | 设置音效音量 |
+| `Mute(bool mute)` | 是否静音 | 静音开关 |
+
+---
+
+### 2.8 IHotUpdateService（热更新服务）
+
+**命名空间**: `CYFramework.Core.HotUpdate`
+
+| 方法 | 返回值 | 说明 |
+|------|--------|------|
+| `CheckForUpdateAsync()` | `Task<UpdateCheckResult>` | 检查更新 |
+| `DownloadUpdateAsync(Action<DownloadProgress> onProgress)` | `Task` | 下载更新 |
+| `ApplyUpdateAsync()` | `Task` | 应用更新 |
+
+---
+
+## 3. UI 模块
+
+### 3.1 UIManager（UI 管理器）
+
+**命名空间**: `CYFramework.Modules.UI`
+
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Open<T>(object data = null)` | 传递数据 | `T` | 打开面板 |
+| `Close<T>()` | 无 | `void` | 关闭指定面板 |
+| `Close(Type panelType)` | 面板类型 | `void` | 按类型关闭 |
+| `Close(UIPanel panel)` | 面板实例 | `void` | 关闭面板实例 |
+| `Back()` | 无 | `void` | 返回上一个面板 |
+| `CloseAll()` | 无 | `void` | 关闭所有面板 |
+| `CloseLayer(UILayer layer)` | 层级 | `void` | 关闭指定层级 |
+| `Get<T>()` | 无 | `T` | 获取已打开的面板 |
+| `IsOpened<T>()` | 无 | `bool` | 检查面板是否已打开 |
+| `Preload<T>()` | 无 | `void` | 预加载面板 |
+| `ShowToast(string msg, float duration = 2f)` | 消息, 时长 | `void` | 显示 Toast |
+| `ShowConfirm(string title, string content, Action onConfirm, Action onCancel)` | 标题, 内容, 回调 | `void` | 确认对话框 |
+
+**UILayer 枚举**:
+| 值 | 数值 | 说明 |
+|----|------|------|
+| `Background` | 0 | 背景层 |
+| `Main` | 100 | 主界面层 |
+| `Popup` | 200 | 弹窗层 |
+| `Tips` | 300 | 提示层 |
+| `Guide` | 400 | 引导层 |
+| `Loading` | 500 | 加载层 |
+| `System` | 600 | 系统层 |
+
+---
+
+### 3.2 UIPanel（面板基类）
+
+**命名空间**: `CYFramework.Modules.UI`
+
+**可重写属性**:
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `Layer` | `UILayer` | `Main` | UI 层级 |
+| `IsStackable` | `bool` | `true` | 是否支持返回栈 |
+| `IsPoolable` | `bool` | `true` | 是否可对象池复用 |
+| `ShowMask` | `bool` | `false` | 是否显示遮罩 |
+| `CloseOnMaskClick` | `bool` | `true` | 点击遮罩是否关闭 |
+| `EnableAnimation` | `bool` | `true` | 是否启用动画 |
+
+**生命周期方法（子类重写）**:
+| 方法 | 说明 |
+|------|------|
+| `OnBindUI()` | 绑定 UI 事件（按钮点击等） |
+| `OnUnbindUI()` | 解绑 UI 事件 |
+| `OnShow(object data)` | 面板显示时调用【必须实现】 |
+| `OnHide()` | 面板隐藏时调用 |
+
+**公开方法**:
+| 方法 | 说明 |
+|------|------|
+| `CloseSelf()` | 关闭自身 |
+| `Back()` | 返回上一个面板 |
+| `SetInteractable(bool)` | 设置可交互性 |
+| `SetAlpha(float)` | 设置透明度 |
+
+**特性**:
 ```csharp
-// 使用 struct 避免 GC
-public struct PlayerDiedEvent
-{
-    public int PlayerId;
-    public Vector3 Position;
-    public string Killer;
-}
+[UIPrefab("UI/Panels/MyPanel")]  // 指定预制体路径
+public class MyPanel : UIPanel { }
 ```
 
-#### 订阅事件
+---
 
-```csharp
-var eventBus = ServiceLocator.Get<EventBus>();
+### 3.3 MVVM 支持
 
-// 基本订阅
-eventBus.Subscribe<PlayerDiedEvent>(OnPlayerDied, this);
+#### ViewModel 基类
 
-// 带优先级（数字大的先执行）
-eventBus.Subscribe<PlayerDiedEvent>(OnPlayerDied, this, priority: 100);
-```
-
-#### 发布事件
-
-```csharp
-// ⚠️ 必须使用 ref 传递，避免装箱
-var evt = new PlayerDiedEvent { PlayerId = 1 };
-eventBus.Post(ref evt);
-```
-
-#### 取消订阅
-
-```csharp
-eventBus.Unsubscribe<PlayerDiedEvent>(OnPlayerDied);
-
-// 或取消某对象的所有订阅
-eventBus.UnsubscribeAll(this);
-```
-
-#### API 列表
+**命名空间**: `CYFramework.Modules.UI.MVVM`
 
 | 方法 | 说明 |
 |------|------|
-| `Subscribe<T>(Action<T>, object, int)` | 订阅事件 |
-| `Unsubscribe<T>(Action<T>)` | 取消订阅 |
-| `UnsubscribeAll(object)` | 取消对象所有订阅 |
-| `Post<T>(ref T)` | 发布事件 |
-| `Clear()` | 清空所有订阅 |
+| `SetProperty<T>(string name, T value)` | 设置属性并通知变更 |
+| `GetProperty<T>(string name, T default)` | 获取属性值 |
+| `Subscribe(string property, PropertyChangedHandler handler)` | 订阅属性变更 |
+| `Unsubscribe(string property, PropertyChangedHandler handler)` | 取消订阅 |
+| `SubscribeAll(PropertyChangedHandler handler)` | 订阅所有属性 |
+| `ClearSubscriptions()` | 清除所有订阅 |
+| `Initialize()` | 初始化（可重写） |
+| `Dispose()` | 销毁（可重写） |
+
+#### MVVMPanel<TViewModel> 基类
+
+| 属性/方法 | 说明 |
+|-----------|------|
+| `ViewModel` | ViewModel 实例（自动创建） |
+| `OnBindViewModel()` | 绑定 ViewModel（可重写） |
+| `OnUnbindViewModel()` | 解绑 ViewModel（可重写） |
+| `OnViewModelPropertyChanged(string, object, object)` | 属性变更回调（可重写） |
+
+#### ObservableList<T>
+
+| 方法 | 说明 |
+|------|------|
+| `Subscribe(CollectionChangedHandler<T>)` | 订阅集合变更 |
+| `Unsubscribe(CollectionChangedHandler<T>)` | 取消订阅 |
+| `AddRange(IEnumerable<T>)` | 批量添加 |
+| `ReplaceAll(IEnumerable<T>)` | 替换所有 |
+| `Sort(Comparison<T>)` | 排序 |
 
 ---
 
-### 3.2 CYLog
-
-分级日志系统。
-
-#### 日志级别
-
-```csharp
-public enum LogLevel
-{
-    Verbose = 0,  // 详细调试
-    Debug = 1,    // 调试信息
-    Info = 2,     // 一般信息
-    Warning = 3,  // 警告
-    Error = 4,    // 错误
-    Fatal = 5,    // 致命错误
-    Off = 6       // 关闭日志
-}
-```
-
-#### 使用方法
-
-```csharp
-CYLog.Verbose("详细信息");
-CYLog.Debug("调试信息");
-CYLog.Info("一般信息");
-CYLog.Warning("警告");
-CYLog.Error("错误");
-CYLog.Fatal("致命错误");
-
-// 带条件的日志（避免字符串拼接开销）
-CYLog.DebugIf(isDebugMode, () => $"复杂计算结果: {Calculate()}");
-```
-
-#### 配置
-
-```csharp
-// 初始化时设置级别
-CYLog.Initialize(LogLevel.Info);
-
-// 运行时修改
-CYLog.SetLevel(LogLevel.Warning);
-```
-
----
-
-### 3.3 ObjectPool
-
-对象池管理器，支持数据对象和 GameObject。
-
-#### 数据对象池
-
-```csharp
-var poolManager = ServiceLocator.Get<PoolManager>();
-
-// 注册池（预热 10 个）
-poolManager.RegisterDataPool<Bullet>(
-    createFunc: () => new Bullet(),
-    prewarm: 10,
-    maxSize: 100
-);
-
-// 获取对象
-var bullet = poolManager.Spawn<Bullet>();
-
-// 归还对象
-poolManager.Despawn(bullet);
-```
-
-#### GameObject 池
-
-```csharp
-// 注册 Prefab 池
-poolManager.RegisterPrefabPool(
-    bulletPrefab,
-    prewarm: 20,
-    maxSize: 200
-);
-
-// 生成
-var go = poolManager.SpawnPrefab(bulletPrefab, position, rotation);
-
-// 回收
-poolManager.DespawnPrefab(go);
-```
-
-#### 自动回收接口
-
-```csharp
-public class Bullet : IPoolable
-{
-    public void OnSpawn()
-    {
-        // 从池中取出时调用
-        isActive = true;
-    }
-    
-    public void OnDespawn()
-    {
-        // 归还池时调用
-        isActive = false;
-        velocity = Vector3.zero;
-    }
-}
-```
-
----
-
-### 3.4 ConfigLoader
-
-配置加载器。
-
-#### 加载配置
-
-```csharp
-var configLoader = ServiceLocator.Get<IConfigLoader>();
-
-// 同步加载
-var weaponConfig = configLoader.Load<WeaponConfig>("Config/Weapons");
-
-// 异步加载
-var config = await configLoader.LoadAsync<EnemyConfig>("Config/Enemies");
-
-// 批量预加载
-await configLoader.PreloadAsync(new[] {
-    "Config/Weapons",
-    "Config/Enemies",
-    "Config/Skills"
-});
-```
-
-#### 配置定义
-
-```csharp
-[CreateAssetMenu(fileName = "WeaponConfig", menuName = "CYFramework/WeaponConfig")]
-public class WeaponConfig : ScriptableObject
-{
-    public string weaponName;
-    public int damage;
-    public float attackSpeed;
-}
-```
-
----
-
-### 3.5 ResourceLoader
-
-资源加载器。
-
-#### 同步加载
-
-```csharp
-var loader = ServiceLocator.Get<IResourceLoader>();
-
-// 加载 Prefab
-var prefab = loader.Load<GameObject>("Prefabs/Player");
-
-// 加载纹理
-var texture = loader.Load<Texture2D>("Textures/UI/Button");
-```
-
-#### 异步加载
-
-```csharp
-// 单个资源
-var prefab = await loader.LoadAsync<GameObject>("Prefabs/Enemy");
-
-// 带进度回调
-loader.LoadAsync<GameObject>("Prefabs/Boss", progress => {
-    loadingBar.value = progress;
-});
-```
-
-#### 场景加载
-
-```csharp
-// 异步加载场景
-await loader.LoadSceneAsync("Level1", LoadSceneMode.Single);
-
-// 带进度
-await loader.LoadSceneAsync("Level2", LoadSceneMode.Additive, 
-    progress => Debug.Log($"加载进度: {progress:P0}"));
-```
-
-#### 资源释放
-
-```csharp
-// 释放单个资源
-loader.Release("Prefabs/Enemy");
-
-// 释放未使用资源
-loader.UnloadUnusedAssets();
-```
-
----
-
-### 3.6 NetworkService
-
-网络服务，支持 HTTP 和 WebSocket。
-
-#### HTTP 请求
-
-```csharp
-var network = ServiceLocator.Get<NetworkService>();
-
-// GET 请求
-var response = await network.GetAsync<PlayerData>("/api/player/123");
-
-// POST 请求
-var loginData = new LoginRequest { username = "test", password = "123" };
-var result = await network.PostAsync<LoginResponse>("/api/login", loginData);
-
-// 带请求头
-var headers = new Dictionary<string, string> {
-    { "Authorization", "Bearer xxx" }
-};
-var data = await network.GetAsync<MyData>("/api/data", headers);
-```
-
-#### WebSocket
-
-```csharp
-// 连接
-await network.ConnectWebSocket("wss://game.server.com/ws");
-
-// 发送消息
-network.SendWebSocketMessage(JsonUtility.ToJson(new MoveCommand { x = 1, y = 2 }));
-
-// 注册消息处理
-network.OnWebSocketMessage += (message) => {
-    var data = JsonUtility.FromJson<ServerMessage>(message);
-    ProcessMessage(data);
-};
-
-// 断开
-network.DisconnectWebSocket();
-```
-
-#### 网络状态
-
-```csharp
-// 检查连接
-bool isConnected = network.IsWebSocketConnected;
-
-// 网络状态变化事件
-network.OnNetworkStatusChanged += (status) => {
-    if (status == NetworkStatus.Disconnected) {
-        ShowReconnectDialog();
-    }
-};
-```
-
----
-
-### 3.7 SaveService
-
-存档服务，支持加密和版本迁移。
-
-#### 保存数据
-
-```csharp
-var saveService = ServiceLocator.Get<SaveService>();
-
-// 定义存档数据
-[Serializable]
-public class PlayerSaveData
-{
-    public int level;
-    public int gold;
-    public List<int> unlockedSkills;
-}
-
-// 保存
-var data = new PlayerSaveData { level = 10, gold = 5000 };
-await saveService.SaveAsync("player", data);
-
-// 快速保存（同步，适合小数据）
-saveService.Save("settings", settingsData);
-```
-
-#### 加载数据
-
-```csharp
-// 异步加载
-var data = await saveService.LoadAsync<PlayerSaveData>("player");
-
-// 同步加载
-var settings = saveService.Load<SettingsData>("settings");
-
-// 带默认值
-var data = saveService.Load<PlayerSaveData>("player", new PlayerSaveData());
-```
-
-#### 检查与删除
-
-```csharp
-// 检查存档是否存在
-if (saveService.Exists("player"))
-{
-    // 加载
-}
-
-// 删除存档
-saveService.Delete("player");
-
-// 删除所有存档
-saveService.DeleteAll();
-```
-
-#### 版本迁移
-
-```csharp
-// 注册迁移器
-saveService.RegisterMigration<PlayerSaveData>(1, 2, oldData => {
-    // v1 -> v2: 添加新字段
-    return new PlayerSaveDataV2 {
-        level = oldData.level,
-        gold = oldData.gold,
-        gems = 0  // 新字段默认值
-    };
-});
-```
-
----
-
-### 3.8 AudioService
-
-音频服务。
-
-#### 播放音乐
-
-```csharp
-var audio = ServiceLocator.Get<IAudioService>();
-
-// 播放 BGM
-audio.PlayBGM("bgm_battle", volume: 0.8f, loop: true);
-
-// 停止 BGM（带淡出）
-audio.StopBGM(fadeOut: 1.0f);
-
-// 暂停/恢复
-audio.PauseBGM();
-audio.ResumeBGM();
-```
-
-#### 播放音效
-
-```csharp
-// 播放音效
-audio.PlaySFX("sfx_explosion");
-
-// 调整音量
-audio.PlaySFX("sfx_coin", volume: 0.5f);
-```
-
-#### 音量控制
-
-```csharp
-// 主音量
-audio.SetMasterVolume(0.8f);
-
-// 分类音量
-audio.SetBGMVolume(0.6f);
-audio.SetSFXVolume(1.0f);
-
-// 静音
-audio.Mute(true);
-```
-
----
-
-### 3.9 HotUpdateService
-
-热更新服务。
-
-#### 检查更新
-
-```csharp
-var hotUpdate = ServiceLocator.Get<IHotUpdateService>();
-
-// 检查更新
-var result = await hotUpdate.CheckForUpdateAsync();
-
-if (result.HasUpdate)
-{
-    Debug.Log($"发现新版本: {result.LatestVersion}");
-    Debug.Log($"需要下载: {result.TotalDownloadSize / 1024}KB");
-}
-```
-
-#### 执行更新
-
-```csharp
-// 开始更新（带进度回调）
-await hotUpdate.DownloadUpdateAsync(progress => {
-    progressBar.value = progress.Progress;
-    progressText.text = $"{progress.DownloadedFiles}/{progress.TotalFiles}";
-});
-
-// 应用更新
-await hotUpdate.ApplyUpdateAsync();
-```
+### 3.4 通用 UI 组件
+
+#### UIToast（Toast 提示）
+
+**命名空间**: `CYFramework.Modules.UI.Components`
+
+| 静态方法 | 参数 | 说明 |
+|----------|------|------|
+| `Show(string content, float duration = 2f)` | 内容, 时长 | 普通提示 |
+| `ShowSuccess(string content)` | 内容 | 成功提示（绿色） |
+| `ShowError(string content)` | 内容 | 错误提示（红色） |
+| `ShowWarning(string content)` | 内容 | 警告提示（黄色） |
+
+#### UIDialog（对话框）
+
+**命名空间**: `CYFramework.Modules.UI.Components`
+
+| 静态方法 | 参数 | 说明 |
+|----------|------|------|
+| `Alert(string content, string title, Action onConfirm)` | 内容, 标题, 回调 | 提示框 |
+| `Confirm(string content, Action onConfirm, Action onCancel, string title)` | 内容, 确认回调, 取消回调, 标题 | 确认框 |
+| `Input(string content, Action<string> onConfirm, string default, string title)` | 内容, 输入回调, 默认值, 标题 | 输入框 |
+
+#### UILoading（加载界面）
+
+**命名空间**: `CYFramework.Modules.UI.Components`
+
+| 静态方法 | 参数 | 返回值 | 说明 |
+|----------|------|--------|------|
+| `Show(string tips, bool showProgress)` | 提示文字, 是否显示进度 | `UILoading` | 显示 Loading |
+| `Hide(Action onComplete)` | 完成回调 | `void` | 隐藏 Loading |
+| `Progress(float value)` | 进度 (0-1) | `void` | 设置进度 |
+| `Tips(string text)` | 提示文字 | `void` | 更新提示 |
+| `WithLoading(IEnumerator operation, string tips)` | 协程, 提示 | `IEnumerator` | 配合协程使用 |
+
+#### UIListView（列表视图）
+
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `SetData<T>(IList<T> data)` | 数据列表 | 设置数据源 |
+| `BindObservableList<T>(ObservableList<T>)` | 可观察列表 | 绑定可观察列表 |
+| `Refresh()` | 无 | 刷新列表 |
+| `UpdateItem(int index, object data)` | 索引, 数据 | 更新指定项 |
+| `InsertItem(int index, object data)` | 索引, 数据 | 插入项 |
+| `RemoveItem(int index)` | 索引 | 移除项 |
+| `Clear()` | 无 | 清空列表 |
+| `GetItem(int index)` | 索引 | 获取项 |
+
+**事件**:
+| 事件 | 参数 | 说明 |
+|------|------|------|
+| `OnItemClicked` | `int index, object data` | 项点击事件 |
 
 ---
 
 ## 4. 玩法核心层
 
-### 4.1 IGameplayWorld
+### 4.1 IGameplayWorld（玩法世界接口）
 
-玩法世界抽象接口。
+**命名空间**: `CYFramework.Gameplay.Abstraction`
+
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `FixedTick(float fixedDt)` | 固定时间步长 | `void` | 逻辑帧更新 |
+| `HandleInput(in InputCommand cmd)` | 输入指令 | `void` | 处理输入 |
+| `GetRenderSnapshot()` | 无 | `ref readonly RenderSnapshot` | 获取当前帧快照 |
+| `GetPrevSnapshot()` | 无 | `ref readonly RenderSnapshot` | 获取上一帧快照 |
+| `ResetDeltaTime()` | 无 | `void` | 重置时间（切后台用） |
+| `Initialize()` | 无 | `void` | 初始化 |
+| `Dispose()` | 无 | `void` | 销毁 |
+
+### 4.2 InputCommand（输入指令）
 
 ```csharp
-public interface IGameplayWorld
+public struct InputCommand
 {
-    // 固定逻辑帧（30/60Hz）
-    void FixedTick(float fixedDt);
-    
-    // 处理输入
-    void HandleInput(InputCommand cmd);
-    
-    // 获取渲染快照
-    ref readonly RenderSnapshot GetRenderSnapshot();
-    
-    // 获取上一帧快照（用于插值）
-    ref readonly RenderSnapshot GetPrevSnapshot();
-    
-    // 重置时间（切后台恢复时调用）
-    void ResetDeltaTime();
+    public InputType Type;      // 输入类型
+    public Vector2 Direction;   // 方向
+    public int SkillId;         // 技能 ID
+    public float Timestamp;     // 时间戳
+    public int CustomId;        // 自定义 ID
 }
+
+public enum InputType { None, Move, Jump, Attack, Skill, Interact, Custom }
 ```
 
-#### 使用示例
+### 4.3 RenderSnapshot（渲染快照）
 
 ```csharp
-public class GameManager : MonoBehaviour
+public struct RenderSnapshot
 {
-    private IGameplayWorld _world;
+    public int Count;              // 有效数量
+    public int[] IDs;              // 单位 ID
+    public Vector3[] Positions;    // 位置
+    public Quaternion[] Rotations; // 旋转
+    public float[] HPs;            // 生命值
+    public int[] StateIDs;         // 状态 ID
+    public float Timestamp;        // 时间戳
     
-    void Start()
-    {
-        // 根据平台选择实现
-#if CY_WECHAT || UNITY_WEBGL
-        _world = new OOPGameplayWorld();
-#else
-        _world = new HybridGameplayWorld();
-#endif
-        
-        if (_world is IInitializable init)
-            init.Initialize();
-    }
-    
-    void FixedUpdate()
-    {
-        _world.FixedTick(Time.fixedDeltaTime);
-    }
-    
-    void Update()
-    {
-        // 收集输入
-        if (Input.GetButtonDown("Jump"))
-        {
-            _world.HandleInput(new InputCommand {
-                Type = InputType.Jump,
-                Timestamp = Time.time
-            });
-        }
-    }
+    public static RenderSnapshot Create(int maxUnits);  // 创建快照
+    public void Clear();                                 // 清空
+    public void CopyFrom(in RenderSnapshot other);       // 复制
 }
 ```
 
 ---
 
-### 4.2 InputBuffer
+## 5. 平台适配层
 
-输入缓冲，解决 Update/FixedUpdate 频率不同步问题。
+### 5.1 平台宏定义
 
-```csharp
-public class InputBuffer
-{
-    // 入队输入
-    public void Enqueue(InputCommand cmd);
-    
-    // 尝试出队
-    public bool TryDequeue(out InputCommand cmd);
-    
-    // 清空缓冲
-    public void Clear();
-    
-    // 缓冲数量
-    public int Count { get; }
-}
-```
+| 宏 | 说明 |
+|----|------|
+| `CY_WECHAT` | 微信小游戏平台 |
+| `CY_PC` | PC 平台 |
+| `CY_MOBILE` | 移动端 |
+| `CY_SINGLE_THREAD` | 单线程模式 |
+| `ENABLE_DOTS` | 启用 Hybrid DOTS |
 
-#### 使用示例
+### 5.2 平台接口
 
-```csharp
-private InputBuffer _inputBuffer = new InputBuffer();
-
-void Update()
-{
-    // 收集输入（在渲染帧）
-    if (Input.GetButtonDown("Attack"))
-    {
-        _inputBuffer.Enqueue(new InputCommand {
-            Type = InputType.Attack,
-            Timestamp = Time.time
-        });
-    }
-}
-
-void FixedUpdate()
-{
-    // 消费输入（在逻辑帧）
-    while (_inputBuffer.TryDequeue(out var cmd))
-    {
-        ProcessCommand(cmd);
-    }
-}
-```
+| 接口 | PC/Mobile 实现 | 微信/WebGL 实现 |
+|------|----------------|-----------------|
+| `IFileSystem` | `UnityFileSystem` | 不支持 |
+| `IStorageAdapter` | `UnityStorageAdapter` | `WeChatStorageAdapter` |
+| `IAudioService` | `UnityAudioService` | `WeChatAudioService` |
+| `IGameplayWorld` | `HybridGameplayWorld` | `OOPGameplayWorld` |
 
 ---
 
-### 4.3 RenderProxy
+## 6. 调试工具
 
-渲染代理，提供快照插值。
-
-```csharp
-var renderProxy = new RenderProxy(gameplayWorld);
-
-// 每帧更新
-void Update()
-{
-    // 获取插值后的快照
-    var snapshot = renderProxy.GetInterpolatedSnapshot();
-    
-    // 更新渲染对象
-    for (int i = 0; i < snapshot.Count; i++)
-    {
-        var renderer = GetRenderer(snapshot.IDs[i]);
-        renderer.transform.position = snapshot.Positions[i];
-        renderer.transform.rotation = snapshot.Rotations[i];
-    }
-}
-```
-
----
-
-### 4.4 状态机与AI
-
-#### 简单状态机
-
-```csharp
-public enum EnemyState { Idle, Patrol, Chase, Attack, Dead }
-
-var fsm = new SimpleFSM<EnemyState>(EnemyState.Idle);
-
-// 注册状态
-fsm.RegisterState(EnemyState.Idle,
-    onEnter: () => animator.Play("Idle"),
-    onUpdate: dt => {
-        if (CanSeePlayer()) fsm.ChangeState(EnemyState.Chase);
-    }
-);
-
-fsm.RegisterState(EnemyState.Chase,
-    onEnter: () => animator.Play("Run"),
-    onUpdate: dt => {
-        MoveTowardsPlayer(dt);
-        if (InAttackRange()) fsm.ChangeState(EnemyState.Attack);
-    }
-);
-
-// 每帧更新
-void Update()
-{
-    fsm.Update(Time.deltaTime);
-}
-```
-
-#### AI 控制器
-
-```csharp
-var ai = new SimpleAIController();
-
-// 添加行为（优先级驱动）
-ai.AddBehavior(new AttackBehavior());   // 近距离攻击
-ai.AddBehavior(new ChaseBehavior());    // 追击玩家
-ai.AddBehavior(new PatrolBehavior());   // 巡逻
-
-// 更新
-void Update()
-{
-    var context = new AIContext {
-        SelfPosition = transform.position,
-        TargetPosition = player.position,
-        HP = currentHP
-    };
-    
-    ai.Update(ref context, Time.deltaTime);
-}
-```
-
----
-
-## 5. 调试工具
-
-### 5.1 RuntimeProfiler
-
-运行时性能面板。
+### 6.1 RuntimeProfiler
 
 **快捷键**: `F1`
 
-显示信息：
-- FPS / 帧时间
-- 内存占用
-- DrawCall
-- 对象池状态
-- 网络延迟
+显示内容：FPS、帧时间、内存占用、DrawCall、对象池状态、网络延迟
 
-### 5.2 CheatConsole
-
-命令控制台。
+### 6.2 CheatConsole
 
 **快捷键**: `` ` `` (波浪键)
 
-#### 内置命令
-
+**内置命令**:
 | 命令 | 说明 |
 |------|------|
-| `help` | 显示所有命令 |
+| `help` | 显示帮助 |
 | `clear` | 清空控制台 |
 | `fps` | 切换 FPS 显示 |
-| `timescale <value>` | 设置时间缩放 |
+| `timescale <value>` | 时间缩放 |
 | `gc` | 强制 GC |
 | `log <level>` | 设置日志级别 |
-| `quit` | 退出游戏 |
 
-#### 注册自定义命令
-
+**注册自定义命令**:
 ```csharp
-var console = FindObjectOfType<CheatConsole>();
-
 console.RegisterCommand("god", "无敌模式", args => {
     player.isInvincible = true;
-    return "已开启无敌模式";
-});
-
-console.RegisterCommand("gold", "设置金币 <amount>", args => {
-    if (args.Length > 0 && int.TryParse(args[0], out int amount))
-    {
-        player.gold = amount;
-        return $"金币已设置为 {amount}";
-    }
-    return "用法: gold <amount>";
+    return "已开启无敌";
 });
 ```
 
 ---
 
-## 6. 平台适配
-
-### 6.1 平台检测
-
-```csharp
-#if CY_WECHAT
-    // 微信小游戏专用代码
-#elif UNITY_WEBGL
-    // WebGL 专用代码
-#elif UNITY_ANDROID
-    // Android 专用代码
-#elif UNITY_IOS
-    // iOS 专用代码
-#else
-    // PC 专用代码
-#endif
-```
-
-### 6.2 平台限制
-
-| 技术 | PC | Mobile | WebGL/微信 |
-|------|:--:|:------:|:----------:|
-| Job System | ✅ | ✅ | ❌ |
-| Burst | ✅ | ✅ | ⚠️ |
-| System.IO | ✅ | ✅ | ❌ |
-| 多线程 | ✅ | ✅ | ❌ |
-| WebSocket | ✅ | ✅ | ✅ |
-
-### 6.3 平台适配器
-
-框架自动根据平台选择适配器：
-
-| 服务 | PC/Mobile | 微信/WebGL |
-|------|-----------|------------|
-| 文件存储 | `UnityFileSystem` | `WeChatStorageAdapter` |
-| 音频 | `UnityAudioService` | `WeChatAudioService` |
-| 玩法世界 | `HybridGameplayWorld` | `OOPGameplayWorld` |
-
----
-
-## 附录
-
-### A. 性能红线
+## 附录：性能红线
 
 | 指标 | 微信/WebGL | Mobile | PC |
 |------|-----------|--------|----|
 | 帧率 | 45-60 FPS | 60-90 FPS | 60-144 FPS |
 | DrawCall | < 100 | < 300 | < 1000 |
 | 内存 | < 200MB | < 400MB | < 800MB |
-| 每帧 GC | 0 (Release) | 0 (Release) | < 1KB |
-
-### B. 目录结构
-
-```
-Assets/CYFramework/
-├── Runtime/
-│   ├── Infrastructure/     # Bootstrap, ServiceLocator
-│   ├── Platform/           # 平台适配器
-│   ├── Core/               # 核心服务
-│   ├── Gameplay/           # 玩法核心
-│   ├── Modules/            # 功能模块
-│   └── Debug/              # 调试工具
-├── Editor/                 # 编辑器工具
-├── Plugins/WebGL/          # JS 桥接
-└── Tests/                  # 测试
-```
-
-### C. 常见问题
-
-**Q: 微信小游戏存档失败？**
-A: 确保添加了 `CY_WECHAT` 宏定义，框架会自动切换到 `wx.setStorageSync`。
-
-**Q: WebGL 没有声音？**
-A: iOS Safari 需要用户交互才能播放音频，框架已自动处理，确保首次播放在点击事件中。
-
-**Q: Job System 报错？**
-A: WebGL 不支持多线程，检查是否添加了平台宏，框架会自动降级到 OOP 实现。
+| 每帧 GC | 0 | 0 | < 1KB |

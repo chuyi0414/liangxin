@@ -426,7 +426,13 @@ Assets/CYFramework/
 │   │   ├── Logic_Common/   # OOP与Hybrid共用的纯逻辑(状态机/AI)
 │   │   ├── Logic_OOP/      # 纯OOP驱动层
 │   │   └── Logic_Hybrid/   # Hybrid DOTS驱动层 (Brain+Muscle)
-│   ├── Modules/            # UI, Audio, i18n等
+│   ├── Modules/            # 功能模块
+│   │   ├── Audio/          # 音频服务
+│   │   └── UI/             # UI 框架 (MVVM)
+│   │       ├── UIManager.cs        # 面板管理器
+│   │       ├── UIPanel.cs          # 面板基类
+│   │       ├── MVVM/               # ViewModel 数据绑定
+│   │       └── Components/         # 通用组件 (Toast/Dialog/Loading)
 │   └── Debug/              # 运行时调试工具
 ├── Editor/
 │   ├── Baking/             # 配置烘焙工具 (SO -> BlobAsset)

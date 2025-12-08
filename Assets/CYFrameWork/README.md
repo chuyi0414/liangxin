@@ -63,6 +63,8 @@ public struct GameEvent { public int Score; }
 | **NetworkService** | HTTP/WebSocket | `CYFramework.Core.Network` |
 | **SaveService** | 加密存档 | `CYFramework.Core.Save` |
 | **AudioService** | 音频管理 | `CYFramework.Modules.Audio` |
+| **UIManager** | UI 面板管理 | `CYFramework.Modules.UI` |
+| **UIDialog/Toast/Loading** | 通用 UI 组件 | `CYFramework.Modules.UI.Components` |
 | **ConfigLoader** | 配置加载 | `CYFramework.Core.Config` |
 | **ResourceLoader** | 资源加载 | `CYFramework.Core.Resource` |
 
@@ -93,6 +95,8 @@ Assets/CYFramework/
 │   ├── Core/             # 核心服务
 │   ├── Gameplay/         # 玩法核心
 │   ├── Modules/          # 功能模块
+│   │   ├── Audio/        # 音频服务
+│   │   └── UI/           # UI 框架 (MVVM)
 │   └── Debug/            # 调试工具
 ├── Editor/               # 编辑器工具
 ├── Plugins/WebGL/        # JS 桥接
@@ -105,7 +109,7 @@ Assets/CYFramework/
 ## 文档
 
 - [API 参考文档](Documentation/API_Reference.md) - 完整 API 说明
-- [使用指南](Documentation/Usage_Guide.md) - 详细使用示例
+- [超详细使用指南](Documentation/Usage_Guide.md) - 框架原理、生命周期、详细教程
 - [设计文档](CYFramework.md) - 架构设计白皮书
 
 ## 性能目标

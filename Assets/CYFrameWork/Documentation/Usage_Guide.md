@@ -1,918 +1,1175 @@
-# CYFramework 2.2 使用指南
+# CYFramework 2.2 超详细使用指南
 
-本文档提供详细的使用示例和最佳实践。
+> 本指南假设你是零基础，会一步一步带你理解框架的原理和使用方法。
 
 ---
 
 ## 目录
 
-1. [项目配置](#1-项目配置)
-2. [游戏启动流程](#2-游戏启动流程)
-3. [场景管理](#3-场景管理)
-4. [UI 开发模式](#4-ui-开发模式)
-5. [网络通信](#5-网络通信)
-6. [存档系统](#6-存档系统)
-7. [音频管理](#7-音频管理)
-8. [对象池优化](#8-对象池优化)
-9. [玩法开发](#9-玩法开发)
-10. [调试与测试](#10-调试与测试)
-11. [发布构建](#11-发布构建)
+1. [框架是什么？解决什么问题？](#1-框架是什么)
+2. [框架的核心原理](#2-框架的核心原理)
+3. [完整的生命周期流程](#3-完整的生命周期流程)
+4. [第一步：让框架跑起来](#4-第一步让框架跑起来)
+5. [服务定位器详解](#5-服务定位器详解)
+6. [事件系统详解](#6-事件系统详解)
+7. [UI 系统完整教程](#7-ui-系统完整教程)
+8. [存档系统详解](#8-存档系统详解)
+9. [音频系统详解](#9-音频系统详解)
+10. [对象池详解](#10-对象池详解)
+11. [网络通信详解](#11-网络通信详解)
+12. [玩法核心层详解](#12-玩法核心层详解)
+13. [完整项目实战](#13-完整项目实战)
+14. [常见问题解答](#14-常见问题解答)
 
 ---
 
-## 1. 项目配置
+## 1. 框架是什么？
 
-### 1.1 初始设置
+### 1.1 为什么需要框架？
 
-1. **导入框架**
-   ```
-   将 CYFramework 文件夹拖入 Assets/
-   ```
+想象你要盖房子：
+- **没有框架** = 每次都从烧砖头开始
+- **有框架** = 直接用现成的砖头、水泥、钢筋
 
-2. **创建启动场景**
-   ```
-   创建 Scenes/Bootstrap.unity
-   创建空 GameObject 命名为 [CYFramework]
-   添加 CYBootstrap 组件
-   ```
+游戏开发中，这些功能几乎每个游戏都需要：
+- 播放音效音乐
+- 保存读取存档
+- 管理 UI 界面
+- 发送网络请求
+- 对象池优化性能
+- 打印调试日志
 
-3. **配置 Build Settings**
-   ```
-   将 Bootstrap 场景设为第一个场景（Build Index 0）
-   ```
+**CYFramework 就是把这些都封装好了，你直接用就行。**
 
-### 1.2 平台宏定义
+### 1.2 框架能做什么？
 
-`Edit > Project Settings > Player > Scripting Define Symbols`
+| 我想做的事 | 框架提供的工具 | 一句话说明 |
+|-----------|---------------|-----------|
+| 播放音效 | `IAudioService` | `audio.PlaySFX("click")` |
+| 保存数据 | `SaveService` | `save.Save("player", data)` |
+| 管理 UI | `UIManager` | `ui.Open<ShopPanel>()` |
+| 发请求 | `NetworkService` | `await network.GetAsync<T>(url)` |
+| 对象池 | `PoolManager` | `pool.Spawn<Bullet>()` |
+| 发事件 | `EventBus` | `eventBus.Post(ref evt)` |
+| 打日志 | `CYLog` | `CYLog.Info("消息")` |
 
-```
-# 微信小游戏
-CY_WECHAT;CY_SINGLE_THREAD
-
-# PC 旗舰版
-CY_PC;ENABLE_DOTS
-
-# 移动端
-CY_MOBILE
-```
-
-### 1.3 项目结构建议
+### 1.3 框架的分层设计
 
 ```
-Assets/
-├── CYFramework/          # 框架（不要修改）
-├── _Project/
-│   ├── Scenes/
-│   ├── Scripts/
-│   │   ├── Game/         # 游戏逻辑
-│   │   ├── UI/           # UI 逻辑
-│   │   └── Data/         # 数据定义
-│   ├── Prefabs/
-│   ├── Resources/
-│   │   ├── Config/       # 配置 SO
-│   │   └── Audio/        # 音频资源
-│   └── Art/
-└── Plugins/
+┌─────────────────────────────────────────────────────────┐
+│                     你的游戏代码                          │
+│         (GameManager, Player, Enemy, UI...)              │
+└─────────────────────────────────────────────────────────┘
+                           ↓ 调用
+┌─────────────────────────────────────────────────────────┐
+│                   CYFramework 框架                        │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │ 表现层: UIManager, AudioService                      ││
+│  ├─────────────────────────────────────────────────────┤│
+│  │ 核心层: EventBus, SaveService, NetworkService, Pool  ││
+│  ├─────────────────────────────────────────────────────┤│
+│  │ 基础层: ServiceLocator, CYBootstrap, CYLog           ││
+│  ├─────────────────────────────────────────────────────┤│
+│  │ 平台层: Unity适配器 / 微信适配器                       ││
+│  └─────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────┘
+                           ↓ 调用
+┌─────────────────────────────────────────────────────────┐
+│                     Unity 引擎                           │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. 游戏启动流程
+## 2. 框架的核心原理
 
-### 2.1 启动器示例
+### 2.1 服务定位器模式（最重要！）
+
+**问题**：你的代码需要用音频服务、存档服务、UI 服务...怎么拿到它们？
+
+**传统做法（不好）**：
+```csharp
+// ❌ 到处 Find，性能差，耦合严重
+var audio = GameObject.Find("AudioManager").GetComponent<AudioManager>();
+```
+
+**框架做法（好）**：
+```csharp
+// ✅ 统一从"服务中心"获取
+var audio = ServiceLocator.Get<IAudioService>();
+```
+
+**原理图**：
+```
+┌─────────────────────────────────────────────┐
+│              ServiceLocator                  │
+│                (服务中心)                     │
+│  ┌─────────────────────────────────────────┐│
+│  │ IAudioService  → UnityAudioService      ││
+│  │ SaveService    → SaveService            ││
+│  │ UIManager      → UIManager              ││
+│  │ EventBus       → EventBus               ││
+│  │ PoolManager    → PoolManager            ││
+│  │ ...                                      ││
+│  └─────────────────────────────────────────┘│
+└─────────────────────────────────────────────┘
+        ↑ Get<T>()              ↑ Register<T>()
+        │                       │
+   你的代码获取服务          框架启动时注册服务
+```
+
+### 2.2 零 GC 事件系统
+
+**问题**：游戏中经常需要"通知"其他模块，比如玩家死亡要通知 UI、音效、成就系统...
+
+**传统做法（耦合严重）**：
+```csharp
+// ❌ 每加一个系统就要改这里
+void OnPlayerDie() {
+    uiManager.ShowGameOver();
+    audioManager.PlayDeathSound();
+    achievementManager.Check();
+    // 加新系统还要改...
+}
+```
+
+**框架做法（解耦）**：
+```csharp
+// ✅ 只管发事件，谁需要谁订阅
+void OnPlayerDie() {
+    var evt = new PlayerDiedEvent();
+    eventBus.Post(ref evt);  // 发出去就完事了
+}
+
+// UI 自己订阅
+eventBus.Subscribe<PlayerDiedEvent>((ref PlayerDiedEvent e) => ShowGameOver(), this);
+
+// 音效自己订阅
+eventBus.Subscribe<PlayerDiedEvent>((ref PlayerDiedEvent e) => PlayDeathSound(), this);
+```
+
+**为什么用 `ref`？**
+- 事件是 `struct`（结构体），不是 `class`
+- 用 `ref` 传递不会产生内存分配（GC）
+- 游戏更流畅，不会卡顿
+
+---
+
+## 3. 完整的生命周期流程
+
+### 3.1 框架启动流程
+
+当你运行游戏，框架按这个顺序启动：
+
+```
+游戏启动
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ 1. Unity 加载场景                         │
+│    找到 CYBootstrap 组件                  │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ 2. CYBootstrap.Awake()                   │
+│    - 设置 DontDestroyOnLoad              │
+│    - 调用 InitializeFramework()          │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ 3. InitializeFramework()                 │
+│    a) CYLog.Initialize() - 初始化日志     │
+│    b) 设置 Time.fixedDeltaTime           │
+│    c) RegisterCoreServices() - 注册服务   │
+│    d) ServiceLocator.InitializeAll()     │
+│    e) 注册异常处理                        │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ 4. RegisterCoreServices()                │
+│    按顺序注册：                           │
+│    - EventBus                            │
+│    - PoolManager                         │
+│    - ConfigLoader                        │
+│    - ResourceLoader                      │
+│    - NetworkService                      │
+│    - SaveService                         │
+│    - HotUpdateService                    │
+│    - AudioService                        │
+│    - UIManager                           │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ 5. ServiceLocator.InitializeAll()        │
+│    遍历所有 IInitializable 服务            │
+│    按 InitOrder 顺序调用 Initialize()     │
+└─────────────────────────────────────────┘
+    │
+    ▼
+   框架初始化完成！你可以开始用了
+```
+
+### 3.2 每帧更新流程
+
+```
+Unity 游戏循环
+    │
+    ├─────────────────────────────────────────┐
+    │                                         │
+    ▼                                         ▼
+┌───────────────────┐              ┌───────────────────┐
+│   FixedUpdate     │              │     Update        │
+│   (固定频率)       │              │   (每帧)          │
+│                   │              │                   │
+│ CYBootstrap 遍历   │              │ CYBootstrap 遍历   │
+│ 所有 ITickable    │              │ 所有 IUpdateable  │
+│ 调用 Tick(dt)     │              │ 调用 OnUpdate(dt) │
+│                   │              │                   │
+│ 用途：逻辑计算     │              │ 用途：渲染、输入   │
+└───────────────────┘              └───────────────────┘
+```
+
+### 3.3 服务生命周期
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    服务的一生                            │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  1. 注册 (Register)                                     │
+│     └─ ServiceLocator.Register<T>()                     │
+│        此时只是"登记"，还没创建实例                        │
+│                                                         │
+│  2. 创建 (Create)                                       │
+│     └─ 第一次 ServiceLocator.Get<T>() 时创建              │
+│        或者 InitializeAll() 时创建                       │
+│                                                         │
+│  3. 初始化 (Initialize)                                 │
+│     └─ 如果实现了 IInitializable                         │
+│        ServiceLocator.InitializeAll() 会调用             │
+│        按 InitOrder 顺序执行                             │
+│                                                         │
+│  4. 运行中 (Running)                                    │
+│     ├─ ITickable.Tick() - 每个 FixedUpdate 调用          │
+│     ├─ IUpdateable.OnUpdate() - 每帧调用                 │
+│     └─ IPausable.OnPause/OnResume() - 切后台时调用        │
+│                                                         │
+│  5. 销毁 (Dispose)                                      │
+│     └─ ServiceLocator.DisposeAll() 时调用                │
+│        按 DisposeOrder 逆序执行                          │
+│        游戏退出或场景切换时触发                            │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. 第一步：让框架跑起来
+
+### 4.1 准备工作
+
+1. **确保 CYFramework 文件夹在 Assets 目录下**
+   ```
+   Assets/
+   └── CYFramework/
+       ├── Runtime/
+       ├── Editor/
+       ├── Documentation/
+       └── ...
+   ```
+
+2. **等待 Unity 编译完成**（没有红色错误）
+
+### 4.2 创建启动场景
+
+**第一步：创建场景**
+1. `File > New Scene` 创建新场景
+2. 保存为 `Assets/Scenes/Bootstrap.unity`
+
+**第二步：创建启动器对象**
+1. 在 Hierarchy 右键 > `Create Empty`
+2. 重命名为 `[CYFramework]`
+3. 选中它，在 Inspector 点 `Add Component`
+4. 搜索 `CYBootstrap`，添加
+
+**第三步：配置 Build Settings**
+1. `File > Build Settings`
+2. 点 `Add Open Scenes` 添加 Bootstrap 场景
+3. 确保它在最上面（Index 0）
+
+### 4.3 运行测试
+
+点击 Play，你应该看到这些日志：
+
+```
+=== CYFramework 2.2 启动 ===
+平台: WindowsEditor
+逻辑帧率: 30Hz
+[CYBootstrap] 平台: Native
+[CYBootstrap] 核心服务注册完成
+[ServiceLocator] 初始化完成: EventBus
+[ServiceLocator] 初始化完成: ...
+[ServiceLocator] 所有服务初始化完成，共 9 个
+=== CYFramework 初始化完成 ===
+```
+
+**如果看到这些，恭喜你！框架已经跑起来了！**
+
+### 4.4 验证框架可用
+
+创建一个测试脚本验证：
+
+```csharp
+using UnityEngine;
+using CYFramework.Infrastructure;
+
+public class FrameworkTest : MonoBehaviour
+{
+    void Start()
+    {
+        // 测试日志
+        CYLog.Info("Hello CYFramework!");
+        
+        // 测试获取服务
+        var eventBus = ServiceLocator.Get<EventBus>();
+        CYLog.Info($"EventBus 获取成功: {eventBus != null}");
+        
+        // 测试 UI 管理器
+        var uiManager = ServiceLocator.Get<UIManager>();
+        CYLog.Info($"UIManager 获取成功: {uiManager != null}");
+    }
+}
+```
+
+把这个脚本挂到任意 GameObject 上运行，应该看到：
+```
+Hello CYFramework!
+EventBus 获取成功: True
+UIManager 获取成功: True
+```
+
+---
+
+## 5. 服务定位器详解
+
+### 5.1 什么是服务？
+
+**服务 = 提供某种功能的类**
+
+比如：
+- `IAudioService` 提供播放音频的功能
+- `SaveService` 提供保存读取数据的功能
+- `UIManager` 提供管理 UI 界面的功能
+
+### 5.2 如何获取服务？
 
 ```csharp
 using CYFramework.Infrastructure;
-using CYFramework.Core.Event;
-using CYFramework.Core.Resource;
-using UnityEngine;
-using UnityEngine.SceneManagement;
 
-/// <summary>
-/// 游戏管理器
-/// 在 CYBootstrap 初始化完成后创建
-/// </summary>
-public class GameManager : MonoBehaviour
+// 方法一：直接获取（推荐）
+var audio = ServiceLocator.Get<IAudioService>();
+audio.PlaySFX("click");
+
+// 方法二：安全获取（不确定服务是否存在时）
+if (ServiceLocator.TryGet<IAudioService>(out var audio))
 {
-    public static GameManager Instance { get; private set; }
-    
+    audio.PlaySFX("click");
+}
+```
+
+### 5.3 服务获取的最佳实践
+
+```csharp
+public class MyGameManager : MonoBehaviour
+{
+    // ✅ 推荐：在类级别缓存服务引用
+    private IAudioService _audio;
+    private SaveService _save;
     private EventBus _eventBus;
-    private IResourceLoader _resourceLoader;
     
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    static void OnGameStart()
+    void Start()
     {
-        // 等待框架初始化完成后创建
-        if (CYBootstrap.Instance == null) return;
-        
-        var go = new GameObject("[GameManager]");
-        DontDestroyOnLoad(go);
-        go.AddComponent<GameManager>();
+        // 在 Start 中获取（框架已初始化完成）
+        _audio = ServiceLocator.Get<IAudioService>();
+        _save = ServiceLocator.Get<SaveService>();
+        _eventBus = ServiceLocator.Get<EventBus>();
     }
     
-    void Awake()
+    void PlayClickSound()
     {
-        if (Instance != null)
-        {
-            Destroy(gameObject);
-            return;
-        }
-        Instance = this;
-        
-        // 获取服务
+        // 直接使用缓存的引用
+        _audio.PlaySFX("click");
+    }
+}
+```
+
+**不要这样做**：
+```csharp
+void Update()
+{
+    // ❌ 错误！每帧都获取服务，浪费性能
+    var audio = ServiceLocator.Get<IAudioService>();
+    if (Input.GetKeyDown(KeyCode.Space))
+    {
+        audio.PlaySFX("click");
+    }
+}
+```
+
+### 5.4 如何注册自己的服务？
+
+如果你想添加自己的服务：
+
+```csharp
+// 第一步：定义接口（可选，但推荐）
+public interface IMyService
+{
+    void DoSomething();
+}
+
+// 第二步：实现服务
+public class MyService : IMyService, IInitializable, IDisposableEx
+{
+    public int InitOrder => 100;  // 初始化顺序
+    public int DisposeOrder => 100;
+    
+    public void Initialize()
+    {
+        CYLog.Info("MyService 初始化");
+    }
+    
+    public void DoSomething()
+    {
+        CYLog.Info("MyService 做事情");
+    }
+    
+    public void Dispose()
+    {
+        CYLog.Info("MyService 销毁");
+    }
+}
+
+// 第三步：在 CYBootstrap.RegisterCoreServices() 中添加
+// 打开 CYBootstrap.cs，找到 RegisterCoreServices 方法，添加：
+ServiceLocator.Register<IMyService, MyService>();
+```
+
+---
+
+## 6. 事件系统详解
+
+### 6.1 为什么需要事件系统？
+
+**场景**：玩家升级了，需要：
+- UI 刷新等级显示
+- 播放升级音效
+- 检查成就
+- 记录日志
+
+**没有事件系统（耦合严重）**：
+```csharp
+// Player.cs
+void LevelUp()
+{
+    level++;
+    
+    // ❌ Player 需要知道所有相关的系统
+    uiManager.RefreshLevel();      // 依赖 UI
+    audioManager.PlayLevelUp();    // 依赖音效
+    achievementManager.Check();    // 依赖成就
+    analyticsManager.Log();        // 依赖统计
+    // 每加一个功能就要改这里！
+}
+```
+
+**有事件系统（解耦）**：
+```csharp
+// Player.cs - 只管发事件
+void LevelUp()
+{
+    level++;
+    
+    var evt = new PlayerLevelUpEvent { NewLevel = level };
+    _eventBus.Post(ref evt);  // ✅ 发出去就完事了
+}
+
+// UI 自己订阅
+// AudioManager 自己订阅
+// AchievementManager 自己订阅
+// 各自独立，互不影响！
+```
+
+### 6.2 事件的完整使用流程
+
+**第一步：定义事件（必须是 struct）**
+
+```csharp
+// Events.cs - 建议统一放在一个文件
+
+// 玩家等级提升事件
+public struct PlayerLevelUpEvent
+{
+    public int OldLevel;
+    public int NewLevel;
+}
+
+// 金币变化事件
+public struct GoldChangedEvent
+{
+    public int OldAmount;
+    public int NewAmount;
+    public int Delta;  // 变化量
+}
+
+// 敌人死亡事件
+public struct EnemyDiedEvent
+{
+    public int EnemyId;
+    public Vector3 Position;
+    public int DropGold;
+}
+```
+
+**第二步：订阅事件**
+
+```csharp
+public class LevelUI : MonoBehaviour
+{
+    private EventBus _eventBus;
+    
+    void Start()
+    {
         _eventBus = ServiceLocator.Get<EventBus>();
-        _resourceLoader = ServiceLocator.Get<IResourceLoader>();
         
         // 订阅事件
-        _eventBus.Subscribe<SceneLoadedEvent>(OnSceneLoaded, this);
-        
-        // 开始游戏流程
-        StartCoroutine(GameStartFlow());
+        _eventBus.Subscribe<PlayerLevelUpEvent>(OnPlayerLevelUp, this);
     }
     
-    System.Collections.IEnumerator GameStartFlow()
+    // 事件处理方法（注意：参数必须是 ref）
+    void OnPlayerLevelUp(ref PlayerLevelUpEvent evt)
     {
-        CYLog.Info("=== 游戏启动 ===");
+        levelText.text = $"Lv.{evt.NewLevel}";
         
-        // 1. 显示 Logo
-        yield return ShowLogo();
-        
-        // 2. 检查热更新
-        yield return CheckHotUpdate();
-        
-        // 3. 加载配置
-        yield return LoadConfigs();
-        
-        // 4. 进入主菜单
-        yield return LoadMainMenu();
-    }
-    
-    System.Collections.IEnumerator ShowLogo()
-    {
-        CYLog.Debug("显示 Logo...");
-        yield return new WaitForSeconds(2f);
-    }
-    
-    System.Collections.IEnumerator CheckHotUpdate()
-    {
-        CYLog.Debug("检查更新...");
-        
-        var hotUpdate = ServiceLocator.Get<IHotUpdateService>();
-        // 实际更新逻辑...
-        
-        yield return null;
-    }
-    
-    System.Collections.IEnumerator LoadConfigs()
-    {
-        CYLog.Debug("加载配置...");
-        
-        var configLoader = ServiceLocator.Get<IConfigLoader>();
-        
-        // 预加载所有配置
-        yield return configLoader.PreloadAsync(new[] {
-            "Config/GameSettings",
-            "Config/Weapons",
-            "Config/Enemies"
-        });
-    }
-    
-    System.Collections.IEnumerator LoadMainMenu()
-    {
-        CYLog.Debug("加载主菜单...");
-        
-        yield return _resourceLoader.LoadSceneAsync("MainMenu", LoadSceneMode.Single);
-        
-        // 发布事件
-        var evt = new SceneLoadedEvent { SceneName = "MainMenu" };
-        _eventBus.Post(ref evt);
-    }
-    
-    void OnSceneLoaded(SceneLoadedEvent e)
-    {
-        CYLog.Info($"场景加载完成: {e.SceneName}");
+        // 显示升级特效
+        if (evt.NewLevel > evt.OldLevel)
+        {
+            ShowLevelUpEffect();
+        }
     }
     
     void OnDestroy()
     {
+        // ⚠️ 重要！销毁时取消订阅
         _eventBus?.UnsubscribeAll(this);
     }
 }
-
-// 事件定义
-public struct SceneLoadedEvent
-{
-    public string SceneName;
-}
 ```
 
----
-
-## 3. 场景管理
-
-### 3.1 场景加载
+**第三步：发布事件**
 
 ```csharp
-public class SceneManager
+public class Player : MonoBehaviour
 {
-    private readonly IResourceLoader _loader;
-    private readonly EventBus _eventBus;
+    private EventBus _eventBus;
+    private int _level = 1;
     
-    public SceneManager()
+    void Start()
     {
-        _loader = ServiceLocator.Get<IResourceLoader>();
         _eventBus = ServiceLocator.Get<EventBus>();
     }
     
-    /// <summary>
-    /// 加载场景（带过渡）
-    /// </summary>
-    public async void LoadScene(string sceneName, System.Action<float> onProgress = null)
+    public void GainExp(int amount)
     {
-        // 显示加载界面
-        ShowLoadingScreen();
+        exp += amount;
         
-        // 清理 Scoped 服务
-        ServiceLocator.ClearScoped();
-        
-        // 加载场景
-        await _loader.LoadSceneAsync(sceneName, LoadSceneMode.Single, onProgress);
-        
-        // 隐藏加载界面
-        HideLoadingScreen();
-        
-        // 发布事件
-        var evt = new SceneLoadedEvent { SceneName = sceneName };
-        _eventBus.Post(ref evt);
+        if (exp >= expToNextLevel)
+        {
+            int oldLevel = _level;
+            _level++;
+            exp -= expToNextLevel;
+            
+            // 发布事件
+            var evt = new PlayerLevelUpEvent
+            {
+                OldLevel = oldLevel,
+                NewLevel = _level
+            };
+            _eventBus.Post(ref evt);  // ⚠️ 必须用 ref
+        }
     }
-    
-    /// <summary>
-    /// 附加加载场景
-    /// </summary>
-    public async void LoadSceneAdditive(string sceneName)
-    {
-        await _loader.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
-    }
-    
-    private void ShowLoadingScreen() { /* ... */ }
-    private void HideLoadingScreen() { /* ... */ }
 }
 ```
 
-### 3.2 场景控制器模板
+### 6.3 事件优先级
+
+订阅时可以指定优先级，数字大的先执行：
 
 ```csharp
-/// <summary>
-/// 场景控制器基类
-/// 每个场景有一个继承此类的控制器
-/// </summary>
-public abstract class SceneController : MonoBehaviour
+// 高优先级（先执行）- 比如音效要立即响应
+_eventBus.Subscribe<PlayerDiedEvent>(OnDied, this, priority: 100);
+
+// 普通优先级（默认 0）
+_eventBus.Subscribe<PlayerDiedEvent>(OnDied, this);
+
+// 低优先级（后执行）- 比如统计可以晚点
+_eventBus.Subscribe<PlayerDiedEvent>(OnDied, this, priority: -100);
+```
+
+### 6.4 常见错误
+
+```csharp
+// ❌ 错误1：忘记用 ref
+void OnEvent(PlayerLevelUpEvent evt) { }  // 应该是 ref PlayerLevelUpEvent
+
+// ❌ 错误2：事件用 class
+public class MyEvent { }  // 应该是 struct
+
+// ❌ 错误3：忘记取消订阅
+void OnDestroy()
 {
-    protected EventBus EventBus { get; private set; }
-    
-    protected virtual void Awake()
-    {
-        EventBus = ServiceLocator.Get<EventBus>();
-    }
-    
-    protected virtual void Start()
-    {
-        OnSceneEnter();
-    }
-    
-    protected virtual void OnDestroy()
-    {
-        OnSceneExit();
-        EventBus?.UnsubscribeAll(this);
-    }
-    
-    /// <summary>
-    /// 场景进入时调用
-    /// </summary>
-    protected abstract void OnSceneEnter();
-    
-    /// <summary>
-    /// 场景退出时调用
-    /// </summary>
-    protected virtual void OnSceneExit() { }
+    // 必须取消订阅，否则会内存泄漏！
+    _eventBus.UnsubscribeAll(this);
 }
 
-/// <summary>
-/// 战斗场景控制器
-/// </summary>
-public class BattleSceneController : SceneController
-{
-    [SerializeField] private Transform _spawnPoint;
-    
-    private IGameplayWorld _gameplayWorld;
-    
-    protected override void OnSceneEnter()
-    {
-        CYLog.Info("进入战斗场景");
-        
-        // 创建玩法世界
-#if CY_WECHAT || UNITY_WEBGL
-        _gameplayWorld = new OOPGameplayWorld();
-#else
-        _gameplayWorld = new HybridGameplayWorld();
-#endif
-        
-        if (_gameplayWorld is IInitializable init)
-            init.Initialize();
-        
-        // 生成玩家
-        SpawnPlayer();
-    }
-    
-    protected override void OnSceneExit()
-    {
-        if (_gameplayWorld is IDisposableEx disposable)
-            disposable.Dispose();
-    }
-    
-    private void SpawnPlayer()
-    {
-        var loader = ServiceLocator.Get<IResourceLoader>();
-        var prefab = loader.Load<GameObject>("Prefabs/Player");
-        Instantiate(prefab, _spawnPoint.position, Quaternion.identity);
-    }
-    
-    void FixedUpdate()
-    {
-        _gameplayWorld?.FixedTick(Time.fixedDeltaTime);
-    }
-}
+// ❌ 错误4：Post 时忘记 ref
+_eventBus.Post(evt);  // 应该是 Post(ref evt)
 ```
 
 ---
 
-## 4. UI 开发模式
+## 7. UI 系统完整教程
 
-### 4.1 UI 管理器
+### 7.1 UI 系统架构
 
-```csharp
-/// <summary>
-/// UI 管理器
-/// 管理所有 UI 面板的打开/关闭
-/// </summary>
-public class UIManager
-{
-    private static UIManager _instance;
-    public static UIManager Instance => _instance ??= new UIManager();
-    
-    private readonly Dictionary<string, UIPanel> _panels = new();
-    private readonly Stack<UIPanel> _panelStack = new();
-    private readonly IResourceLoader _loader;
-    private Transform _uiRoot;
-    
-    private UIManager()
-    {
-        _loader = ServiceLocator.Get<IResourceLoader>();
-        
-        // 创建 UI 根节点
-        var canvas = Object.FindObjectOfType<Canvas>();
-        if (canvas != null)
-        {
-            _uiRoot = canvas.transform;
-        }
-    }
-    
-    /// <summary>
-    /// 打开面板
-    /// </summary>
-    public T Open<T>(object data = null) where T : UIPanel
-    {
-        string panelName = typeof(T).Name;
-        
-        if (!_panels.TryGetValue(panelName, out var panel))
-        {
-            // 加载面板
-            var prefab = _loader.Load<GameObject>($"UI/{panelName}");
-            var go = Object.Instantiate(prefab, _uiRoot);
-            panel = go.GetComponent<UIPanel>();
-            _panels[panelName] = panel;
-        }
-        
-        panel.gameObject.SetActive(true);
-        panel.OnOpen(data);
-        _panelStack.Push(panel);
-        
-        return panel as T;
-    }
-    
-    /// <summary>
-    /// 关闭面板
-    /// </summary>
-    public void Close<T>() where T : UIPanel
-    {
-        string panelName = typeof(T).Name;
-        
-        if (_panels.TryGetValue(panelName, out var panel))
-        {
-            panel.OnClose();
-            panel.gameObject.SetActive(false);
-        }
-    }
-    
-    /// <summary>
-    /// 关闭顶层面板
-    /// </summary>
-    public void CloseTop()
-    {
-        if (_panelStack.Count > 0)
-        {
-            var panel = _panelStack.Pop();
-            panel.OnClose();
-            panel.gameObject.SetActive(false);
-        }
-    }
-    
-    /// <summary>
-    /// 关闭所有面板
-    /// </summary>
-    public void CloseAll()
-    {
-        foreach (var panel in _panels.Values)
-        {
-            panel.OnClose();
-            panel.gameObject.SetActive(false);
-        }
-        _panelStack.Clear();
-    }
-}
-
-/// <summary>
-/// UI 面板基类
-/// </summary>
-public abstract class UIPanel : MonoBehaviour
-{
-    protected EventBus EventBus { get; private set; }
-    
-    protected virtual void Awake()
-    {
-        EventBus = ServiceLocator.Get<EventBus>();
-    }
-    
-    /// <summary>
-    /// 面板打开时调用
-    /// </summary>
-    public virtual void OnOpen(object data) { }
-    
-    /// <summary>
-    /// 面板关闭时调用
-    /// </summary>
-    public virtual void OnClose() { }
-    
-    /// <summary>
-    /// 刷新面板
-    /// </summary>
-    public virtual void Refresh() { }
-    
-    protected virtual void OnDestroy()
-    {
-        EventBus?.UnsubscribeAll(this);
-    }
-}
+```
+┌─────────────────────────────────────────────────────────┐
+│                      UIManager                           │
+│                     (UI 管理器)                           │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │ 职责：                                               ││
+│  │ - 打开/关闭面板                                       ││
+│  │ - 管理面板栈（支持返回）                               ││
+│  │ - 面板层级排序                                        ││
+│  │ - 面板对象池                                          ││
+│  │ - 预加载面板                                          ││
+│  └─────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────┘
+                           │
+                           │ 管理
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                       UIPanel                            │
+│                      (面板基类)                           │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │ 生命周期：                                           ││
+│  │ OnBindUI()   → 绑定按钮点击等事件                     ││
+│  │ OnShow()     → 面板显示，初始化数据                   ││
+│  │ OnHide()     → 面板隐藏，清理状态                     ││
+│  │ OnUnbindUI() → 解绑事件                              ││
+│  └─────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────┘
+                           │
+                           │ 继承
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│              你的具体面板类                               │
+│      MainPanel, ShopPanel, SettingsPanel...             │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 UI 面板示例
+### 7.2 UI 层级说明
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  System (600)    │ 系统级弹窗，如崩溃提示                  │
+├──────────────────┼──────────────────────────────────────┤
+│  Loading (500)   │ 加载界面，全屏遮挡                     │
+├──────────────────┼──────────────────────────────────────┤
+│  Guide (400)     │ 新手引导                              │
+├──────────────────┼──────────────────────────────────────┤
+│  Tips (300)      │ Toast 提示                           │
+├──────────────────┼──────────────────────────────────────┤
+│  Popup (200)     │ 弹窗，如确认框、商店                    │
+├──────────────────┼──────────────────────────────────────┤
+│  Main (100)      │ 主界面，如主菜单、战斗 HUD              │
+├──────────────────┼──────────────────────────────────────┤
+│  Background (0)  │ 背景层                                │
+└─────────────────────────────────────────────────────────┘
+        ↑ 越上面层级越高，显示在更前面
+```
+
+### 7.3 创建你的第一个 UI 面板
+
+**第一步：创建预制体**
+
+1. 在场景中创建 UI：
+   - 右键 Hierarchy > UI > Canvas（如果没有的话）
+   - 在 Canvas 下右键 > UI > Panel
+   
+2. 设计你的 UI：
+   - 添加按钮、文本等
+   - 记住给需要代码控制的 UI 起个名字
+
+3. 保存为预制体：
+   - 把 Panel 拖到 `Resources/UI/Panels/` 文件夹
+   - 命名为 `MainMenuPanel`
+   
+4. 删除场景中的 Panel（已保存为预制体）
+
+**第二步：创建面板脚本**
 
 ```csharp
-/// <summary>
-/// 主菜单面板
-/// </summary>
+using UnityEngine;
+using UnityEngine.UI;
+using CYFramework.Infrastructure;
+using CYFramework.Modules.UI;
+
+// 指定预制体路径（相对于 Resources）
+[UIPrefab("UI/Panels/MainMenuPanel")]
 public class MainMenuPanel : UIPanel
 {
+    // ========== UI 引用 ==========
+    [Header("按钮")]
     [SerializeField] private Button _startButton;
     [SerializeField] private Button _settingsButton;
     [SerializeField] private Button _quitButton;
     
-    protected override void Awake()
+    [Header("文本")]
+    [SerializeField] private Text _versionText;
+    
+    // ========== 属性配置 ==========
+    
+    // 设置层级为主界面层
+    public override UILayer Layer => UILayer.Main;
+    
+    // 允许对象池复用
+    public override bool IsPoolable => true;
+    
+    // ========== 生命周期方法 ==========
+    
+    /// <summary>
+    /// 绑定 UI 事件
+    /// 在这里添加按钮点击监听
+    /// </summary>
+    protected override void OnBindUI()
     {
-        base.Awake();
+        base.OnBindUI();
         
-        _startButton.onClick.AddListener(OnStartClick);
-        _settingsButton.onClick.AddListener(OnSettingsClick);
-        _quitButton.onClick.AddListener(OnQuitClick);
+        _startButton.onClick.AddListener(OnStartClicked);
+        _settingsButton.onClick.AddListener(OnSettingsClicked);
+        _quitButton.onClick.AddListener(OnQuitClicked);
     }
     
-    public override void OnOpen(object data)
+    /// <summary>
+    /// 解绑 UI 事件
+    /// 在这里移除所有监听
+    /// </summary>
+    protected override void OnUnbindUI()
     {
+        base.OnUnbindUI();
+        
+        _startButton.onClick.RemoveListener(OnStartClicked);
+        _settingsButton.onClick.RemoveListener(OnSettingsClicked);
+        _quitButton.onClick.RemoveListener(OnQuitClicked);
+    }
+    
+    /// <summary>
+    /// 面板显示时调用
+    /// 在这里初始化数据、刷新 UI
+    /// </summary>
+    protected override void OnShow(object data)
+    {
+        // 显示版本号
+        _versionText.text = $"v{Application.version}";
+        
         // 播放 BGM
         var audio = ServiceLocator.Get<IAudioService>();
         audio.PlayBGM("bgm_menu");
     }
     
-    void OnStartClick()
+    /// <summary>
+    /// 面板隐藏时调用
+    /// 在这里清理状态
+    /// </summary>
+    protected override void OnHide()
     {
-        ServiceLocator.Get<IAudioService>().PlaySFX("sfx_click");
+        // 可以在这里做清理工作
+    }
+    
+    // ========== 按钮事件 ==========
+    
+    private void OnStartClicked()
+    {
+        PlayClickSound();
         
         // 关闭当前面板
-        UIManager.Instance.Close<MainMenuPanel>();
+        CloseSelf();
         
-        // 加载游戏场景
-        new SceneManager().LoadScene("Level1");
+        // 打开游戏场景（你的逻辑）
+        CYLog.Info("开始游戏！");
     }
     
-    void OnSettingsClick()
+    private void OnSettingsClicked()
     {
-        ServiceLocator.Get<IAudioService>().PlaySFX("sfx_click");
-        UIManager.Instance.Open<SettingsPanel>();
+        PlayClickSound();
+        
+        // 打开设置面板
+        Manager.Open<SettingsPanel>();
     }
     
-    void OnQuitClick()
+    private void OnQuitClicked()
     {
+        PlayClickSound();
+        
+        #if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+        #else
         Application.Quit();
+        #endif
     }
-}
-
-/// <summary>
-/// 设置面板
-/// </summary>
-public class SettingsPanel : UIPanel
-{
-    [SerializeField] private Slider _masterVolumeSlider;
-    [SerializeField] private Slider _bgmVolumeSlider;
-    [SerializeField] private Slider _sfxVolumeSlider;
-    [SerializeField] private Toggle _muteToggle;
-    [SerializeField] private Button _closeButton;
     
-    private IAudioService _audio;
-    private SaveService _saveService;
-    
-    protected override void Awake()
+    private void PlayClickSound()
     {
-        base.Awake();
-        
-        _audio = ServiceLocator.Get<IAudioService>();
-        _saveService = ServiceLocator.Get<SaveService>();
-        
-        _masterVolumeSlider.onValueChanged.AddListener(OnMasterVolumeChanged);
-        _bgmVolumeSlider.onValueChanged.AddListener(OnBGMVolumeChanged);
-        _sfxVolumeSlider.onValueChanged.AddListener(OnSFXVolumeChanged);
-        _muteToggle.onValueChanged.AddListener(OnMuteChanged);
-        _closeButton.onClick.AddListener(OnCloseClick);
+        var audio = ServiceLocator.Get<IAudioService>();
+        audio.PlaySFX("sfx_click");
     }
-    
-    public override void OnOpen(object data)
-    {
-        // 加载设置
-        var settings = _saveService.Load<SettingsData>("settings", new SettingsData());
-        
-        _masterVolumeSlider.value = settings.masterVolume;
-        _bgmVolumeSlider.value = settings.bgmVolume;
-        _sfxVolumeSlider.value = settings.sfxVolume;
-        _muteToggle.isOn = settings.isMuted;
-    }
-    
-    public override void OnClose()
-    {
-        // 保存设置
-        var settings = new SettingsData
-        {
-            masterVolume = _masterVolumeSlider.value,
-            bgmVolume = _bgmVolumeSlider.value,
-            sfxVolume = _sfxVolumeSlider.value,
-            isMuted = _muteToggle.isOn
-        };
-        
-        _saveService.Save("settings", settings);
-    }
-    
-    void OnMasterVolumeChanged(float value) => _audio.SetMasterVolume(value);
-    void OnBGMVolumeChanged(float value) => _audio.SetBGMVolume(value);
-    void OnSFXVolumeChanged(float value) => _audio.SetSFXVolume(value);
-    void OnMuteChanged(bool muted) => _audio.Mute(muted);
-    void OnCloseClick() => UIManager.Instance.Close<SettingsPanel>();
-}
-
-[Serializable]
-public class SettingsData
-{
-    public float masterVolume = 1f;
-    public float bgmVolume = 0.8f;
-    public float sfxVolume = 1f;
-    public bool isMuted = false;
 }
 ```
 
----
+**第三步：在预制体上挂载脚本**
 
-## 5. 网络通信
+1. 打开 `Resources/UI/Panels/MainMenuPanel.prefab`
+2. 在根节点添加 `MainMenuPanel` 脚本
+3. 把按钮、文本拖到脚本对应的字段上
+4. 保存预制体
 
-### 5.1 HTTP 请求封装
+**第四步：打开面板**
 
 ```csharp
-/// <summary>
-/// API 客户端
-/// 封装所有服务器请求
-/// </summary>
-public class ApiClient
+// 在任何地方打开面板
+var uiManager = ServiceLocator.Get<UIManager>();
+uiManager.Open<MainMenuPanel>();
+```
+
+### 7.4 面板之间传递数据
+
+```csharp
+// 定义数据类
+public class ShopPanelData
 {
-    private readonly NetworkService _network;
-    private readonly string _baseUrl = "https://api.game.com";
-    private string _token;
-    
-    public ApiClient()
-    {
-        _network = ServiceLocator.Get<NetworkService>();
-    }
-    
-    /// <summary>
-    /// 设置认证 Token
-    /// </summary>
-    public void SetToken(string token)
-    {
-        _token = token;
-    }
-    
-    /// <summary>
-    /// 登录
-    /// </summary>
-    public async Task<LoginResponse> Login(string username, string password)
-    {
-        var request = new LoginRequest { username = username, password = password };
-        var response = await _network.PostAsync<LoginResponse>($"{_baseUrl}/auth/login", request);
-        
-        if (response != null && !string.IsNullOrEmpty(response.token))
-        {
-            SetToken(response.token);
-        }
-        
-        return response;
-    }
-    
-    /// <summary>
-    /// 获取玩家数据
-    /// </summary>
-    public async Task<PlayerData> GetPlayerData()
-    {
-        var headers = GetAuthHeaders();
-        return await _network.GetAsync<PlayerData>($"{_baseUrl}/player", headers);
-    }
-    
-    /// <summary>
-    /// 保存玩家进度
-    /// </summary>
-    public async Task<bool> SaveProgress(PlayerProgress progress)
-    {
-        var headers = GetAuthHeaders();
-        var response = await _network.PostAsync<ApiResponse>(
-            $"{_baseUrl}/player/progress", 
-            progress, 
-            headers
-        );
-        return response?.success ?? false;
-    }
-    
-    private Dictionary<string, string> GetAuthHeaders()
-    {
-        return new Dictionary<string, string>
-        {
-            { "Authorization", $"Bearer {_token}" }
-        };
-    }
+    public int PlayerGold;
+    public List<ShopItem> Items;
 }
 
-// 数据类
-[Serializable]
-public class LoginRequest
+// 打开时传递数据
+var data = new ShopPanelData
 {
-    public string username;
-    public string password;
-}
+    PlayerGold = player.Gold,
+    Items = shopItems
+};
+uiManager.Open<ShopPanel>(data);
 
-[Serializable]
-public class LoginResponse
+// 在 ShopPanel 中接收
+protected override void OnShow(object data)
 {
-    public bool success;
-    public string token;
-    public string message;
-}
-
-[Serializable]
-public class PlayerData
-{
-    public int id;
-    public string name;
-    public int level;
-    public int gold;
-}
-
-[Serializable]
-public class ApiResponse
-{
-    public bool success;
-    public string message;
+    var shopData = data as ShopPanelData;
+    if (shopData != null)
+    {
+        _goldText.text = shopData.PlayerGold.ToString();
+        RefreshItemList(shopData.Items);
+    }
 }
 ```
 
-### 5.2 WebSocket 实时通信
+### 7.5 使用通用组件
+
+#### Toast 提示
 
 ```csharp
-/// <summary>
-/// 游戏同步客户端
-/// </summary>
-public class GameSyncClient
-{
-    private readonly NetworkService _network;
-    private readonly EventBus _eventBus;
-    
-    public GameSyncClient()
-    {
-        _network = ServiceLocator.Get<NetworkService>();
-        _eventBus = ServiceLocator.Get<EventBus>();
-        
-        // 注册消息处理
-        _network.OnWebSocketMessage += OnMessage;
-        _network.OnWebSocketDisconnected += OnDisconnected;
-    }
-    
-    /// <summary>
-    /// 连接服务器
-    /// </summary>
-    public async Task Connect(string roomId)
-    {
-        string url = $"wss://game.server.com/room/{roomId}";
-        await _network.ConnectWebSocket(url);
-        
-        CYLog.Info($"已连接到房间: {roomId}");
-    }
-    
-    /// <summary>
-    /// 发送移动命令
-    /// </summary>
-    public void SendMove(Vector3 position, Vector3 direction)
-    {
-        var cmd = new MoveMessage
-        {
-            type = "move",
-            x = position.x,
-            y = position.y,
-            z = position.z,
-            dirX = direction.x,
-            dirZ = direction.z
-        };
-        
-        _network.SendWebSocketMessage(JsonUtility.ToJson(cmd));
-    }
-    
-    /// <summary>
-    /// 发送攻击命令
-    /// </summary>
-    public void SendAttack(int targetId, int skillId)
-    {
-        var cmd = new AttackMessage
-        {
-            type = "attack",
-            targetId = targetId,
-            skillId = skillId
-        };
-        
-        _network.SendWebSocketMessage(JsonUtility.ToJson(cmd));
-    }
-    
-    private void OnMessage(string message)
-    {
-        // 解析消息类型
-        var baseMsg = JsonUtility.FromJson<BaseMessage>(message);
-        
-        switch (baseMsg.type)
-        {
-            case "sync":
-                var syncData = JsonUtility.FromJson<SyncMessage>(message);
-                var syncEvt = new ServerSyncEvent { Data = syncData };
-                _eventBus.Post(ref syncEvt);
-                break;
-                
-            case "player_join":
-                var joinData = JsonUtility.FromJson<PlayerJoinMessage>(message);
-                var joinEvt = new PlayerJoinEvent { PlayerId = joinData.playerId };
-                _eventBus.Post(ref joinEvt);
-                break;
-                
-            case "player_leave":
-                var leaveData = JsonUtility.FromJson<PlayerLeaveMessage>(message);
-                var leaveEvt = new PlayerLeaveEvent { PlayerId = leaveData.playerId };
-                _eventBus.Post(ref leaveEvt);
-                break;
-        }
-    }
-    
-    private void OnDisconnected()
-    {
-        CYLog.Warning("与服务器断开连接");
-        
-        // 发布断线事件
-        var evt = new DisconnectedEvent();
-        _eventBus.Post(ref evt);
-    }
-    
-    public void Disconnect()
-    {
-        _network.DisconnectWebSocket();
-    }
-}
+using CYFramework.Modules.UI.Components;
 
-// 消息定义
-[Serializable] public class BaseMessage { public string type; }
-[Serializable] public class MoveMessage : BaseMessage { public float x, y, z, dirX, dirZ; }
-[Serializable] public class AttackMessage : BaseMessage { public int targetId, skillId; }
-[Serializable] public class SyncMessage : BaseMessage { public PlayerState[] players; }
-[Serializable] public class PlayerJoinMessage : BaseMessage { public int playerId; }
-[Serializable] public class PlayerLeaveMessage : BaseMessage { public int playerId; }
+// 普通提示
+UIToast.Show("操作成功");
 
-// 事件定义
-public struct ServerSyncEvent { public SyncMessage Data; }
-public struct PlayerJoinEvent { public int PlayerId; }
-public struct PlayerLeaveEvent { public int PlayerId; }
-public struct DisconnectedEvent { }
+// 成功提示（绿色）
+UIToast.ShowSuccess("购买成功！");
+
+// 错误提示（红色）
+UIToast.ShowError("网络连接失败");
+
+// 警告提示（黄色）
+UIToast.ShowWarning("余额不足");
+
+// 自定义显示时间
+UIToast.Show("这条消息显示 5 秒", 5f);
 ```
 
----
-
-## 6. 存档系统
-
-### 6.1 存档数据设计
+#### 对话框
 
 ```csharp
-/// <summary>
-/// 玩家存档数据
-/// 使用 [Serializable] 以支持 JSON 序列化
-/// </summary>
-[Serializable]
-public class PlayerSaveData
+using CYFramework.Modules.UI.Components;
+
+// 提示框（仅确认按钮）
+UIDialog.Alert("你的账号已过期", "提示", () => {
+    CYLog.Info("用户点击了确认");
+});
+
+// 确认框（确认 + 取消）
+UIDialog.Confirm(
+    "确定要删除这个存档吗？",
+    onConfirm: () => {
+        SaveManager.Instance.Delete();
+        UIToast.Show("删除成功");
+    },
+    onCancel: () => {
+        CYLog.Info("用户取消了删除");
+    },
+    title: "确认删除"
+);
+
+// 输入框
+UIDialog.Input(
+    "请输入你的角色名",
+    onConfirm: (name) => {
+        player.Name = name;
+        UIToast.Show($"欢迎，{name}！");
+    },
+    defaultValue: "玩家1",
+    title: "创建角色"
+);
+```
+
+#### Loading 加载界面
+
+```csharp
+using CYFramework.Modules.UI.Components;
+
+// 显示 Loading
+UILoading.Show("正在加载资源...");
+
+// 更新进度 (0-1)
+UILoading.Progress(0.3f);
+UILoading.Progress(0.6f);
+UILoading.Progress(1.0f);
+
+// 更新提示文字
+UILoading.Tips("正在初始化游戏...");
+
+// 隐藏 Loading
+UILoading.Hide();
+
+// 配合协程使用
+IEnumerator LoadGameAsync()
 {
-    // 版本号（用于数据迁移）
-    public int version = 1;
+    UILoading.Show("加载中...");
     
-    // 基础信息
-    public string playerName;
-    public int level;
-    public int exp;
+    // 加载场景
+    var operation = SceneManager.LoadSceneAsync("GameScene");
+    while (!operation.isDone)
+    {
+        UILoading.Progress(operation.progress);
+        yield return null;
+    }
     
-    // 货币
-    public int gold;
-    public int gems;
+    UILoading.Hide();
+}
+```
+
+### 7.6 MVVM 数据绑定
+
+当面板数据经常变化时，使用 MVVM 模式：
+
+**第一步：创建 ViewModel**
+
+```csharp
+using CYFramework.Modules.UI.MVVM;
+
+public class PlayerInfoViewModel : ViewModel
+{
+    // 属性名常量
+    public const string PROP_NAME = "Name";
+    public const string PROP_LEVEL = "Level";
+    public const string PROP_HP = "HP";
+    public const string PROP_MAX_HP = "MaxHP";
+    public const string PROP_GOLD = "Gold";
     
     // 属性
-    public int hp;
-    public int maxHp;
-    public int attack;
-    public int defense;
+    public string Name
+    {
+        get => GetProperty<string>(PROP_NAME, "玩家");
+        set => SetProperty(PROP_NAME, value);
+    }
     
-    // 装备
-    public List<int> equippedItems = new();
+    public int Level
+    {
+        get => GetProperty<int>(PROP_LEVEL, 1);
+        set => SetProperty(PROP_LEVEL, value);
+    }
     
-    // 背包
-    public List<InventoryItem> inventory = new();
+    public int HP
+    {
+        get => GetProperty<int>(PROP_HP, 100);
+        set => SetProperty(PROP_HP, value);
+    }
     
-    // 已解锁技能
-    public List<int> unlockedSkills = new();
+    public int MaxHP
+    {
+        get => GetProperty<int>(PROP_MAX_HP, 100);
+        set => SetProperty(PROP_MAX_HP, value);
+    }
     
-    // 进度
-    public int currentChapter;
-    public int currentLevel;
-    public List<int> completedLevels = new();
+    public int Gold
+    {
+        get => GetProperty<int>(PROP_GOLD, 0);
+        set => SetProperty(PROP_GOLD, value);
+    }
     
-    // 统计
-    public int totalPlayTime; // 秒
-    public int totalKills;
-    public int totalDeaths;
-    
-    // 时间戳
-    public long lastSaveTime;
-}
-
-[Serializable]
-public class InventoryItem
-{
-    public int itemId;
-    public int count;
+    // 计算属性（只读）
+    public float HPPercent => MaxHP > 0 ? (float)HP / MaxHP : 0f;
 }
 ```
 
-### 6.2 存档管理器
+**第二步：创建 MVVM 面板**
 
 ```csharp
-/// <summary>
-/// 存档管理器
-/// 封装存档操作
-/// </summary>
-public class SaveManager
+using CYFramework.Modules.UI;
+using CYFramework.Modules.UI.MVVM;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class PlayerInfoPanel : MVVMPanel<PlayerInfoViewModel>
 {
-    private static SaveManager _instance;
-    public static SaveManager Instance => _instance ??= new SaveManager();
+    [SerializeField] private Text _nameText;
+    [SerializeField] private Text _levelText;
+    [SerializeField] private Slider _hpBar;
+    [SerializeField] private Text _hpText;
+    [SerializeField] private Text _goldText;
     
-    private readonly SaveService _saveService;
-    private PlayerSaveData _currentData;
+    protected override void OnShow(object data)
+    {
+        // 初始刷新
+        RefreshAll();
+    }
     
-    private const string SAVE_KEY = "player_save";
-    private const string AUTO_SAVE_KEY = "player_autosave";
+    // 响应 ViewModel 属性变更
+    protected override void OnViewModelPropertyChanged(string propertyName, object oldValue, object newValue)
+    {
+        switch (propertyName)
+        {
+            case PlayerInfoViewModel.PROP_NAME:
+                _nameText.text = (string)newValue;
+                break;
+                
+            case PlayerInfoViewModel.PROP_LEVEL:
+                _levelText.text = $"Lv.{newValue}";
+                break;
+                
+            case PlayerInfoViewModel.PROP_HP:
+            case PlayerInfoViewModel.PROP_MAX_HP:
+                RefreshHP();
+                break;
+                
+            case PlayerInfoViewModel.PROP_GOLD:
+                _goldText.text = $"金币: {newValue}";
+                break;
+        }
+    }
     
-    public PlayerSaveData Data => _currentData;
+    private void RefreshAll()
+    {
+        _nameText.text = ViewModel.Name;
+        _levelText.text = $"Lv.{ViewModel.Level}";
+        _goldText.text = $"金币: {ViewModel.Gold}";
+        RefreshHP();
+    }
     
-    private SaveManager()
+    private void RefreshHP()
+    {
+        _hpBar.value = ViewModel.HPPercent;
+        _hpText.text = $"{ViewModel.HP}/{ViewModel.MaxHP}";
+    }
+}
+```
+
+**第三步：修改 ViewModel，UI 自动更新**
+
+```csharp
+// 获取面板
+var panel = uiManager.Get<PlayerInfoPanel>();
+
+// 修改 ViewModel 的属性，UI 会自动更新！
+panel.ViewModel.Gold += 100;  // 金币显示自动刷新
+panel.ViewModel.Level++;       // 等级显示自动刷新
+panel.ViewModel.HP -= 20;      // 血条自动刷新
+```
+
+---
+
+## 8. 存档系统详解
+
+### 8.1 基本使用
+
+```csharp
+using CYFramework.Infrastructure;
+using CYFramework.Core.Save;
+
+// 获取存档服务
+var save = ServiceLocator.Get<SaveService>();
+
+// 定义存档数据
+[System.Serializable]
+public class PlayerData
+{
+    public string name = "玩家";
+    public int level = 1;
+    public int gold = 0;
+    public List<int> unlockedItems = new List<int>();
+}
+
+// 保存数据
+var data = new PlayerData { level = 10, gold = 5000 };
+save.Save("player", data);
+
+// 读取数据
+var loaded = save.Load<PlayerData>("player");
+if (loaded != null)
+{
+    CYLog.Info($"等级: {loaded.level}, 金币: {loaded.gold}");
+}
+
+// 读取（带默认值）
+var settings = save.Load<SettingsData>("settings", new SettingsData());
+
+// 检查存档是否存在
+if (save.Exists("player"))
+{
+    // 有存档
+}
+
+// 删除存档
+save.Delete("player");
+```
+
+### 8.2 完整的存档管理器示例
+
+```csharp
+public class GameSaveManager
+{
+    private static GameSaveManager _instance;
+    public static GameSaveManager Instance => _instance ??= new GameSaveManager();
+    
+    private SaveService _saveService;
+    private PlayerData _playerData;
+    
+    private const string PLAYER_KEY = "player_save";
+    
+    public PlayerData Data => _playerData;
+    
+    private GameSaveManager()
     {
         _saveService = ServiceLocator.Get<SaveService>();
     }
@@ -922,711 +1179,427 @@ public class SaveManager
     /// </summary>
     public bool Load()
     {
-        if (_saveService.Exists(SAVE_KEY))
+        if (_saveService.Exists(PLAYER_KEY))
         {
-            _currentData = _saveService.Load<PlayerSaveData>(SAVE_KEY);
-            CYLog.Info($"存档加载成功，等级: {_currentData.level}");
+            _playerData = _saveService.Load<PlayerData>(PLAYER_KEY);
+            CYLog.Info($"存档加载成功，等级: {_playerData.level}");
             return true;
         }
         
-        CYLog.Info("没有找到存档，创建新存档");
-        _currentData = CreateNewSave();
+        // 没有存档，创建新的
+        _playerData = new PlayerData();
+        CYLog.Info("创建新存档");
         return false;
     }
     
     /// <summary>
     /// 保存存档
     /// </summary>
-    public async Task Save()
+    public void Save()
     {
-        _currentData.lastSaveTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        
-        await _saveService.SaveAsync(SAVE_KEY, _currentData);
+        _saveService.Save(PLAYER_KEY, _playerData);
         CYLog.Info("存档保存成功");
     }
     
     /// <summary>
-    /// 自动保存
+    /// 删除存档（重新开始）
     /// </summary>
-    public async Task AutoSave()
+    public void Reset()
     {
-        _currentData.lastSaveTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        
-        await _saveService.SaveAsync(AUTO_SAVE_KEY, _currentData);
-        CYLog.Debug("自动保存完成");
+        _saveService.Delete(PLAYER_KEY);
+        _playerData = new PlayerData();
+        CYLog.Info("存档已重置");
     }
-    
-    /// <summary>
-    /// 从自动存档恢复
-    /// </summary>
-    public bool LoadAutoSave()
-    {
-        if (_saveService.Exists(AUTO_SAVE_KEY))
-        {
-            _currentData = _saveService.Load<PlayerSaveData>(AUTO_SAVE_KEY);
-            return true;
-        }
-        return false;
-    }
-    
-    /// <summary>
-    /// 删除存档
-    /// </summary>
-    public void Delete()
-    {
-        _saveService.Delete(SAVE_KEY);
-        _saveService.Delete(AUTO_SAVE_KEY);
-        _currentData = null;
-    }
-    
-    /// <summary>
-    /// 检查是否有存档
-    /// </summary>
-    public bool HasSave()
-    {
-        return _saveService.Exists(SAVE_KEY);
-    }
-    
-    /// <summary>
-    /// 创建新存档
-    /// </summary>
-    private PlayerSaveData CreateNewSave()
-    {
-        return new PlayerSaveData
-        {
-            version = 1,
-            playerName = "Player",
-            level = 1,
-            exp = 0,
-            gold = 100,
-            gems = 0,
-            hp = 100,
-            maxHp = 100,
-            attack = 10,
-            defense = 5,
-            currentChapter = 1,
-            currentLevel = 1,
-            lastSaveTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-        };
-    }
-}
-```
-
-### 6.3 使用示例
-
-```csharp
-// 游戏开始时加载
-void Start()
-{
-    SaveManager.Instance.Load();
-    
-    // 显示玩家数据
-    var data = SaveManager.Instance.Data;
-    playerNameText.text = data.playerName;
-    levelText.text = $"Lv.{data.level}";
-    goldText.text = data.gold.ToString();
-}
-
-// 获得金币时
-void OnGoldCollected(int amount)
-{
-    SaveManager.Instance.Data.gold += amount;
-    
-    // 自动保存
-    SaveManager.Instance.AutoSave();
-}
-
-// 关卡完成时
-async void OnLevelComplete(int levelId)
-{
-    var data = SaveManager.Instance.Data;
-    
-    if (!data.completedLevels.Contains(levelId))
-    {
-        data.completedLevels.Add(levelId);
-    }
-    
-    data.exp += 100;
-    
-    // 检查升级
-    CheckLevelUp();
-    
-    // 保存
-    await SaveManager.Instance.Save();
-}
-
-// 退出游戏时
-void OnApplicationQuit()
-{
-    SaveManager.Instance.Save();
 }
 ```
 
 ---
 
-## 7. 音频管理
+## 9. 音频系统详解
 
-### 7.1 音频管理器
+### 9.1 基本使用
 
 ```csharp
-/// <summary>
-/// 音频管理器
-/// 封装音频服务，提供更方便的 API
-/// </summary>
-public class AudioManager
-{
-    private static AudioManager _instance;
-    public static AudioManager Instance => _instance ??= new AudioManager();
-    
-    private readonly IAudioService _audio;
-    
-    // 音频配置
-    private readonly Dictionary<string, string> _bgmMap = new()
-    {
-        { "menu", "bgm_menu" },
-        { "battle", "bgm_battle" },
-        { "boss", "bgm_boss" },
-        { "victory", "bgm_victory" },
-        { "defeat", "bgm_defeat" }
-    };
-    
-    private readonly Dictionary<string, string> _sfxMap = new()
-    {
-        { "click", "sfx_click" },
-        { "coin", "sfx_coin" },
-        { "hit", "sfx_hit" },
-        { "explosion", "sfx_explosion" },
-        { "levelup", "sfx_levelup" }
-    };
-    
-    private AudioManager()
-    {
-        _audio = ServiceLocator.Get<IAudioService>();
-    }
-    
-    /// <summary>
-    /// 播放 BGM（使用别名）
-    /// </summary>
-    public void PlayBGM(string alias)
-    {
-        if (_bgmMap.TryGetValue(alias, out var name))
-        {
-            _audio.PlayBGM(name);
-        }
-        else
-        {
-            _audio.PlayBGM(alias);
-        }
-    }
-    
-    /// <summary>
-    /// 停止 BGM
-    /// </summary>
-    public void StopBGM(float fadeOut = 0.5f)
-    {
-        _audio.StopBGM(fadeOut);
-    }
-    
-    /// <summary>
-    /// 播放音效（使用别名）
-    /// </summary>
-    public void PlaySFX(string alias, float volume = 1f)
-    {
-        if (_sfxMap.TryGetValue(alias, out var name))
-        {
-            _audio.PlaySFX(name, volume);
-        }
-        else
-        {
-            _audio.PlaySFX(alias, volume);
-        }
-    }
-    
-    /// <summary>
-    /// 播放 UI 点击音效
-    /// </summary>
-    public void PlayClick()
-    {
-        PlaySFX("click", 0.5f);
-    }
-}
+using CYFramework.Infrastructure;
+using CYFramework.Modules.Audio;
+
+// 获取音频服务
+var audio = ServiceLocator.Get<IAudioService>();
+
+// 播放 BGM
+audio.PlayBGM("bgm_battle");         // 默认音量，循环
+audio.PlayBGM("bgm_boss", 0.8f);     // 自定义音量
+audio.PlayBGM("bgm_intro", 1f, false); // 不循环
+
+// 停止 BGM
+audio.StopBGM();       // 立即停止
+audio.StopBGM(1.0f);   // 1秒淡出
+
+// 暂停/恢复 BGM
+audio.PauseBGM();
+audio.ResumeBGM();
+
+// 播放音效
+audio.PlaySFX("sfx_click");
+audio.PlaySFX("sfx_explosion", 0.5f); // 自定义音量
+
+// 音量控制
+audio.SetMasterVolume(0.8f);  // 主音量
+audio.SetBGMVolume(0.6f);     // BGM 音量
+audio.SetSFXVolume(1.0f);     // 音效音量
+
+// 静音
+audio.Mute(true);   // 静音
+audio.Mute(false);  // 取消静音
 ```
 
-### 7.2 使用示例
+### 9.2 音频资源放置
 
-```csharp
-// 进入场景
-void OnSceneEnter()
-{
-    AudioManager.Instance.PlayBGM("battle");
-}
-
-// UI 按钮点击
-void OnButtonClick()
-{
-    AudioManager.Instance.PlayClick();
-}
-
-// 拾取金币
-void OnCoinCollected()
-{
-    AudioManager.Instance.PlaySFX("coin");
-}
-
-// Boss 战
-void OnBossBattle()
-{
-    AudioManager.Instance.StopBGM(1f);
-    AudioManager.Instance.PlayBGM("boss");
-}
+```
+Resources/
+└── Audio/
+    ├── BGM/
+    │   ├── bgm_menu.mp3
+    │   ├── bgm_battle.mp3
+    │   └── bgm_boss.mp3
+    └── SFX/
+        ├── sfx_click.wav
+        ├── sfx_explosion.wav
+        └── sfx_coin.wav
 ```
 
 ---
 
-## 8. 对象池优化
+## 10. 对象池详解
 
-### 8.1 子弹池示例
+### 10.1 为什么需要对象池？
+
+**问题**：频繁创建销毁对象会产生 GC（垃圾回收），导致游戏卡顿
+
+**解决**：用完的对象不销毁，放回"池子"里，下次需要时取出来复用
+
+### 10.2 使用 GameObject 池
 
 ```csharp
-public class BulletPool : MonoBehaviour
+using CYFramework.Infrastructure;
+using CYFramework.Core.Pool;
+
+public class BulletSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject _bulletPrefab;
-    [SerializeField] private int _prewarmCount = 50;
     
-    private PoolManager _poolManager;
+    private PoolManager _pool;
     
     void Start()
     {
-        _poolManager = ServiceLocator.Get<PoolManager>();
+        _pool = ServiceLocator.Get<PoolManager>();
         
-        // 注册子弹池
-        _poolManager.RegisterPrefabPool(
-            _bulletPrefab,
-            prewarm: _prewarmCount,
-            maxSize: 200
-        );
+        // 创建子弹池，预热 20 个
+        _pool.CreateGameObjectPool("Bullet", _bulletPrefab, 20);
     }
     
-    /// <summary>
-    /// 发射子弹
-    /// </summary>
-    public void Fire(Vector3 position, Vector3 direction, float speed)
+    public void Fire(Vector3 position, Vector3 direction)
     {
-        var bullet = _poolManager.SpawnPrefab(
-            _bulletPrefab, 
-            position, 
-            Quaternion.LookRotation(direction)
-        );
+        // 从池中获取子弹
+        var bullet = _pool.SpawnGameObject("Bullet", position, Quaternion.identity);
         
-        var bulletScript = bullet.GetComponent<Bullet>();
-        bulletScript.Initialize(direction, speed);
+        // 设置子弹方向...
+        bullet.GetComponent<Bullet>().SetDirection(direction);
+    }
+    
+    public void RecycleBullet(GameObject bullet)
+    {
+        // 回收子弹到池中
+        _pool.DespawnGameObject("Bullet", bullet);
     }
 }
+```
 
-/// <summary>
-/// 子弹脚本
-/// </summary>
-public class Bullet : MonoBehaviour, IPoolable
+### 10.3 使用数据对象池
+
+```csharp
+// 定义可池化的数据类
+public class DamageData : IPoolable
 {
-    private Vector3 _direction;
-    private float _speed;
-    private float _lifeTime;
-    private PoolManager _poolManager;
-    
-    public void Initialize(Vector3 direction, float speed)
-    {
-        _direction = direction;
-        _speed = speed;
-        _lifeTime = 0f;
-    }
+    public int Damage;
+    public int SourceId;
+    public int TargetId;
     
     public void OnSpawn()
     {
-        _poolManager = ServiceLocator.Get<PoolManager>();
-        _lifeTime = 0f;
+        // 从池中取出时调用
     }
     
     public void OnDespawn()
     {
-        _direction = Vector3.zero;
-        _speed = 0f;
-    }
-    
-    void Update()
-    {
-        // 移动
-        transform.position += _direction * _speed * Time.deltaTime;
-        
-        // 生命周期
-        _lifeTime += Time.deltaTime;
-        if (_lifeTime > 5f)
-        {
-            _poolManager.DespawnPrefab(gameObject);
-        }
-    }
-    
-    void OnTriggerEnter(Collider other)
-    {
-        if (other.CompareTag("Enemy"))
-        {
-            // 造成伤害
-            other.GetComponent<Enemy>()?.TakeDamage(10);
-            
-            // 回收
-            _poolManager.DespawnPrefab(gameObject);
-        }
+        // 归还池时调用，重置状态
+        Damage = 0;
+        SourceId = 0;
+        TargetId = 0;
     }
 }
+
+// 使用
+var pool = ServiceLocator.Get<PoolManager>();
+
+// 创建池
+pool.CreatePool<DamageData>(() => new DamageData(), 50, 200);
+
+// 获取
+var dmg = pool.Spawn<DamageData>();
+dmg.Damage = 100;
+dmg.SourceId = 1;
+dmg.TargetId = 2;
+
+// 处理完后归还
+pool.Despawn(dmg);
 ```
 
-### 8.2 特效池
+---
+
+## 11. 网络通信详解
+
+### 11.1 HTTP 请求
 
 ```csharp
-public class VFXPool : MonoBehaviour
+using CYFramework.Infrastructure;
+using CYFramework.Core.Network;
+
+var network = ServiceLocator.Get<NetworkService>();
+
+// GET 请求
+var playerData = await network.GetAsync<PlayerData>("/api/player/123");
+
+// POST 请求
+var loginRequest = new LoginRequest { username = "test", password = "123" };
+var loginResult = await network.PostAsync<LoginResponse>("/api/login", loginRequest);
+
+// 带请求头
+var headers = new Dictionary<string, string>
 {
-    [System.Serializable]
-    public class VFXEntry
+    { "Authorization", "Bearer your-token" }
+};
+var data = await network.GetAsync<MyData>("/api/data", headers);
+```
+
+### 11.2 WebSocket
+
+```csharp
+// 连接
+await network.ConnectWebSocket("wss://game.server.com/ws");
+
+// 监听消息
+network.OnWebSocketMessage += (message) => {
+    var data = JsonUtility.FromJson<ServerMessage>(message);
+    HandleMessage(data);
+};
+
+// 发送消息
+var cmd = new MoveCommand { x = 1, y = 2 };
+network.SendWebSocketMessage(JsonUtility.ToJson(cmd));
+
+// 断开
+network.DisconnectWebSocket();
+```
+
+---
+
+## 12. 玩法核心层详解
+
+### 12.1 逻辑帧与渲染帧分离
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      游戏循环                            │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  FixedUpdate (30Hz)          Update (60-144Hz)          │
+│  ┌─────────────────┐         ┌─────────────────┐        │
+│  │ 逻辑帧          │         │ 渲染帧          │        │
+│  │ - 物理计算      │         │ - 画面渲染      │        │
+│  │ - AI 决策       │    →    │ - 动画播放      │        │
+│  │ - 状态更新      │  快照   │ - 位置插值      │        │
+│  │ - 碰撞检测      │         │ - 特效显示      │        │
+│  └─────────────────┘         └─────────────────┘        │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 12.2 输入缓冲
+
+```csharp
+// 问题：按键发生在两个 FixedUpdate 之间会丢失
+
+// 解决：Update 收集输入，FixedUpdate 消费
+private Queue<InputCommand> _inputBuffer = new();
+
+void Update()
+{
+    // 收集输入
+    if (Input.GetButtonDown("Jump"))
     {
-        public string name;
-        public GameObject prefab;
-        public int prewarm;
+        _inputBuffer.Enqueue(new InputCommand { Type = InputType.Jump });
+    }
+}
+
+void FixedUpdate()
+{
+    // 消费输入
+    while (_inputBuffer.TryDequeue(out var cmd))
+    {
+        _gameplayWorld.HandleInput(cmd);
     }
     
-    [SerializeField] private VFXEntry[] _vfxEntries;
-    
-    private PoolManager _poolManager;
-    private Dictionary<string, GameObject> _prefabMap = new();
-    
-    void Start()
-    {
-        _poolManager = ServiceLocator.Get<PoolManager>();
-        
-        foreach (var entry in _vfxEntries)
-        {
-            _poolManager.RegisterPrefabPool(entry.prefab, entry.prewarm, 50);
-            _prefabMap[entry.name] = entry.prefab;
-        }
-    }
-    
-    /// <summary>
-    /// 播放特效
-    /// </summary>
-    public void Play(string name, Vector3 position)
-    {
-        if (!_prefabMap.TryGetValue(name, out var prefab)) return;
-        
-        var vfx = _poolManager.SpawnPrefab(prefab, position, Quaternion.identity);
-        
-        // 自动回收
-        StartCoroutine(AutoDespawn(vfx, 2f));
-    }
-    
-    private System.Collections.IEnumerator AutoDespawn(GameObject vfx, float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        _poolManager.DespawnPrefab(vfx);
-    }
+    _gameplayWorld.FixedTick(Time.fixedDeltaTime);
 }
 ```
 
 ---
 
-## 9. 玩法开发
+## 13. 完整项目实战
 
-### 9.1 单位管理
+### 13.1 项目结构
+
+```
+Assets/
+├── CYFramework/              # 框架（不要修改）
+├── _Project/
+│   ├── Scenes/
+│   │   ├── Bootstrap.unity   # 启动场景
+│   │   ├── MainMenu.unity    # 主菜单
+│   │   └── Game.unity        # 游戏场景
+│   ├── Scripts/
+│   │   ├── Core/
+│   │   │   ├── GameManager.cs
+│   │   │   └── Events.cs     # 事件定义
+│   │   ├── Player/
+│   │   │   ├── Player.cs
+│   │   │   └── PlayerData.cs
+│   │   ├── UI/
+│   │   │   ├── MainMenuPanel.cs
+│   │   │   ├── GameHUDPanel.cs
+│   │   │   └── SettingsPanel.cs
+│   │   └── Save/
+│   │       └── SaveManager.cs
+│   ├── Prefabs/
+│   │   └── ...
+│   └── Resources/
+│       ├── UI/Panels/
+│       ├── Audio/
+│       └── Config/
+└── ...
+```
+
+### 13.2 游戏管理器示例
 
 ```csharp
-using CYFramework.Gameplay.OOP;
+using UnityEngine;
+using CYFramework.Infrastructure;
+using CYFramework.Core.Event;
+using CYFramework.Modules.UI;
+using CYFramework.Modules.Audio;
 
-/// <summary>
-/// 战斗管理器
-/// </summary>
-public class BattleManager : MonoBehaviour
+public class GameManager : MonoBehaviour
 {
-    private OOPGameplayWorld _world;
-    private RenderProxy _renderProxy;
+    public static GameManager Instance { get; private set; }
     
-    // 渲染对象映射
-    private Dictionary<int, UnitRenderer> _renderers = new();
+    private EventBus _eventBus;
+    private UIManager _uiManager;
+    private IAudioService _audio;
+    
+    void Awake()
+    {
+        if (Instance != null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
+    }
     
     void Start()
     {
-        // 创建玩法世界
-        _world = new OOPGameplayWorld();
-        _world.Initialize();
+        // 获取服务
+        _eventBus = ServiceLocator.Get<EventBus>();
+        _uiManager = ServiceLocator.Get<UIManager>();
+        _audio = ServiceLocator.Get<IAudioService>();
         
-        // 创建渲染代理
-        _renderProxy = new RenderProxy(_world);
+        // 订阅事件
+        _eventBus.Subscribe<GameStartEvent>(OnGameStart, this);
+        _eventBus.Subscribe<GameOverEvent>(OnGameOver, this);
         
-        // 生成初始单位
-        SpawnPlayer();
-        SpawnEnemies(10);
+        // 加载存档
+        SaveManager.Instance.Load();
+        
+        // 打开主菜单
+        _uiManager.Open<MainMenuPanel>();
     }
     
-    void FixedUpdate()
+    void OnGameStart(ref GameStartEvent evt)
     {
-        // 逻辑更新
-        _world.FixedTick(Time.fixedDeltaTime);
+        _audio.PlayBGM("bgm_game");
+        _uiManager.CloseAll();
+        _uiManager.Open<GameHUDPanel>();
     }
     
-    void Update()
+    void OnGameOver(ref GameOverEvent evt)
     {
-        // 收集输入
-        CollectInput();
-        
-        // 渲染更新
-        UpdateRenderers();
+        SaveManager.Instance.Save();
+        _uiManager.Open<GameOverPanel>();
     }
-    
-    private void CollectInput()
-    {
-        // 移动输入
-        float h = Input.GetAxis("Horizontal");
-        float v = Input.GetAxis("Vertical");
-        
-        if (h != 0 || v != 0)
-        {
-            _world.HandleInput(new InputCommand
-            {
-                Type = InputType.Move,
-                Direction = new Vector2(h, v),
-                Timestamp = Time.time
-            });
-        }
-        
-        // 攻击输入
-        if (Input.GetButtonDown("Fire1"))
-        {
-            _world.HandleInput(new InputCommand
-            {
-                Type = InputType.Attack,
-                Timestamp = Time.time
-            });
-        }
-    }
-    
-    private void UpdateRenderers()
-    {
-        ref readonly var snapshot = ref _world.GetRenderSnapshot();
-        
-        // 更新现有单位
-        for (int i = 0; i < snapshot.Count; i++)
-        {
-            int id = snapshot.IDs[i];
-            
-            if (!_renderers.TryGetValue(id, out var renderer))
-            {
-                // 创建新渲染对象
-                renderer = CreateRenderer(id);
-                _renderers[id] = renderer;
-            }
-            
-            // 更新位置
-            renderer.UpdatePosition(snapshot.Positions[i], snapshot.Rotations[i]);
-            renderer.UpdateHP(snapshot.HPs[i]);
-        }
-        
-        // 清理已销毁的单位
-        CleanupDeadUnits(snapshot);
-    }
-    
-    private UnitRenderer CreateRenderer(int id)
-    {
-        var loader = ServiceLocator.Get<IResourceLoader>();
-        var prefab = loader.Load<GameObject>("Prefabs/Unit");
-        var go = Instantiate(prefab);
-        return go.GetComponent<UnitRenderer>();
-    }
-    
-    private void CleanupDeadUnits(in RenderSnapshot snapshot)
-    {
-        var toRemove = new List<int>();
-        
-        foreach (var kvp in _renderers)
-        {
-            bool found = false;
-            for (int i = 0; i < snapshot.Count; i++)
-            {
-                if (snapshot.IDs[i] == kvp.Key)
-                {
-                    found = true;
-                    break;
-                }
-            }
-            
-            if (!found)
-            {
-                toRemove.Add(kvp.Key);
-            }
-        }
-        
-        foreach (int id in toRemove)
-        {
-            Destroy(_renderers[id].gameObject);
-            _renderers.Remove(id);
-        }
-    }
-    
-    private void SpawnPlayer() { /* ... */ }
-    private void SpawnEnemies(int count) { /* ... */ }
     
     void OnDestroy()
     {
-        _world?.Dispose();
+        _eventBus?.UnsubscribeAll(this);
     }
 }
 ```
 
 ---
 
-## 10. 调试与测试
+## 14. 常见问题解答
 
-### 10.1 使用 RuntimeProfiler
+### Q: 服务获取失败，报 NullReferenceException？
 
-按 `F1` 打开性能面板，显示：
-- FPS / 帧时间
-- 内存使用
-- DrawCall
-- 对象池状态
-- 网络延迟
+**原因**：在框架初始化完成前就调用了 `ServiceLocator.Get`
 
-### 10.2 使用 CheatConsole
-
-按 `` ` `` 打开控制台，输入命令：
-
-```bash
-# 设置时间缩放（慢动作调试）
-timescale 0.5
-
-# 显示 FPS
-fps
-
-# 强制 GC
-gc
-
-# 自定义命令
-god     # 无敌模式
-gold 9999   # 设置金币
-level 10    # 设置等级
-```
-
-### 10.3 单元测试
-
+**解决**：
 ```csharp
-[TestFixture]
-public class MyGameTests
+// ❌ 错误：Awake 可能比框架启动更早
+void Awake()
 {
-    [Test]
-    public void Player_TakeDamage_ReducesHP()
-    {
-        // Arrange
-        var player = new PlayerData { hp = 100 };
-        
-        // Act
-        player.hp -= 30;
-        
-        // Assert
-        Assert.AreEqual(70, player.hp);
-    }
-    
-    [Test]
-    public void SaveManager_SaveAndLoad_PreservesData()
-    {
-        // Arrange
-        var saveService = new SaveService();
-        saveService.Initialize();
-        
-        var data = new PlayerSaveData { level = 10, gold = 5000 };
-        
-        // Act
-        saveService.Save("test", data);
-        var loaded = saveService.Load<PlayerSaveData>("test");
-        
-        // Assert
-        Assert.AreEqual(10, loaded.level);
-        Assert.AreEqual(5000, loaded.gold);
-        
-        // Cleanup
-        saveService.Delete("test");
-    }
+    var audio = ServiceLocator.Get<IAudioService>(); // 可能为空！
+}
+
+// ✅ 正确：在 Start 中获取
+void Start()
+{
+    var audio = ServiceLocator.Get<IAudioService>(); // 安全
 }
 ```
 
----
+### Q: 事件订阅了但收不到？
 
-## 11. 发布构建
+**检查清单**：
+1. 事件是否用 `struct` 定义？
+2. 发布时是否用了 `ref`？
+3. 订阅的处理方法参数是否有 `ref`？
+4. 是否在销毁后还在发送？
 
-### 11.1 构建前检查
+### Q: UI 面板打不开？
 
-1. **运行平台兼容性检查器**
-   ```
-   菜单: CYFramework > 平台兼容性检查
-   ```
+**检查清单**：
+1. 预制体是否在 `Resources/UI/Panels/` 下？
+2. `[UIPrefab]` 特性路径是否正确？
+3. 预制体根节点是否挂载了面板脚本？
 
-2. **设置正确的宏定义**
-   - 微信: `CY_WECHAT;CY_SINGLE_THREAD`
-   - PC: `CY_PC;ENABLE_DOTS`
+### Q: 微信小游戏存档失败？
 
-3. **烘焙配置**
-   ```
-   菜单: CYFramework > 配置烘焙工具
-   ```
+**解决**：添加宏定义 `CY_WECHAT;CY_SINGLE_THREAD`
 
-### 11.2 微信小游戏构建
+### Q: WebGL 没有声音？
 
-1. 安装微信小游戏 Unity 插件
-2. 设置 `Player Settings > WebGL`
-3. 添加宏定义 `CY_WECHAT`
-4. 构建 WebGL
-5. 使用微信开发者工具发布
+**原因**：iOS Safari 需要用户交互才能播放音频
 
-### 11.3 PC 构建
-
-1. 设置 `Player Settings > Standalone`
-2. 添加宏定义 `CY_PC;ENABLE_DOTS`
-3. 构建 Windows/Mac/Linux
-
----
-
-## 附录：常用代码片段
-
-### 获取服务
-
-```csharp
-var eventBus = ServiceLocator.Get<EventBus>();
-var audio = ServiceLocator.Get<IAudioService>();
-var save = ServiceLocator.Get<SaveService>();
-var loader = ServiceLocator.Get<IResourceLoader>();
-var network = ServiceLocator.Get<NetworkService>();
-var pool = ServiceLocator.Get<PoolManager>();
-```
-
-### 事件模式
-
-```csharp
-// 定义
-public struct MyEvent { public int Value; }
-
-// 订阅
-eventBus.Subscribe<MyEvent>(OnMyEvent, this);
-
-// 发布
-var evt = new MyEvent { Value = 42 };
-eventBus.Post(ref evt);
-
-// 取消
-eventBus.UnsubscribeAll(this);
-```
-
-### 异步加载
-
-```csharp
-// 资源
-var prefab = await loader.LoadAsync<GameObject>("Prefabs/Enemy");
-
-// 场景
-await loader.LoadSceneAsync("Level1");
-
-// 存档
-var data = await saveService.LoadAsync<PlayerData>("save");
-```
+**解决**：确保第一次播放在点击事件中触发
