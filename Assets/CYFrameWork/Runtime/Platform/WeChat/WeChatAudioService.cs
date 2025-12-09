@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // CYFramework 2.2 - 微信音频服务
 // 文档位置：3.1.7 音频系统 - 微信端特供处理
 // 使用 wx.createInnerAudioContext (BGM) + WebAudio API (SFX)
@@ -9,7 +9,7 @@
 using System;
 using System.Runtime.InteropServices;
 using CYFramework.Infrastructure;
-using CYFramework.Modules.Audio;
+using CYFramework.Core.Audio;
 
 namespace CYFramework.Platform.WeChat
 {
@@ -243,3 +243,4 @@ namespace CYFramework.Platform.WeChat
 }
 
 #endif
+

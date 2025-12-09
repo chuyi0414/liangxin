@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // CYFramework 2.2 - Bootstrap 框架启动器
 // 功能：框架初始化入口、生命周期调度、平台适配
 // ============================================================================
@@ -9,10 +9,12 @@ using CYFramework.Core.Event;
 using CYFramework.Core.HotUpdate;
 using CYFramework.Core.Network;
 using CYFramework.Core.Pool;
+using CYFramework.Core.Procedure;
 using CYFramework.Core.Resource;
 using CYFramework.Core.Save;
-using CYFramework.Modules.Audio;
-using CYFramework.Modules.UI;
+using CYFramework.Core.Timer;
+using CYFramework.Core.Audio;
+using CYFramework.Core.UI;
 using CYFramework.Platform;
 using CYFramework.Platform.Unity;
 using UnityEngine;
@@ -88,7 +90,7 @@ namespace CYFramework.Infrastructure
             
             float dt = Time.deltaTime;
             
-            // 按优先级执行 Update
+            // 按优先级执行 Update（Timer/Procedure 已通过 IUpdateable 注册）
             for (int i = 0; i < _updateables.Count; i++)
             {
                 _updateables[i].OnUpdate(dt);
@@ -408,3 +410,4 @@ namespace CYFramework.Infrastructure
         #endregion
     }
 }
+

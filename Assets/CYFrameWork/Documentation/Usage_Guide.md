@@ -1,4 +1,4 @@
-# CYFramework 2.2 超详细使用指南
+﻿# CYFramework 2.2 超详细使用指南
 
 > 本指南假设你是零基础，会一步一步带你理解框架的原理和使用方法。
 
@@ -10,16 +10,22 @@
 2. [框架的核心原理](#2-框架的核心原理)
 3. [完整的生命周期流程](#3-完整的生命周期流程)
 4. [第一步：让框架跑起来](#4-第一步让框架跑起来)
-5. [服务定位器详解](#5-服务定位器详解)
-6. [事件系统详解](#6-事件系统详解)
-7. [UI 系统完整教程](#7-ui-系统完整教程)
-8. [存档系统详解](#8-存档系统详解)
-9. [音频系统详解](#9-音频系统详解)
-10. [对象池详解](#10-对象池详解)
-11. [网络通信详解](#11-网络通信详解)
-12. [玩法核心层详解](#12-玩法核心层详解)
-13. [完整项目实战](#13-完整项目实战)
-14. [常见问题解答](#14-常见问题解答)
+5. [CY 统一入口（推荐）](#5-cy-统一入口) **[NEW]**
+6. [服务定位器详解](#6-服务定位器详解)
+7. [事件系统详解](#7-事件系统详解)
+8. [流程系统详解](#8-流程系统详解) **[NEW]**
+9. [计时器系统详解](#9-计时器系统详解) **[NEW]**
+10. [有限状态机详解](#10-有限状态机详解) **[NEW]**
+11. [实体系统详解](#11-实体系统详解) **[NEW]**
+12. [数据表系统详解](#12-数据表系统详解) **[NEW]**
+13. [UI 系统完整教程](#13-ui-系统完整教程)
+14. [存档系统详解](#14-存档系统详解)
+15. [音频系统详解](#15-音频系统详解)
+16. [对象池详解](#16-对象池详解)
+17. [网络通信详解](#17-网络通信详解)
+18. [玩法核心层详解](#18-玩法核心层详解)
+19. [完整项目实战](#19-完整项目实战)
+20. [常见问题解答](#20-常见问题解答)
 
 ---
 
@@ -354,9 +360,65 @@ UIManager 获取成功: True
 
 ---
 
-## 5. 服务定位器详解
+## 5. CY 统一入口（推荐）
 
-### 5.1 什么是服务？
+### 5.1 什么是 CY 统一入口？
+
+**CY 类**是框架的统一入口，类似 GameFramework 的 GameEntry。它把所有常用功能封装成简单的静态方法，让你不用记忆各种 ServiceLocator.Get<> 调用。
+
+### 5.2 快速上手
+
+```csharp
+using CYFramework;  // 只需要这一个命名空间
+
+public class MyGame : MonoBehaviour
+{
+    void Start()
+    {
+        // 事件系统
+        CY.Event.Subscribe<GameStartEvent>(OnGameStart, this);
+        CY.Event.Fire(new GameStartEvent { StageId = 1 });
+        
+        // 日志
+        CY.Log.Info("游戏启动");
+        CY.Log.Warning("这是警告");
+        
+        // 计时器
+        CY.Timer.Delay(2f, () => CY.Log.Info("2秒后执行"));
+        CY.Timer.Loop(1f, () => CY.Log.Info("每秒执行一次"));
+        
+        // 流程切换
+        CY.Procedure.Change<BattleProcedure>();
+    }
+    
+    void OnDestroy()
+    {
+        CY.Event.UnsubscribeAll(this);  // 清理订阅
+    }
+    
+    void OnGameStart(ref GameStartEvent evt)
+    {
+        CY.Log.Info($"关卡 {evt.StageId} 开始!");
+    }
+}
+```
+
+### 5.3 CY vs ServiceLocator 对比
+
+| 功能 | ServiceLocator 写法 | CY 写法 |
+|------|---------------------|---------|
+| 事件订阅 | `ServiceLocator.Get<EventBus>().Subscribe(...)` | `CY.Event.Subscribe(...)` |
+| 发布事件 | `ServiceLocator.Get<EventBus>().Post(ref evt)` | `CY.Event.Fire(evt)` |
+| 日志 | `CYLog.Info("msg")` | `CY.Log.Info("msg")` |
+| 获取服务 | `ServiceLocator.Get<T>()` | `CY.Get<T>()` |
+
+**推荐使用 CY 类**，代码更简洁。
+
+---
+
+## 6. 服务定位器详解
+
+### 6.1 什么是服务？
 
 **服务 = 提供某种功能的类**
 
@@ -726,7 +788,7 @@ _eventBus.Post(evt);  // 应该是 Post(ref evt)
 using UnityEngine;
 using UnityEngine.UI;
 using CYFramework.Infrastructure;
-using CYFramework.Modules.UI;
+using CYFramework.Core.UI;
 
 // 指定预制体路径（相对于 Resources）
 [UIPrefab("UI/Panels/MainMenuPanel")]
@@ -890,7 +952,7 @@ protected override void OnShow(object data)
 #### Toast 提示
 
 ```csharp
-using CYFramework.Modules.UI.Components;
+using CYFramework.Core.UI.Components;
 
 // 普通提示
 UIToast.Show("操作成功");
@@ -911,7 +973,7 @@ UIToast.Show("这条消息显示 5 秒", 5f);
 #### 对话框
 
 ```csharp
-using CYFramework.Modules.UI.Components;
+using CYFramework.Core.UI.Components;
 
 // 提示框（仅确认按钮）
 UIDialog.Alert("你的账号已过期", "提示", () => {
@@ -946,7 +1008,7 @@ UIDialog.Input(
 #### Loading 加载界面
 
 ```csharp
-using CYFramework.Modules.UI.Components;
+using CYFramework.Core.UI.Components;
 
 // 显示 Loading
 UILoading.Show("正在加载资源...");
@@ -986,7 +1048,7 @@ IEnumerator LoadGameAsync()
 **第一步：创建 ViewModel**
 
 ```csharp
-using CYFramework.Modules.UI.MVVM;
+using CYFramework.Core.UI.MVVM;
 
 public class PlayerInfoViewModel : ViewModel
 {
@@ -1036,8 +1098,8 @@ public class PlayerInfoViewModel : ViewModel
 **第二步：创建 MVVM 面板**
 
 ```csharp
-using CYFramework.Modules.UI;
-using CYFramework.Modules.UI.MVVM;
+using CYFramework.Core.UI;
+using CYFramework.Core.UI.MVVM;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -1221,7 +1283,7 @@ public class GameSaveManager
 
 ```csharp
 using CYFramework.Infrastructure;
-using CYFramework.Modules.Audio;
+using CYFramework.Core.Audio;
 
 // 获取音频服务
 var audio = ServiceLocator.Get<IAudioService>();
@@ -1496,8 +1558,8 @@ Assets/
 using UnityEngine;
 using CYFramework.Infrastructure;
 using CYFramework.Core.Event;
-using CYFramework.Modules.UI;
-using CYFramework.Modules.Audio;
+using CYFramework.Core.UI;
+using CYFramework.Core.Audio;
 
 public class GameManager : MonoBehaviour
 {
@@ -1603,3 +1665,4 @@ void Start()
 **原因**：iOS Safari 需要用户交互才能播放音频
 
 **解决**：确保第一次播放在点击事件中触发
+

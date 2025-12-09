@@ -406,33 +406,39 @@ UI 根据 Snapshot 中的 ID 进行 Update。如果 ID 消失，则回收 UI 节
 
 **收益**：彻底解耦 + 零 GC。UI 随便写，不会因为访问了被销毁的 Entity 而导致 Crash。
 
-## 4. 目录结构规范 (V2.2)
+## 4. 目录结构规范 (V2.3)
 
 ```
 Assets/CYFramework/
 ├── Runtime/
-│   ├── Infrastructure/     # 启动与服务定位
+│   ├── CY.cs               # 统一入口（类似 GameEntry）
+│   ├── Infrastructure/     # 启动与服务定位、ServiceBase
 │   ├── Platform/           # 微信/PC 适配器
 │   ├── Core/
-│   │   ├── Config/         # 配置定义与加载器
-│   │   ├── Network/        # 网络层 (HTTP/WS/适配器)
-│   │   ├── Save/           # 存档系统
-│   │   ├── HotUpdate/      # 热更新管理
-│   │   ├── Pool/           # 对象池
-│   │   ├── Event/          # 事件总线
-│   │   └── Log/            # 日志系统
-│   ├── Gameplay/
-│   │   ├── Abstraction/    # IGameplayWorld, RenderSnapshot定义
-│   │   ├── Logic_Common/   # OOP与Hybrid共用的纯逻辑(状态机/AI)
-│   │   ├── Logic_OOP/      # 纯OOP驱动层
-│   │   └── Logic_Hybrid/   # Hybrid DOTS驱动层 (Brain+Muscle)
-│   ├── Modules/            # 功能模块
 │   │   ├── Audio/          # 音频服务
+│   │   ├── Config/         # 配置定义与加载器
+│   │   ├── DataTable/      # 数据表管理 [NEW]
+│   │   ├── Entity/         # 实体管理 [NEW]
+│   │   ├── Event/          # 事件总线
+│   │   ├── FSM/            # 有限状态机
+│   │   ├── HotUpdate/      # 热更新管理
+│   │   ├── Log/            # 日志系统
+│   │   ├── Network/        # 网络层 (HTTP/WS/适配器)
+│   │   ├── Pool/           # 对象池
+│   │   ├── Procedure/      # 流程管理器
+│   │   ├── Resource/       # 资源加载
+│   │   ├── Save/           # 存档系统
+│   │   ├── Timer/          # 计时器系统
 │   │   └── UI/             # UI 框架 (MVVM)
 │   │       ├── UIManager.cs        # 面板管理器
 │   │       ├── UIPanel.cs          # 面板基类
 │   │       ├── MVVM/               # ViewModel 数据绑定
 │   │       └── Components/         # 通用组件 (Toast/Dialog/Loading)
+│   ├── Gameplay/
+│   │   ├── Abstraction/    # IGameplayWorld, RenderSnapshot定义
+│   │   ├── Logic_Common/   # OOP与Hybrid共用的纯逻辑(状态机/AI)
+│   │   ├── Logic_OOP/      # 纯OOP驱动层
+│   │   └── Logic_Hybrid/   # Hybrid DOTS驱动层 (Brain+Muscle)
 │   └── Debug/              # 运行时调试工具
 ├── Editor/
 │   ├── Baking/             # 配置烘焙工具 (SO -> BlobAsset)

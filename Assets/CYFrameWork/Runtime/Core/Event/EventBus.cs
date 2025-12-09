@@ -30,6 +30,21 @@ namespace CYFramework.Core.Event
     }
     
     /// <summary>
+    /// 标记方法自动订阅事件
+    /// 方法签名必须为: void MethodName(ref TEvent evt)
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    public class OnEventAttribute : Attribute
+    {
+        public int Priority { get; }
+        
+        public OnEventAttribute(int priority = 0)
+        {
+            Priority = priority;
+        }
+    }
+    
+    /// <summary>
     /// 事件订阅信息
     /// </summary>
     internal class EventSubscription
@@ -207,6 +222,53 @@ namespace CYFramework.Core.Event
             }
             
             _targetSubscriptions.Remove(target);
+        }
+        
+        /// <summary>
+        /// 自动扫描并订阅所有标记 [OnEvent] 的方法
+        /// </summary>
+        public void SubscribeAll(object target)
+        {
+            if (target == null) return;
+            
+            var type = target.GetType();
+            var methods = type.GetMethods(System.Reflection.BindingFlags.Instance | 
+                                           System.Reflection.BindingFlags.Public | 
+                                           System.Reflection.BindingFlags.NonPublic);
+            
+            foreach (var method in methods)
+            {
+                var attr = method.GetCustomAttributes(typeof(OnEventAttribute), true);
+                if (attr.Length == 0) continue;
+                
+                var onEvent = (OnEventAttribute)attr[0];
+                var parameters = method.GetParameters();
+                
+                // 验证方法签名: void Method(ref TEvent evt)
+                if (parameters.Length != 1) continue;
+                if (!parameters[0].ParameterType.IsByRef) continue;
+                
+                var eventType = parameters[0].ParameterType.GetElementType();
+                if (eventType == null || !eventType.IsValueType) continue;
+                
+                try
+                {
+                    // 创建委托
+                    var handlerType = typeof(EventHandler<>).MakeGenericType(eventType);
+                    var handler = Delegate.CreateDelegate(handlerType, target, method);
+                    
+                    // 调用泛型 Subscribe 方法
+                    var subscribeMethod = typeof(EventBus).GetMethod("Subscribe")
+                        ?.MakeGenericMethod(eventType);
+                    subscribeMethod?.Invoke(this, new object[] { handler, target, onEvent.Priority });
+                    
+                    CYLog.Debug($"[EventBus] 自动订阅: {type.Name}.{method.Name} -> {eventType.Name}");
+                }
+                catch (Exception e)
+                {
+                    CYLog.Warning($"[EventBus] 自动订阅失败: {method.Name}, {e.Message}");
+                }
+            }
         }
         
         #endregion

@@ -1,4 +1,4 @@
-# CYFramework 2.2 API 参考文档
+﻿# CYFramework 2.3 API 参考文档
 
 > 本文档包含框架所有公开 API 的完整说明。
 
@@ -6,18 +6,137 @@
 
 ## 目录
 
-- [1. 基础设施层 (Infrastructure)](#1-基础设施层)
-- [2. 核心服务层 (Core)](#2-核心服务层)
-- [3. UI 模块 (Modules/UI)](#3-ui-模块)
-- [4. 玩法核心层 (Gameplay)](#4-玩法核心层)
-- [5. 平台适配层 (Platform)](#5-平台适配层)
-- [6. 调试工具 (Debug)](#6-调试工具)
+- [1. 统一入口 (CY)](#1-统一入口)
+- [2. 基础设施层 (Infrastructure)](#2-基础设施层)
+- [3. 核心服务层 (Core)](#3-核心服务层)
+- [4. UI 模块 (Modules/UI)](#4-ui-模块)
+- [5. 玩法核心层 (Gameplay)](#5-玩法核心层)
+- [6. 平台适配层 (Platform)](#6-平台适配层)
+- [7. 调试工具 (Debug)](#7-调试工具)
 
 ---
 
-## 1. 基础设施层
+## 1. 统一入口
 
-### 1.1 ServiceLocator（服务定位器）
+### 1.1 CY 静态类
+
+**命名空间**: `CYFramework`
+
+类似 GameFramework 的 GameEntry，提供简洁的 API 入口。
+
+#### CY.Event（事件系统）
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `Subscribe<T>(handler, owner)` | 处理器, 拥有者 | 订阅事件 |
+| `Unsubscribe<T>(handler)` | 处理器 | 取消订阅 |
+| `Fire<T>(T evt)` | 事件数据 | 发布事件 |
+| `Fire<T>(ref T evt)` | 事件数据 | 发布事件（零 GC） |
+| `UnsubscribeAll(owner)` | 拥有者 | 取消所有订阅 |
+| `SubscribeAll(target)` | 目标对象 | 自动订阅 [OnEvent] 标记的方法 |
+
+#### CY.Log（日志系统）
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `Info(string msg)` | 消息 | 信息日志 |
+| `Warning(string msg)` | 消息 | 警告日志 |
+| `Error(string msg)` | 消息 | 错误日志 |
+| `Info(string tag, string msg)` | 标签, 消息 | 带标签的信息 |
+
+#### CY.Timer（计时器系统）
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Delay(seconds, onComplete, useUnscaledTime)` | 秒数, 回调, 是否不受时间缩放 | `Timer` | 延迟执行 |
+| `Loop(interval, onTick, useUnscaledTime)` | 间隔, 回调, 是否不受时间缩放 | `Timer` | 循环执行 |
+| `NextFrame(onComplete)` | 回调 | `Timer` | 下一帧执行 |
+| `CancelAll()` | 无 | `void` | 取消所有计时器 |
+
+#### CY.Procedure（流程系统）
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `Add<T>(name)` | 名称(可选) | 注册流程 |
+| `AutoRegisterAll(assembly)` | 程序集(可选) | 自动注册 [AutoRegisterProcedure] 标记的流程 |
+| `Start<T>()` | 无 | 启动流程系统 |
+| `Start(name)` | 流程名称 | 按名称启动 |
+| `Change<T>()` | 无 | 切换流程 |
+| `Change<T>(userData)` | 用户数据 | 切换流程（带参数） |
+| `Change(name, userData)` | 流程名称, 用户数据 | 按名称切换流程 |
+| `Current` | - | 获取当前流程 |
+| `CurrentName` | - | 获取当前流程名称 |
+
+#### CY.Entity（实体系统）
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Register(type, prefab, preload)` | 类型名, 预制体, 预加载数 | `void` | 注册实体类型 |
+| `Show<T>(type, userData)` | 类型名, 用户数据 | `T` | 显示实体 |
+| `Show(type, userData)` | 类型名, 用户数据 | `IEntity` | 显示实体 |
+| `Hide(entityId)` | 实体 ID | `void` | 隐藏实体 |
+| `Hide(entity)` | 实体对象 | `void` | 隐藏实体 |
+| `HideAll(type)` | 类型名 | `void` | 隐藏指定类型所有实体 |
+| `HideAll()` | 无 | `void` | 隐藏所有实体 |
+| `Get<T>(entityId)` | 实体 ID | `T` | 获取实体 |
+| `Count(type)` | 类型名 | `int` | 获取实体数量 |
+
+#### CY.Data（数据表系统）
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Create<T>(name)` | 表名 | `DataTable<T>` | 创建数据表 |
+| `GetTable<T>(name)` | 表名 | `DataTable<T>` | 获取数据表 |
+| `LoadCsv<T>(csvText, name)` | CSV 文本, 表名 | `DataTable<T>` | 从 CSV 加载 |
+| `GetRow<T>(id, tableName)` | 行 ID, 表名 | `T` | 获取数据行 |
+
+#### CY 服务定位器快捷方法
+| 方法 | 说明 |
+|------|------|
+| `Get<T>()` | 获取服务（等同 ServiceLocator.Get） |
+| `Register<T>(service)` | 注册服务 |
+
+#### 特性（Attributes）
+| 特性 | 用途 | 示例 |
+|------|------|------|
+| `[AutoRegisterProcedure(name, order)]` | 标记流程自动注册 | `[AutoRegisterProcedure("Menu", 0)]` |
+| `[OnEvent(priority)]` | 标记方法自动订阅事件 | `[OnEvent] void OnGameOver(ref GameOverEvent e)` |
+| `[EventPriority(priority)]` | 设置事件处理优先级 | `[EventPriority(-100)]` |
+
+**使用示例**:
+```csharp
+// ========== 事件 ==========
+// 手动订阅
+CY.Event.Subscribe<GameStartEvent>(OnStart, this);
+CY.Event.Fire(new GameStartEvent { StageId = 1 });
+
+// 自动订阅（推荐）- 在类中使用 [OnEvent] 标记方法
+[OnEvent]
+private void OnStart(ref GameStartEvent evt) { }
+
+// ========== 流程 ==========
+// 手动注册
+CY.Procedure.Add<MenuProcedure>("Menu");
+CY.Procedure.Start("Menu");
+CY.Procedure.Change("Battle");
+
+// 自动注册（推荐）- 在流程类上使用 [AutoRegisterProcedure]
+[AutoRegisterProcedure("Menu", order: 0)]
+public class MenuProcedure : ProcedureBase { }
+
+// ========== 计时器 ==========
+CY.Timer.Delay(2f, () => CY.Log.Info("延迟 2 秒"));
+CY.Timer.Loop(1f, () => CY.Log.Info("每秒执行"));
+
+// ========== 实体 ==========
+CY.Entity.Register("Enemy", enemyPrefab, 10);
+var enemy = CY.Entity.Show<EnemyEntity>("Enemy");
+CY.Entity.Hide(enemy);
+
+// ========== 数据表 ==========
+CY.Data.LoadCsv<MonsterRow>(csvText);
+var monster = CY.Data.GetRow<MonsterRow>(1001);
+```
+
+---
+
+## 2. 基础设施层
+
+### 2.1 ServiceLocator（服务定位器）
 
 **命名空间**: `CYFramework.Infrastructure`
 
@@ -150,9 +269,9 @@ public enum LogLevel { Verbose = 0, Debug = 1, Info = 2, Warning = 3, Error = 4,
 
 ---
 
-## 2. 核心服务层
+## 3. 核心服务层
 
-### 2.1 EventBus（事件总线）
+### 3.1 EventBus（事件总线）
 
 **命名空间**: `CYFramework.Core.Event`
 
@@ -171,7 +290,203 @@ public delegate void EventHandler<T>(ref T evt) where T : struct;
 
 ---
 
-### 2.2 PoolManager（对象池）
+### 3.2 FSM（有限状态机）
+
+**命名空间**: `CYFramework.Core.FSM`
+
+#### FSM<T> 类
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `AddState(IState<T> state)` | 状态实例 | `FSM<T>` | 注册状态（链式调用） |
+| `AddStates(params IState<T>[])` | 多个状态 | `FSM<T>` | 批量注册状态 |
+| `Start(T initialState)` | 初始状态 | `void` | 启动状态机 |
+| `ChangeState(T newState)` | 新状态 | `void` | 切换状态 |
+| `Update(float deltaTime)` | 时间增量 | `void` | 更新（每帧调用） |
+| `Stop()` | 无 | `void` | 停止状态机 |
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `CurrentStateType` | `T` | 当前状态类型 |
+| `IsRunning` | `bool` | 是否运行中 |
+
+#### IState<T> 接口
+```csharp
+public interface IState<T> where T : Enum
+{
+    T StateType { get; }
+    void OnEnter();
+    void OnUpdate(float deltaTime);
+    void OnExit();
+}
+```
+
+#### StateBase<T> 基类
+```csharp
+public abstract class StateBase<T> : IState<T> where T : Enum
+{
+    public abstract T StateType { get; }
+    protected FSM<T> FSM { get; }
+    
+    public virtual void OnEnter() { }
+    public virtual void OnUpdate(float deltaTime) { }
+    public virtual void OnExit() { }
+    
+    protected void ChangeState(T newState);  // 切换状态
+}
+```
+
+**使用示例**:
+```csharp
+public enum EnemyState { Idle, Patrol, Chase, Attack }
+
+public class IdleState : StateBase<EnemyState>
+{
+    public override EnemyState StateType => EnemyState.Idle;
+    
+    public override void OnEnter() => Debug.Log("进入待机");
+    public override void OnUpdate(float dt) {
+        if (DetectPlayer()) ChangeState(EnemyState.Chase);
+    }
+}
+
+// 使用
+var fsm = new FSM<EnemyState>();
+fsm.AddState(new IdleState())
+   .AddState(new PatrolState())
+   .Start(EnemyState.Idle);
+```
+
+---
+
+### 3.3 ProcedureManager（流程管理器）
+
+**命名空间**: `CYFramework.Core.Procedure`
+
+类似 GameFramework 的 Procedure 系统，管理游戏流程。
+
+#### ProcedureManager 类
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `AddProcedure<T>()` | 无 | `ProcedureManager` | 注册流程 |
+| `AddProcedure(ProcedureBase)` | 流程实例 | `ProcedureManager` | 注册流程实例 |
+| `Start<T>()` | 无 | `void` | 启动流程系统 |
+| `ChangeProcedure<T>()` | 无 | `void` | 切换流程 |
+| `ChangeProcedure<T>(userData)` | 用户数据 | `void` | 切换流程（带参数） |
+| `GetProcedure<T>()` | 无 | `T` | 获取指定流程 |
+| `Stop()` | 无 | `void` | 停止流程系统 |
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `CurrentProcedure` | `ProcedureBase` | 当前流程 |
+| `IsRunning` | `bool` | 是否运行中 |
+| `UpdateOrder` | `int` | 更新优先级（默认 -50） |
+
+#### ProcedureBase 基类
+```csharp
+public abstract class ProcedureBase
+{
+    protected ProcedureManager Owner { get; }
+    
+    protected internal virtual void OnEnter(ProcedureBase previous) { }
+    protected internal virtual void OnUpdate(float deltaTime) { }
+    protected internal virtual void OnLeave(ProcedureBase next) { }
+    
+    protected void ChangeProcedure<T>() where T : ProcedureBase;
+    protected void ChangeProcedure<T>(object userData) where T : ProcedureBase;
+}
+```
+
+#### ProcedureBase<TData> 泛型基类
+```csharp
+public abstract class ProcedureBase<TData> : ProcedureBase
+{
+    protected TData UserData { get; }  // 切换时传入的数据
+}
+```
+
+**使用示例**:
+```csharp
+public class MenuProcedure : ProcedureBase
+{
+    protected internal override void OnEnter(ProcedureBase previous)
+    {
+        CYLog.Info("进入主菜单");
+        // 显示菜单 UI
+    }
+    
+    protected internal override void OnUpdate(float dt)
+    {
+        if (Input.GetKeyDown(KeyCode.Space))
+            ChangeProcedure<GameProcedure>();
+    }
+    
+    protected internal override void OnLeave(ProcedureBase next)
+    {
+        // 关闭菜单 UI
+    }
+}
+```
+
+---
+
+### 3.4 TimerManager（计时器管理器）
+
+**命名空间**: `CYFramework.Core.Timer`
+
+#### TimerManager 类
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Delay(seconds, onComplete, useUnscaledTime)` | 秒数, 回调, 是否不受缩放 | `Timer` | 延迟执行 |
+| `Loop(interval, onTick, useUnscaledTime)` | 间隔, 回调, 是否不受缩放 | `Timer` | 循环执行 |
+| `NextFrame(onComplete)` | 回调 | `Timer` | 下一帧执行 |
+| `Cancel(Timer)` | 计时器 | `void` | 取消计时器 |
+| `CancelAll()` | 无 | `void` | 取消所有 |
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `ActiveCount` | `int` | 活跃计时器数量 |
+| `UpdateOrder` | `int` | 更新优先级（默认 -100） |
+
+#### Timer 类
+| 方法 | 说明 |
+|------|------|
+| `OnUpdate(Action<float>)` | 设置进度回调（0-1） |
+| `Pause()` | 暂停 |
+| `Resume()` | 恢复 |
+| `Stop()` | 停止 |
+| `Reset()` | 重置 |
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `Id` | `int` | 计时器 ID |
+| `Duration` | `float` | 总时长 |
+| `Elapsed` | `float` | 已过时间 |
+| `IsLoop` | `bool` | 是否循环 |
+| `IsPaused` | `bool` | 是否暂停 |
+| `IsCompleted` | `bool` | 是否完成 |
+| `UseUnscaledTime` | `bool` | 是否不受时间缩放 |
+
+**使用示例**:
+```csharp
+// 延迟 2 秒执行
+CY.Timer.Delay(2f, () => Debug.Log("2秒后"));
+
+// 带进度回调
+CY.Timer.Delay(3f, OnComplete).OnUpdate(progress => {
+    loadingBar.value = progress;  // 0 -> 1
+});
+
+// 循环执行
+var timer = CY.Timer.Loop(1f, () => Debug.Log("每秒执行"));
+timer.Stop();  // 停止
+
+// 不受时间缩放（暂停时也继续）
+CY.Timer.Delay(5f, OnTimeout, useUnscaledTime: true);
+```
+
+---
+
+### 3.5 PoolManager（对象池）
 
 **命名空间**: `CYFramework.Core.Pool`
 
@@ -197,7 +512,169 @@ public interface IPoolable
 
 ---
 
-### 2.3 ConfigLoader（配置加载器）
+### 3.6 EntityManager（实体管理器）
+
+**命名空间**: `CYFramework.Core.Entity`
+
+管理游戏中的动态实体（敌人、子弹、特效等）。
+
+#### EntityManager 类
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Initialize(Transform root)` | 根节点 | `void` | 初始化 |
+| `RegisterEntity(type, prefab, preload, parent)` | 类型名, 预制体, 预加载数, 父节点 | `void` | 注册实体类型 |
+| `ShowEntity<T>(type, userData)` | 类型名, 用户数据 | `T` | 显示实体 |
+| `HideEntity(entityId)` | 实体 ID | `void` | 隐藏实体 |
+| `HideEntity(entity)` | 实体对象 | `void` | 隐藏实体 |
+| `HideAllEntities(type)` | 类型名 | `void` | 隐藏指定类型 |
+| `HideAllEntities()` | 无 | `void` | 隐藏所有 |
+| `GetEntity<T>(entityId)` | 实体 ID | `T` | 获取实体 |
+| `GetEntities(type)` | 类型名 | `IReadOnlyList<IEntity>` | 获取所有指定类型 |
+| `GetEntityCount(type)` | 类型名 | `int` | 获取数量 |
+| `HasEntity(entityId)` | 实体 ID | `bool` | 是否存在 |
+
+#### IEntity 接口
+```csharp
+public interface IEntity
+{
+    int Id { get; }
+    string EntityType { get; }
+    bool IsVisible { get; }
+    GameObject GameObject { get; }
+    
+    void OnInit(int id, object userData);
+    void OnShow(object userData);
+    void OnHide();
+    void OnUpdate(float deltaTime);
+    void OnRecycle();
+}
+```
+
+#### EntityBase 基类
+```csharp
+public abstract class EntityBase : MonoBehaviour, IEntity
+{
+    public int Id { get; }
+    public abstract string EntityType { get; }
+    public bool IsVisible { get; }
+    protected object UserData { get; }
+    
+    // 子类重写
+    protected virtual void OnEntityInit(object userData) { }
+    protected virtual void OnEntityShow(object userData) { }
+    protected virtual void OnEntityHide() { }
+    protected virtual void OnEntityUpdate(float deltaTime) { }
+    protected virtual void OnEntityRecycle() { }
+}
+```
+
+**使用示例**:
+```csharp
+public class EnemyEntity : EntityBase
+{
+    public override string EntityType => "Enemy";
+    
+    private int _hp;
+    
+    protected override void OnEntityShow(object userData)
+    {
+        var data = (EnemyData)userData;
+        _hp = data.MaxHp;
+        transform.position = data.SpawnPos;
+    }
+    
+    protected override void OnEntityUpdate(float dt)
+    {
+        // 移动逻辑
+    }
+    
+    protected override void OnEntityHide()
+    {
+        // 死亡特效
+    }
+}
+
+// 使用
+CY.Entity.Register("Enemy", enemyPrefab, 20);
+var enemy = CY.Entity.Show<EnemyEntity>("Enemy", new EnemyData { MaxHp = 100 });
+```
+
+---
+
+### 3.7 DataTableManager（数据表管理器）
+
+**命名空间**: `CYFramework.Core.DataTable`
+
+管理游戏配置数据（怪物、技能、关卡配置表）。
+
+#### DataTableManager 类
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `CreateDataTable<T>(name)` | 表名 | `DataTable<T>` | 创建数据表 |
+| `GetDataTable<T>(name)` | 表名 | `DataTable<T>` | 获取数据表 |
+| `HasDataTable(name)` | 表名 | `bool` | 是否存在 |
+| `LoadFromCsv<T>(csvText, name, separator)` | CSV 文本, 表名, 分隔符 | `DataTable<T>` | 从 CSV 加载 |
+| `LoadFromScriptableObject<T, TSO>(so, getter, name)` | SO, 行获取器, 表名 | `DataTable<T>` | 从 SO 加载 |
+| `UnloadDataTable(name)` | 表名 | `void` | 卸载数据表 |
+| `UnloadAllDataTables()` | 无 | `void` | 卸载所有 |
+
+#### IDataRow 接口
+```csharp
+public interface IDataRow
+{
+    int Id { get; }
+    void ParseRow(string[] values);
+}
+```
+
+#### DataTable<T> 类
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `AddRow(row)` | 数据行 | `void` | 添加行 |
+| `GetRow(id)` | 行 ID | `T` | 获取行 |
+| `GetRow(predicate)` | 条件 | `T` | 条件查询 |
+| `GetAllRows()` | 无 | `IReadOnlyList<T>` | 获取所有行 |
+| `GetRows(predicate)` | 条件 | `List<T>` | 条件查询多行 |
+| `HasRow(id)` | 行 ID | `bool` | 是否存在 |
+| `Count` | - | `int` | 行数 |
+
+**使用示例**:
+```csharp
+// 定义数据行
+public class MonsterRow : IDataRow
+{
+    public int Id { get; private set; }
+    public string Name { get; private set; }
+    public int Hp { get; private set; }
+    public float Speed { get; private set; }
+    public int Damage { get; private set; }
+    
+    public void ParseRow(string[] values)
+    {
+        Id = int.Parse(values[0]);
+        Name = values[1];
+        Hp = int.Parse(values[2]);
+        Speed = float.Parse(values[3]);
+        Damage = int.Parse(values[4]);
+    }
+}
+
+// 加载 CSV（格式: Id,Name,Hp,Speed,Damage）
+string csv = Resources.Load<TextAsset>("Config/Monster").text;
+CY.Data.LoadCsv<MonsterRow>(csv);
+
+// 获取数据
+var monster = CY.Data.GetRow<MonsterRow>(1001);
+Debug.Log($"{monster.Name}: HP={monster.Hp}");
+
+// 条件查询
+var table = CY.Data.GetTable<MonsterRow>();
+var bosses = table.GetRows(m => m.Hp > 1000);
+```
+
+---
+
+### 3.8 ConfigLoader（配置加载器）
 
 **命名空间**: `CYFramework.Core.Config`
 
@@ -272,7 +749,7 @@ public interface IPoolable
 
 ### 2.7 IAudioService（音频服务）
 
-**命名空间**: `CYFramework.Modules.Audio`
+**命名空间**: `CYFramework.Core.Audio`
 
 | 方法 | 参数 | 说明 |
 |------|------|------|
@@ -304,7 +781,7 @@ public interface IPoolable
 
 ### 3.1 UIManager（UI 管理器）
 
-**命名空间**: `CYFramework.Modules.UI`
+**命名空间**: `CYFramework.Core.UI`
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
@@ -336,7 +813,7 @@ public interface IPoolable
 
 ### 3.2 UIPanel（面板基类）
 
-**命名空间**: `CYFramework.Modules.UI`
+**命名空间**: `CYFramework.Core.UI`
 
 **可重写属性**:
 | 属性 | 类型 | 默认值 | 说明 |
@@ -376,7 +853,7 @@ public class MyPanel : UIPanel { }
 
 #### ViewModel 基类
 
-**命名空间**: `CYFramework.Modules.UI.MVVM`
+**命名空间**: `CYFramework.Core.UI.MVVM`
 
 | 方法 | 说明 |
 |------|------|
@@ -414,7 +891,7 @@ public class MyPanel : UIPanel { }
 
 #### UIToast（Toast 提示）
 
-**命名空间**: `CYFramework.Modules.UI.Components`
+**命名空间**: `CYFramework.Core.UI.Components`
 
 | 静态方法 | 参数 | 说明 |
 |----------|------|------|
@@ -425,7 +902,7 @@ public class MyPanel : UIPanel { }
 
 #### UIDialog（对话框）
 
-**命名空间**: `CYFramework.Modules.UI.Components`
+**命名空间**: `CYFramework.Core.UI.Components`
 
 | 静态方法 | 参数 | 说明 |
 |----------|------|------|
@@ -435,7 +912,7 @@ public class MyPanel : UIPanel { }
 
 #### UILoading（加载界面）
 
-**命名空间**: `CYFramework.Modules.UI.Components`
+**命名空间**: `CYFramework.Core.UI.Components`
 
 | 静态方法 | 参数 | 返回值 | 说明 |
 |----------|------|--------|------|
@@ -580,3 +1057,4 @@ console.RegisterCommand("god", "无敌模式", args => {
 | DrawCall | < 100 | < 300 | < 1000 |
 | 内存 | < 200MB | < 400MB | < 800MB |
 | 每帧 GC | 0 | 0 | < 1KB |
+

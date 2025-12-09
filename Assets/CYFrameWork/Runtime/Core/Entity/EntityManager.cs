@@ -1,0 +1,420 @@
+// ============================================================================
+// CYFramework - 实体管理器
+// 统一管理游戏中的动态实体（敌人、子弹、单位等）
+// ============================================================================
+
+using System;
+using System.Collections.Generic;
+using CYFramework.Core.Pool;
+using CYFramework.Infrastructure;
+using UnityEngine;
+
+namespace CYFramework.Core.Entity
+{
+    /// <summary>
+    /// 实体接口
+    /// </summary>
+    public interface IEntity
+    {
+        int Id { get; }
+        string EntityType { get; }
+        bool IsVisible { get; }
+        GameObject GameObject { get; }
+        
+        void OnInit(int id, object userData);
+        void OnShow(object userData);
+        void OnHide();
+        void OnFixedUpdate(float deltaTime);
+        void OnUpdate(float deltaTime);
+        void OnLateUpdate(float deltaTime);
+        void OnRecycle();
+    }
+    
+    /// <summary>
+    /// 实体基类
+    /// </summary>
+    public abstract class EntityBase : MonoBehaviour, IEntity, IPoolable
+    {
+        public int Id { get; private set; }
+        public abstract string EntityType { get; }
+        public bool IsVisible { get; private set; }
+        public GameObject GameObject => gameObject;
+        
+        protected object UserData { get; private set; }
+        
+        public void OnInit(int id, object userData)
+        {
+            Id = id;
+            UserData = userData;
+            OnEntityInit(userData);
+        }
+        
+        public void OnShow(object userData)
+        {
+            UserData = userData;
+            IsVisible = true;
+            gameObject.SetActive(true);
+            OnEntityShow(userData);
+        }
+        
+        public void OnHide()
+        {
+            IsVisible = false;
+            OnEntityHide();
+            gameObject.SetActive(false);
+        }
+        
+        public void OnFixedUpdate(float deltaTime)
+        {
+            if (IsVisible)
+            {
+                OnEntityFixedUpdate(deltaTime);
+            }
+        }
+        
+        public void OnUpdate(float deltaTime)
+        {
+            if (IsVisible)
+            {
+                OnEntityUpdate(deltaTime);
+            }
+        }
+        
+        public void OnLateUpdate(float deltaTime)
+        {
+            if (IsVisible)
+            {
+                OnEntityLateUpdate(deltaTime);
+            }
+        }
+        
+        public void OnRecycle()
+        {
+            OnEntityRecycle();
+            Id = 0;
+            UserData = null;
+        }
+        
+        // IPoolable
+        public void OnSpawn() { }
+        public void OnDespawn() => OnRecycle();
+        
+        // 子类重写
+        protected virtual void OnEntityInit(object userData) { }
+        protected virtual void OnEntityShow(object userData) { }
+        protected virtual void OnEntityHide() { }
+        protected virtual void OnEntityFixedUpdate(float deltaTime) { }  // 物理/AI 逻辑
+        protected virtual void OnEntityUpdate(float deltaTime) { }       // 常规更新
+        protected virtual void OnEntityLateUpdate(float deltaTime) { }   // 相机跟随等
+        protected virtual void OnEntityRecycle() { }
+    }
+    
+    /// <summary>
+    /// 实体信息
+    /// </summary>
+    public class EntityInfo
+    {
+        public string EntityType;
+        public GameObject Prefab;
+        public int PreloadCount;
+        public Transform Parent;
+    }
+    
+    /// <summary>
+    /// 实体管理器
+    /// </summary>
+    public class EntityManager : ITickable, IUpdateable, ILateUpdateable, IDisposableEx
+    {
+        public int TickOrder => 0;
+        public int UpdateOrder => 0;
+        public int LateUpdateOrder => 0;
+        public int DisposeOrder => 0;
+        
+        private readonly Dictionary<string, EntityInfo> _entityInfos = new();
+        private readonly Dictionary<int, IEntity> _entities = new();
+        private readonly Dictionary<string, List<IEntity>> _entityGroups = new();
+        private readonly Dictionary<string, Queue<IEntity>> _entityPools = new();
+        
+        private int _nextEntityId = 1;
+        private Transform _entityRoot;
+        
+        /// <summary>
+        /// 初始化
+        /// </summary>
+        public void Initialize(Transform entityRoot = null)
+        {
+            _entityRoot = entityRoot;
+            if (_entityRoot == null)
+            {
+                var go = new GameObject("[Entities]");
+                GameObject.DontDestroyOnLoad(go);
+                _entityRoot = go.transform;
+            }
+            CYLog.Debug("[EntityManager] 初始化完成");
+        }
+        
+        /// <summary>
+        /// 注册实体类型
+        /// </summary>
+        public void RegisterEntity(string entityType, GameObject prefab, int preloadCount = 0, Transform parent = null)
+        {
+            if (_entityInfos.ContainsKey(entityType))
+            {
+                CYLog.Warning($"[EntityManager] 实体类型已注册: {entityType}");
+                return;
+            }
+            
+            var info = new EntityInfo
+            {
+                EntityType = entityType,
+                Prefab = prefab,
+                PreloadCount = preloadCount,
+                Parent = parent ?? _entityRoot
+            };
+            
+            _entityInfos[entityType] = info;
+            _entityGroups[entityType] = new List<IEntity>();
+            _entityPools[entityType] = new Queue<IEntity>();
+            
+            // 预加载
+            for (int i = 0; i < preloadCount; i++)
+            {
+                var entity = CreateEntityInstance(info);
+                entity.OnHide();
+                _entityPools[entityType].Enqueue(entity);
+            }
+            
+            CYLog.Debug($"[EntityManager] 注册实体: {entityType}, 预加载: {preloadCount}");
+        }
+        
+        /// <summary>
+        /// 显示实体
+        /// </summary>
+        public T ShowEntity<T>(string entityType, object userData = null) where T : class, IEntity
+        {
+            return ShowEntity(entityType, userData) as T;
+        }
+        
+        /// <summary>
+        /// 显示实体
+        /// </summary>
+        public IEntity ShowEntity(string entityType, object userData = null)
+        {
+            if (!_entityInfos.TryGetValue(entityType, out var info))
+            {
+                CYLog.Error($"[EntityManager] 未注册的实体类型: {entityType}");
+                return null;
+            }
+            
+            IEntity entity;
+            
+            // 从池中获取或创建新实体
+            if (_entityPools[entityType].Count > 0)
+            {
+                entity = _entityPools[entityType].Dequeue();
+            }
+            else
+            {
+                entity = CreateEntityInstance(info);
+            }
+            
+            // 初始化并显示
+            int entityId = _nextEntityId++;
+            entity.OnInit(entityId, userData);
+            entity.OnShow(userData);
+            
+            _entities[entityId] = entity;
+            _entityGroups[entityType].Add(entity);
+            
+            return entity;
+        }
+        
+        /// <summary>
+        /// 隐藏实体
+        /// </summary>
+        public void HideEntity(int entityId)
+        {
+            if (!_entities.TryGetValue(entityId, out var entity))
+            {
+                return;
+            }
+            
+            HideEntityInternal(entity);
+        }
+        
+        /// <summary>
+        /// 隐藏实体
+        /// </summary>
+        public void HideEntity(IEntity entity)
+        {
+            if (entity == null) return;
+            HideEntityInternal(entity);
+        }
+        
+        private void HideEntityInternal(IEntity entity)
+        {
+            entity.OnHide();
+            
+            _entities.Remove(entity.Id);
+            
+            if (_entityGroups.TryGetValue(entity.EntityType, out var group))
+            {
+                group.Remove(entity);
+            }
+            
+            // 回收到池
+            if (_entityPools.TryGetValue(entity.EntityType, out var pool))
+            {
+                pool.Enqueue(entity);
+            }
+        }
+        
+        /// <summary>
+        /// 隐藏所有指定类型的实体
+        /// </summary>
+        public void HideAllEntities(string entityType)
+        {
+            if (!_entityGroups.TryGetValue(entityType, out var group))
+            {
+                return;
+            }
+            
+            // 复制列表避免迭代时修改
+            var entities = new List<IEntity>(group);
+            foreach (var entity in entities)
+            {
+                HideEntityInternal(entity);
+            }
+        }
+        
+        /// <summary>
+        /// 隐藏所有实体
+        /// </summary>
+        public void HideAllEntities()
+        {
+            var entities = new List<IEntity>(_entities.Values);
+            foreach (var entity in entities)
+            {
+                HideEntityInternal(entity);
+            }
+        }
+        
+        /// <summary>
+        /// 获取实体
+        /// </summary>
+        public IEntity GetEntity(int entityId)
+        {
+            return _entities.TryGetValue(entityId, out var entity) ? entity : null;
+        }
+        
+        /// <summary>
+        /// 获取实体
+        /// </summary>
+        public T GetEntity<T>(int entityId) where T : class, IEntity
+        {
+            return GetEntity(entityId) as T;
+        }
+        
+        /// <summary>
+        /// 获取所有指定类型的实体
+        /// </summary>
+        public IReadOnlyList<IEntity> GetEntities(string entityType)
+        {
+            return _entityGroups.TryGetValue(entityType, out var group) ? group : Array.Empty<IEntity>();
+        }
+        
+        /// <summary>
+        /// 获取实体数量
+        /// </summary>
+        public int GetEntityCount(string entityType = null)
+        {
+            if (string.IsNullOrEmpty(entityType))
+            {
+                return _entities.Count;
+            }
+            
+            return _entityGroups.TryGetValue(entityType, out var group) ? group.Count : 0;
+        }
+        
+        /// <summary>
+        /// 是否存在实体
+        /// </summary>
+        public bool HasEntity(int entityId)
+        {
+            return _entities.ContainsKey(entityId);
+        }
+        
+        private IEntity CreateEntityInstance(EntityInfo info)
+        {
+            var go = GameObject.Instantiate(info.Prefab, info.Parent);
+            var entity = go.GetComponent<IEntity>();
+            
+            if (entity == null)
+            {
+                CYLog.Error($"[EntityManager] 预制体缺少 IEntity 组件: {info.EntityType}");
+                GameObject.Destroy(go);
+                return null;
+            }
+            
+            return entity;
+        }
+        
+        // ITickable - 固定帧更新（物理/AI）
+        public void Tick(float deltaTime)
+        {
+            foreach (var entity in _entities.Values)
+            {
+                entity.OnFixedUpdate(deltaTime);
+            }
+        }
+        
+        // IUpdateable - 每帧更新
+        public void OnUpdate(float deltaTime)
+        {
+            foreach (var entity in _entities.Values)
+            {
+                entity.OnUpdate(deltaTime);
+            }
+        }
+        
+        // ILateUpdateable - 延迟更新（相机跟随等）
+        public void OnLateUpdate(float deltaTime)
+        {
+            foreach (var entity in _entities.Values)
+            {
+                entity.OnLateUpdate(deltaTime);
+            }
+        }
+        
+        // IDisposableEx
+        public void Dispose()
+        {
+            HideAllEntities();
+            
+            // 销毁池中的实体
+            foreach (var pool in _entityPools.Values)
+            {
+                while (pool.Count > 0)
+                {
+                    var entity = pool.Dequeue();
+                    if (entity.GameObject != null)
+                    {
+                        GameObject.Destroy(entity.GameObject);
+                    }
+                }
+            }
+            
+            _entityInfos.Clear();
+            _entities.Clear();
+            _entityGroups.Clear();
+            _entityPools.Clear();
+            
+            if (_entityRoot != null)
+            {
+                GameObject.Destroy(_entityRoot.gameObject);
+            }
+            
+            CYLog.Debug("[EntityManager] 已销毁");
+        }
+    }
+}
