@@ -8,8 +8,9 @@
 - ✅ **多平台** - PC / Android / iOS / 微信小游戏 / WebGL
 - ✅ **混合架构** - OOP 写逻辑，DOTS 做计算（PC 端可选）
 - ✅ **平台适配** - 自动处理微信/WebGL 的 API 限制
-- ✅ **统一入口** - `CY.Event` / `CY.Timer` / `CY.Entity` 简洁 API
-- ✅ **开箱即用** - 流程、实体、数据表、网络、存档、音频一应俱全
+- ✅ **统一入口** - `CY.xxx` 直接暴露 Manager，无中间封装
+- ✅ **可扩展** - partial class 支持游戏项目扩展自定义系统
+- ✅ **开箱即用** - 流程、实体、UI、数据表、音频、存档一应俱全
 
 ## 快速开始
 
@@ -43,7 +44,7 @@ public class MyGame : GameEntryBase
     [OnEvent]
     private void OnGameOver(ref GameOverEvent evt)
     {
-        CY.Log.Info($"游戏结束: {evt.IsVictory}");
+        Debug.Log($"游戏结束: {evt.IsVictory}");
     }
 }
 
@@ -57,42 +58,80 @@ public class BattleProcedure : ProcedureBase { }
 
 ### 3. 使用 CY 统一入口
 
-```csharp
-// 事件（手动订阅 或 [OnEvent] 自动订阅）
-CY.Event.Subscribe<GameEvent>(OnEvent, this);
-CY.Event.Fire(new GameEvent { Score = 100 });
+CY 直接暴露 Manager，可访问全部 API：
 
-// 计时器
+```csharp
+// 事件（CY.Event 返回 EventBus）
+CY.Event.Subscribe<GameEvent>(OnEvent, this);
+CY.Event.Post(ref evt);  // 发布事件
+
+// 计时器（CY.Timer 返回 TimerManager）
 CY.Timer.Delay(2f, () => Debug.Log("2秒后"));
 CY.Timer.Loop(1f, () => Debug.Log("每秒执行"));
 
-// 实体
-CY.Entity.Register("Enemy", enemyPrefab, 20);
-var enemy = CY.Entity.Show<EnemyEntity>("Enemy");
-CY.Entity.Hide(enemy);
+// 实体（CY.Entity 返回 EntityManager）
+CY.Entity.RegisterEntity("Enemy", enemyPrefab, 20);
+var enemy = CY.Entity.ShowEntity<EnemyEntity>("Enemy");
+CY.Entity.HideEntity(enemy);
+CY.Entity.PauseEntity(enemy.Id);  // 暂停实体
 
-// 数据表
-CY.Data.LoadCsv<MonsterRow>(csvText);
-var monster = CY.Data.GetRow<MonsterRow>(1001);
+// UI（CY.UI 返回 UIManager）
+CY.UI.Open<ShopUI>();
+CY.UI.ShowConfirm("提示", "确定吗？", onConfirm, onCancel);
+CY.UI.ShowToast("购买成功");
 
-// 流程（按名称或类型）
+// 数据表（CY.Data 返回 DataTableManager）
+CY.Data.LoadFromCsv<MonsterRow>(csvText);
+var monster = CY.Data.GetDataTable<MonsterRow>().GetRow(1001);
+
+// 流程（CY.Procedure 返回 ProcedureManager）
 CY.Procedure.Change("Battle");
-CY.Procedure.Change<BattleProcedure>();
+CY.Procedure.ChangeProcedure<BattleProcedure>();
+
+// 音频（CY.Audio 返回 IAudioService）
+CY.Audio.PlayBGM("battle");
+CY.Audio.PlaySFX("click");
+```
+
+### 4. 扩展自定义系统
+
+CY 是 partial class，可在游戏项目中扩展：
+
+```csharp
+// Assets/_Game/Scripts/Core/CY.Game.cs
+namespace CYFramework
+{
+    public static partial class CY
+    {
+        private static QuestManager _quest;
+        
+        /// <summary>
+        /// 任务系统
+        /// </summary>
+        public static QuestManager Quest => _quest ??= Get<QuestManager>();
+    }
+}
+
+// 使用
+CY.Quest.AcceptQuest(1001);
 ```
 
 ## 核心模块
 
 ### CY 统一入口
 
-| 入口 | 说明 |
-|------|------|
-| `CY.Event` | 事件系统 |
-| `CY.Timer` | 计时器 |
-| `CY.Procedure` | 流程管理 |
-| `CY.Entity` | 实体管理 |
-| `CY.Data` | 数据表 |
-| `CY.Log` | 日志 |
-| `CY.Game` | 游戏入口 |
+| 入口 | 类型 | 说明 | 场景 |
+|------|------|------|------|
+| `CY.Event` | EventBus | 事件系统 | 模块解耦通信 |
+| `CY.Timer` | TimerManager | 计时器 | 技能冷却、定时刷怪 |
+| `CY.Procedure` | ProcedureManager | 流程管理 | 菜单→战斗→结算 |
+| `CY.Entity` | EntityManager | 实体管理 | 敌人、子弹、特效 |
+| `CY.UI` | UIManager | UI 面板 | 背包、商店、对话框 |
+| `CY.Data` | DataTableManager | 数据表 | 配置表读取 |
+| `CY.Audio` | IAudioService | 音频 | BGM、音效 |
+| `CY.Save` | SaveService | 存档 | 进度保存 |
+| `CY.Pool` | PoolManager | 对象池 | 复用 GameObject |
+| `CY.Game` | GameEntryBase | 游戏入口 | 访问全局实例 |
 
 ### 核心服务
 

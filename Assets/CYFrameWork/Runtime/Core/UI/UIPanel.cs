@@ -105,7 +105,7 @@ namespace CYFramework.Core.UI
         
         #endregion
         
-        #region 生命周期
+        #region 生命周期 - 框架内部调用
         
         /// <summary>
         /// 设置管理器引用
@@ -116,20 +116,23 @@ namespace CYFramework.Core.UI
         }
         
         /// <summary>
-        /// 面板打开时调用
+        /// 面板初始化（每次打开时调用，包括从对象池取出）
         /// </summary>
-        /// <param name="data">传入的数据</param>
-        public void OnOpen(object data)
+        internal void InternalInit(object userData)
+        {
+            _rectTransform = GetComponent<RectTransform>();
+            OnInit(userData);
+        }
+        
+        /// <summary>
+        /// 面板打开
+        /// </summary>
+        internal void InternalOpen(object userData)
         {
             IsOpened = true;
-            
-            // 绑定 UI 事件
             OnBindUI();
+            OnOpen(userData);
             
-            // 子类实现
-            OnShow(data);
-            
-            // 播放打开动画
             if (EnableAnimation)
             {
                 PlayOpenAnimation();
@@ -137,39 +140,81 @@ namespace CYFramework.Core.UI
         }
         
         /// <summary>
-        /// 面板刷新时调用（已打开状态下再次 Open）
+        /// 面板关闭
         /// </summary>
-        public void OnRefresh(object data)
-        {
-            OnShow(data);
-        }
-        
-        /// <summary>
-        /// 面板关闭时调用
-        /// </summary>
-        public void OnClose()
+        internal void InternalClose(bool isShutdown, object userData)
         {
             IsOpened = false;
-            
-            // 解绑 UI 事件
+            OnClose(isShutdown, userData);
             OnUnbindUI();
-            
-            // 子类实现
-            OnHide();
         }
         
         /// <summary>
-        /// Unity Awake
+        /// 面板显示（从隐藏恢复）
         /// </summary>
-        protected virtual void Awake()
+        internal void InternalShow()
         {
-            // 缓存组件
-            _rectTransform = GetComponent<RectTransform>();
+            gameObject.SetActive(true);
+            OnShow();
         }
         
         /// <summary>
-        /// Unity OnDestroy
+        /// 面板隐藏（不关闭，只隐藏）
         /// </summary>
+        internal void InternalHide()
+        {
+            OnHide();
+            gameObject.SetActive(false);
+        }
+        
+        /// <summary>
+        /// 面板刷新（已打开状态下再次 Open）
+        /// </summary>
+        internal void InternalRefresh(object userData)
+        {
+            OnRefresh(userData);
+        }
+        
+        /// <summary>
+        /// 面板被覆盖（新面板打开）
+        /// </summary>
+        internal void InternalPause()
+        {
+            OnPause();
+        }
+        
+        /// <summary>
+        /// 面板恢复（覆盖的面板关闭后）
+        /// </summary>
+        internal void InternalResume()
+        {
+            OnResume();
+        }
+        
+        /// <summary>
+        /// 面板回收到对象池
+        /// </summary>
+        internal void InternalRecycle()
+        {
+            OnRecycle();
+        }
+        
+        /// <summary>
+        /// 每帧更新
+        /// </summary>
+        internal void InternalUpdate(float elapseSeconds, float realElapseSeconds)
+        {
+            OnUpdate(elapseSeconds, realElapseSeconds);
+        }
+        
+        /// <summary>
+        /// 延迟更新
+        /// </summary>
+        internal void InternalLateUpdate(float elapseSeconds, float realElapseSeconds)
+        {
+            OnLateUpdate(elapseSeconds, realElapseSeconds);
+        }
+        
         protected virtual void OnDestroy()
         {
             OnUnbindUI();
@@ -177,7 +222,70 @@ namespace CYFramework.Core.UI
         
         #endregion
         
-        #region 子类实现
+        #region 子类重写 - 生命周期
+        
+        /// <summary>
+        /// 窗口初始化时调用（每次打开时调用，包括从对象池取出）
+        /// </summary>
+        protected virtual void OnInit(object userData) { }
+        
+        /// <summary>
+        /// 窗口打开时调用
+        /// </summary>
+        protected virtual void OnOpen(object userData) { }
+        
+        /// <summary>
+        /// 窗口关闭时调用
+        /// </summary>
+        /// <param name="isShutdown">是否是关闭整个 UI 系统</param>
+        /// <param name="userData">用户数据</param>
+        protected virtual void OnClose(bool isShutdown, object userData) { }
+        
+        /// <summary>
+        /// 窗口显示时调用（从隐藏恢复）
+        /// </summary>
+        protected virtual void OnShow() { }
+        
+        /// <summary>
+        /// 窗口隐藏时调用
+        /// </summary>
+        protected virtual void OnHide() { }
+        
+        /// <summary>
+        /// 每帧更新时调用
+        /// </summary>
+        /// <param name="elapseSeconds">逻辑流逝时间（受 TimeScale 影响）</param>
+        /// <param name="realElapseSeconds">真实流逝时间</param>
+        protected virtual void OnUpdate(float elapseSeconds, float realElapseSeconds) { }
+        
+        /// <summary>
+        /// 延迟更新时调用
+        /// </summary>
+        protected virtual void OnLateUpdate(float elapseSeconds, float realElapseSeconds) { }
+        
+        /// <summary>
+        /// 窗口回收时调用（对象池回收，下次取出时会重新执行 OnInit）
+        /// </summary>
+        protected virtual void OnRecycle() { }
+        
+        /// <summary>
+        /// 窗口被其他窗口覆盖时调用
+        /// </summary>
+        protected virtual void OnPause() { }
+        
+        /// <summary>
+        /// 覆盖的窗口关闭后恢复时调用
+        /// </summary>
+        protected virtual void OnResume() { }
+        
+        /// <summary>
+        /// 窗口刷新时调用（已打开状态下再次 Open）
+        /// </summary>
+        protected virtual void OnRefresh(object userData) { }
+        
+        #endregion
+        
+        #region 子类重写 - UI 事件绑定
         
         /// <summary>
         /// 绑定 UI 事件（按钮点击等）
@@ -188,29 +296,6 @@ namespace CYFramework.Core.UI
         /// 解绑 UI 事件
         /// </summary>
         protected virtual void OnUnbindUI() { }
-        
-        /// <summary>
-        /// 面板显示
-        /// </summary>
-        /// <param name="data">传入的数据</param>
-        protected abstract void OnShow(object data);
-        
-        /// <summary>
-        /// 面板隐藏
-        /// </summary>
-        protected virtual void OnHide() { }
-        
-        /// <summary>
-        /// 每帧更新（动画、计时器等）
-        /// 由 UIManager 自动驱动
-        /// </summary>
-        protected internal virtual void OnUpdate(float deltaTime) { }
-        
-        /// <summary>
-        /// 延迟更新（跟随、位置调整等）
-        /// 由 UIManager 自动驱动
-        /// </summary>
-        protected internal virtual void OnLateUpdate(float deltaTime) { }
         
         #endregion
         

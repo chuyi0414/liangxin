@@ -406,12 +406,60 @@ UI 根据 Snapshot 中的 ID 进行 Update。如果 ID 消失，则回收 UI 节
 
 **收益**：彻底解耦 + 零 GC。UI 随便写，不会因为访问了被销毁的 Entity 而导致 Crash。
 
-## 4. 目录结构规范 (V2.3)
+## 4. CY 统一入口 (V2.4)
+
+### 4.1 设计原则
+
+CY 直接暴露 Manager，无中间封装：
+
+```csharp
+// 直接访问 Manager 的全部 API
+CY.Entity.ShowEntity("Enemy");    // 而不是 CY.Entity.Show()
+CY.Entity.PauseEntity(id);
+CY.UI.Open<ShopUI>();
+CY.UI.ShowConfirm(...);
+CY.Procedure.ChangeProcedure<T>();
+```
+
+### 4.2 核心服务一览
+
+| 入口 | 类型 | 说明 | 使用场景 |
+|------|------|------|----------|
+| `CY.Event` | EventBus | 事件系统 | 模块解耦通信 |
+| `CY.Timer` | TimerManager | 计时器 | 技能冷却、定时刷怪 |
+| `CY.Procedure` | ProcedureManager | 流程管理 | 菜单→战斗→结算 |
+| `CY.Entity` | EntityManager | 实体管理 | 敌人、子弹、特效 |
+| `CY.UI` | UIManager | UI 面板 | 背包、商店、对话框 |
+| `CY.Data` | DataTableManager | 数据表 | 配置表读取 |
+| `CY.Audio` | IAudioService | 音频 | BGM、音效 |
+| `CY.Save` | SaveService | 存档 | 进度保存 |
+| `CY.Pool` | PoolManager | 对象池 | 复用 GameObject |
+| `CY.Game` | GameEntryBase | 游戏入口 | 访问全局实例 |
+
+### 4.3 扩展自定义系统
+
+CY 是 partial class，游戏项目可扩展而不修改框架代码：
+
+```csharp
+// Assets/_Game/Scripts/Core/CY.Game.cs
+namespace CYFramework
+{
+    public static partial class CY
+    {
+        private static QuestManager _quest;
+        public static QuestManager Quest => _quest ??= Get<QuestManager>();
+    }
+}
+
+// 使用
+CY.Quest.AcceptQuest(1001);
+
+## 5. 目录结构规范 (V2.4)
 
 ```
 Assets/CYFramework/
 ├── Runtime/
-│   ├── CY.cs               # 统一入口（类似 GameEntry）
+│   ├── CY.cs               # 统一入口（partial class，直接暴露 Manager）
 │   ├── Infrastructure/     # 启动与服务定位、ServiceBase
 │   ├── Platform/           # 微信/PC 适配器
 │   ├── Core/

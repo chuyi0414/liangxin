@@ -19,11 +19,14 @@ namespace CYFramework.Core.Entity
         int Id { get; }
         string EntityType { get; }
         bool IsVisible { get; }
+        bool IsPaused { get; }
         GameObject GameObject { get; }
         
         void OnInit(int id, object userData);
         void OnShow(object userData);
         void OnHide();
+        void OnPause();
+        void OnResume();
         void OnFixedUpdate(float deltaTime);
         void OnUpdate(float deltaTime);
         void OnLateUpdate(float deltaTime);
@@ -38,6 +41,7 @@ namespace CYFramework.Core.Entity
         public int Id { get; private set; }
         public abstract string EntityType { get; }
         public bool IsVisible { get; private set; }
+        public bool IsPaused { get; private set; }
         public GameObject GameObject => gameObject;
         
         protected object UserData { get; private set; }
@@ -46,6 +50,7 @@ namespace CYFramework.Core.Entity
         {
             Id = id;
             UserData = userData;
+            IsPaused = false;
             OnEntityInit(userData);
         }
         
@@ -53,6 +58,7 @@ namespace CYFramework.Core.Entity
         {
             UserData = userData;
             IsVisible = true;
+            IsPaused = false;
             gameObject.SetActive(true);
             OnEntityShow(userData);
         }
@@ -64,9 +70,23 @@ namespace CYFramework.Core.Entity
             gameObject.SetActive(false);
         }
         
+        public void OnPause()
+        {
+            if (IsPaused) return;
+            IsPaused = true;
+            OnEntityPause();
+        }
+        
+        public void OnResume()
+        {
+            if (!IsPaused) return;
+            IsPaused = false;
+            OnEntityResume();
+        }
+        
         public void OnFixedUpdate(float deltaTime)
         {
-            if (IsVisible)
+            if (IsVisible && !IsPaused)
             {
                 OnEntityFixedUpdate(deltaTime);
             }
@@ -74,7 +94,7 @@ namespace CYFramework.Core.Entity
         
         public void OnUpdate(float deltaTime)
         {
-            if (IsVisible)
+            if (IsVisible && !IsPaused)
             {
                 OnEntityUpdate(deltaTime);
             }
@@ -82,7 +102,7 @@ namespace CYFramework.Core.Entity
         
         public void OnLateUpdate(float deltaTime)
         {
-            if (IsVisible)
+            if (IsVisible && !IsPaused)
             {
                 OnEntityLateUpdate(deltaTime);
             }
@@ -93,6 +113,7 @@ namespace CYFramework.Core.Entity
             OnEntityRecycle();
             Id = 0;
             UserData = null;
+            IsPaused = false;
         }
         
         // IPoolable
@@ -103,6 +124,8 @@ namespace CYFramework.Core.Entity
         protected virtual void OnEntityInit(object userData) { }
         protected virtual void OnEntityShow(object userData) { }
         protected virtual void OnEntityHide() { }
+        protected virtual void OnEntityPause() { }   // 实体暂停（暂停动画/特效）
+        protected virtual void OnEntityResume() { }  // 实体恢复
         protected virtual void OnEntityFixedUpdate(float deltaTime) { }  // 物理/AI 逻辑
         protected virtual void OnEntityUpdate(float deltaTime) { }       // 常规更新
         protected virtual void OnEntityLateUpdate(float deltaTime) { }   // 相机跟随等
@@ -265,6 +288,7 @@ namespace CYFramework.Core.Entity
             // 回收到池
             if (_entityPools.TryGetValue(entity.EntityType, out var pool))
             {
+                entity.OnRecycle();  // 回收前调用
                 pool.Enqueue(entity);
             }
         }
@@ -342,6 +366,78 @@ namespace CYFramework.Core.Entity
         public bool HasEntity(int entityId)
         {
             return _entities.ContainsKey(entityId);
+        }
+        
+        /// <summary>
+        /// 暂停单个实体
+        /// </summary>
+        public void PauseEntity(int entityId)
+        {
+            if (_entities.TryGetValue(entityId, out var entity))
+            {
+                entity.OnPause();
+            }
+        }
+        
+        /// <summary>
+        /// 恢复单个实体
+        /// </summary>
+        public void ResumeEntity(int entityId)
+        {
+            if (_entities.TryGetValue(entityId, out var entity))
+            {
+                entity.OnResume();
+            }
+        }
+        
+        /// <summary>
+        /// 暂停指定类型的所有实体（分组暂停）
+        /// </summary>
+        public void PauseEntities(string entityType)
+        {
+            if (_entityGroups.TryGetValue(entityType, out var group))
+            {
+                foreach (var entity in group)
+                {
+                    entity.OnPause();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 恢复指定类型的所有实体（分组恢复）
+        /// </summary>
+        public void ResumeEntities(string entityType)
+        {
+            if (_entityGroups.TryGetValue(entityType, out var group))
+            {
+                foreach (var entity in group)
+                {
+                    entity.OnResume();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 暂停所有实体
+        /// </summary>
+        public void PauseAllEntities()
+        {
+            foreach (var entity in _entities.Values)
+            {
+                entity.OnPause();
+            }
+        }
+        
+        /// <summary>
+        /// 恢复所有实体
+        /// </summary>
+        public void ResumeAllEntities()
+        {
+            foreach (var entity in _entities.Values)
+            {
+                entity.OnResume();
+            }
         }
         
         private IEntity CreateEntityInstance(EntityInfo info)

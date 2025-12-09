@@ -133,11 +133,12 @@ namespace CYFramework.Core.UI
         public void OnUpdate(float deltaTime)
         {
             // 驱动所有已打开面板的 Update
+            float realDeltaTime = Time.unscaledDeltaTime;
             foreach (var panel in _openedPanels.Values)
             {
                 if (panel != null && panel.IsOpened)
                 {
-                    panel.OnUpdate(deltaTime);
+                    panel.InternalUpdate(deltaTime, realDeltaTime);
                 }
             }
         }
@@ -145,19 +146,20 @@ namespace CYFramework.Core.UI
         public void OnLateUpdate(float deltaTime)
         {
             // 驱动所有已打开面板的 LateUpdate
+            float realDeltaTime = Time.unscaledDeltaTime;
             foreach (var panel in _openedPanels.Values)
             {
                 if (panel != null && panel.IsOpened)
                 {
-                    panel.OnLateUpdate(deltaTime);
+                    panel.InternalLateUpdate(deltaTime, realDeltaTime);
                 }
             }
         }
         
         public void Dispose()
         {
-            // 关闭所有面板
-            CloseAll();
+            // 关闭所有面板（标记为系统关闭）
+            CloseAll(isShutdown: true);
             
             // 清理缓存
             _prefabCache.Clear();
@@ -188,8 +190,8 @@ namespace CYFramework.Core.UI
             // 检查是否已打开
             if (_openedPanels.TryGetValue(panelType, out var existingPanel))
             {
-                CYLog.Warning($"[UIManager] 面板已打开: {panelType.Name}");
-                existingPanel.OnRefresh(data);
+                CYLog.Debug($"[UIManager] 面板已打开，刷新: {panelType.Name}");
+                existingPanel.InternalRefresh(data);
                 return existingPanel as T;
             }
             
@@ -208,9 +210,20 @@ namespace CYFramework.Core.UI
                 panel.transform.SetParent(container, false);
             }
             
+            // 暂停当前栈顶面板
+            if (panel.IsStackable && _panelStack.Count > 0)
+            {
+                var topPanel = _panelStack.Peek();
+                if (topPanel != null && topPanel != panel)
+                {
+                    topPanel.InternalPause();
+                }
+            }
+            
             // 激活并初始化
             panel.gameObject.SetActive(true);
-            panel.OnOpen(data);
+            panel.InternalInit(data);
+            panel.InternalOpen(data);
             
             // 记录
             _openedPanels[panelType] = panel;
@@ -275,13 +288,13 @@ namespace CYFramework.Core.UI
         /// <summary>
         /// 关闭所有面板
         /// </summary>
-        public void CloseAll()
+        public void CloseAll(bool isShutdown = false)
         {
             var panelsToClose = new List<UIPanel>(_openedPanels.Values);
             
             foreach (var panel in panelsToClose)
             {
-                ClosePanel(panel);
+                ClosePanel(panel, isShutdown);
             }
             
             _panelStack.Clear();
@@ -361,9 +374,30 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void ShowConfirm(string title, string content, Action onConfirm, Action onCancel = null)
         {
-            // TODO: 实现通用确认对话框
-            CYLog.Info($"[Confirm] {title}: {content}");
-            onConfirm?.Invoke();
+            var config = new Components.DialogConfig
+            {
+                Title = title,
+                Content = content,
+                Type = Components.DialogType.Confirm,
+                OnConfirm = onConfirm,
+                OnCancel = onCancel
+            };
+            Open<Components.UIDialog>(config);
+        }
+        
+        /// <summary>
+        /// 显示提示框（仅确认按钮）
+        /// </summary>
+        public void ShowAlert(string title, string content, Action onConfirm = null)
+        {
+            var config = new Components.DialogConfig
+            {
+                Title = title,
+                Content = content,
+                Type = Components.DialogType.Alert,
+                OnConfirm = onConfirm
+            };
+            Open<Components.UIDialog>(config);
         }
         
         #endregion
@@ -470,12 +504,12 @@ namespace CYFramework.Core.UI
         /// <summary>
         /// 关闭面板
         /// </summary>
-        private void ClosePanel(UIPanel panel)
+        private void ClosePanel(UIPanel panel, bool isShutdown = false)
         {
             var panelType = panel.GetType();
             
             // 调用关闭回调
-            panel.OnClose();
+            panel.InternalClose(isShutdown, null);
             
             // 从记录中移除
             _openedPanels.Remove(panelType);
@@ -483,6 +517,7 @@ namespace CYFramework.Core.UI
             // 对象池回收或销毁
             if (_config.EnablePool && panel.IsPoolable)
             {
+                panel.InternalRecycle();
                 panel.gameObject.SetActive(false);
                 
                 if (!_panelPool.TryGetValue(panelType, out var pool))
@@ -503,6 +538,16 @@ namespace CYFramework.Core.UI
             else
             {
                 UnityEngine.Object.Destroy(panel.gameObject);
+            }
+            
+            // 恢复栈顶面板
+            if (_panelStack.Count > 0)
+            {
+                var topPanel = _panelStack.Peek();
+                if (topPanel != null && topPanel.IsOpened)
+                {
+                    topPanel.InternalResume();
+                }
             }
             
             CYLog.Debug($"[UIManager] 关闭面板: {panelType.Name}");

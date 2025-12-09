@@ -94,9 +94,9 @@ namespace CYFramework.Core.UI.Components
             _maskButton?.onClick.RemoveListener(OnMaskClicked);
         }
         
-        protected override void OnShow(object data)
+        protected override void OnOpen(object userData)
         {
-            _config = data as DialogConfig ?? new DialogConfig();
+            _config = userData as DialogConfig ?? new DialogConfig();
             
             // 设置标题和内容
             if (_titleText != null)

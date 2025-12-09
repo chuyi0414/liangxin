@@ -703,6 +703,135 @@ _eventBus.Post(evt);  // 应该是 Post(ref evt)
 
 ---
 
+## 6. 实体系统详解
+
+### 6.1 实体系统架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   EntityManager                          │
+│                   (实体管理器)                            │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │ 职责：                                               ││
+│  │ - 显示/隐藏实体                                       ││
+│  │ - 实体对象池                                          ││
+│  │ - 分组管理                                            ││
+│  │ - 暂停/恢复（支持单个、分组、全部）                    ││
+│  └─────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────┘
+                           │
+                           │ 管理
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                      EntityBase                          │
+│                     (实体基类)                           │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │ 生命周期：                                           ││
+│  │   OnEntityInit(userData)       创建/从池取出         ││
+│  │   OnEntityShow(userData)       显示                  ││
+│  │   OnEntityFixedUpdate(dt)      固定帧（物理/AI）      ││
+│  │   OnEntityUpdate(dt)           每帧更新              ││
+│  │   OnEntityLateUpdate(dt)       延迟更新              ││
+│  │   OnEntityPause()              暂停（停止移动）       ││
+│  │   OnEntityResume()             恢复                  ││
+│  │   OnEntityHide()               隐藏                  ││
+│  │   OnEntityRecycle()            回收到池              ││
+│  └─────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────┘
+```
+
+### 6.2 实体暂停说明
+
+**暂停时**：
+- `OnEntityFixedUpdate` 不调用 → 物理/AI 停止
+- `OnEntityUpdate` 不调用 → 移动逻辑停止
+- `OnEntityLateUpdate` 不调用 → 跟随逻辑停止
+- **动画继续播放**（Animator 由 Unity 驱动，不受影响）
+
+**使用场景**：
+- 冻结敌人但玩家继续移动
+- 技能效果：时间停止
+
+### 6.3 完整 API
+
+```csharp
+// 显示实体
+var enemy = CY.Entity.Show<Enemy>("Enemy", enemyData);
+
+// 隐藏实体
+CY.Entity.HideEntity(enemy.Id);
+CY.Entity.HideEntity(enemy);
+CY.Entity.HideAllEntities("Enemy");  // 隐藏所有敌人
+CY.Entity.HideAllEntities();         // 隐藏全部
+
+// 暂停/恢复 - 单个
+CY.Entity.PauseEntity(entityId);
+CY.Entity.ResumeEntity(entityId);
+
+// 暂停/恢复 - 分组（按类型）
+CY.Entity.PauseEntities("Enemy");    // 暂停所有敌人
+CY.Entity.ResumeEntities("Enemy");   // 恢复所有敌人
+
+// 暂停/恢复 - 全部
+CY.Entity.PauseAllEntities();
+CY.Entity.ResumeAllEntities();
+
+// 查询
+var entity = CY.Entity.GetEntity(entityId);
+var enemies = CY.Entity.GetEntities("Enemy");
+int count = CY.Entity.GetEntityCount("Enemy");
+bool exists = CY.Entity.HasEntity(entityId);
+```
+
+### 6.4 实体示例
+
+```csharp
+public class Enemy : EntityBase
+{
+    public override string EntityType => "Enemy";
+    
+    private float _speed = 5f;
+    private Animator _animator;
+    
+    protected override void OnEntityInit(object userData)
+    {
+        _animator = GetComponent<Animator>();
+    }
+    
+    protected override void OnEntityShow(object userData)
+    {
+        var data = userData as EnemyData;
+        _speed = data?.Speed ?? 5f;
+        _animator.Play("Walk");
+    }
+    
+    protected override void OnEntityUpdate(float deltaTime)
+    {
+        // 暂停时不执行（IsPaused = true）
+        transform.Translate(Vector3.forward * _speed * deltaTime);
+    }
+    
+    protected override void OnEntityPause()
+    {
+        // 可选：切换到待机动画
+        _animator.Play("Idle");
+    }
+    
+    protected override void OnEntityResume()
+    {
+        // 可选：恢复行走动画
+        _animator.Play("Walk");
+    }
+    
+    protected override void OnEntityHide()
+    {
+        // 清理状态
+    }
+}
+```
+
+---
+
 ## 7. UI 系统完整教程
 
 ### 7.1 UI 系统架构
@@ -727,11 +856,21 @@ _eventBus.Post(evt);  // 应该是 Post(ref evt)
 │                       UIPanel                            │
 │                      (面板基类)                           │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │ 生命周期：                                           ││
-│  │ OnBindUI()   → 绑定按钮点击等事件                     ││
-│  │ OnShow()     → 面板显示，初始化数据                   ││
-│  │ OnHide()     → 面板隐藏，清理状态                     ││
-│  │ OnUnbindUI() → 解绑事件                              ││
+│  │ 生命周期及调用时机：                                  ││
+│  │                                                     ││
+│  │ OnInit(userData)       首次创建 或 从对象池取出时     ││
+│  │ OnBindUI()             OnInit 之后，绑定按钮事件      ││
+│  │ OnOpen(userData)       面板打开，初始化数据           ││
+│  │ OnShow()               从隐藏状态恢复显示             ││
+│  │ OnUpdate(dt,realDt)    每帧调用（打开状态）           ││
+│  │ OnLateUpdate(dt,realDt)每帧延迟调用（打开状态）       ││
+│  │ OnPause()              新面板覆盖当前面板时           ││
+│  │ OnResume()             覆盖面板关闭，恢复栈顶时       ││
+│  │ OnRefresh(userData)    已打开状态再次 Open 时        ││
+│  │ OnHide()               面板隐藏（不关闭）时           ││
+│  │ OnClose(isShutdown,ud) 面板关闭时                    ││
+│  │ OnUnbindUI()           OnClose 之后，解绑按钮事件     ││
+│  │ OnRecycle()            回收到对象池，等待复用         ││
 │  └─────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────┘
                            │
@@ -743,7 +882,123 @@ _eventBus.Post(evt);  // 应该是 Post(ref evt)
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 UI 层级说明
+### 7.2 UI 生命周期完整流程
+
+```
+═══════════════════════════════════════════════════════════════════
+                    首次打开面板 A
+═══════════════════════════════════════════════════════════════════
+
+CY.UI.Open<PanelA>(data)
+         │
+         ▼
+    ┌─────────┐
+    │ 创建面板 │ (或从对象池取出)
+    └────┬────┘
+         │
+         ▼
+┌─────────────────┐
+│ OnInit(data)    │  ← 缓存组件引用、重置状态
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ OnBindUI()      │  ← 绑定按钮点击事件
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ OnOpen(data)    │  ← 业务初始化、刷新 UI
+└────────┬────────┘
+         │
+         ▼
+    【面板运行中】
+         │
+    ┌────┴────┐
+    │ 每帧循环 │
+    └────┬────┘
+         │
+    ┌────▼────┐
+    │OnUpdate │ → │OnLateUpdate│
+    └─────────┘
+
+═══════════════════════════════════════════════════════════════════
+                 打开新面板 B 覆盖 A
+═══════════════════════════════════════════════════════════════════
+
+CY.UI.Open<PanelB>(data)
+         │
+         ├───────────────────────┐
+         │                       │
+         ▼                       ▼
+┌─────────────────┐     ┌─────────────────┐
+│ A.OnPause()     │     │ B.OnInit(data)  │
+│ (A 被覆盖暂停)   │     │ B.OnBindUI()    │
+└─────────────────┘     │ B.OnOpen(data)  │
+                        └─────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+                      关闭面板 B
+═══════════════════════════════════════════════════════════════════
+
+CY.UI.Close<PanelB>()
+         │
+         ├───────────────────────┐
+         │                       │
+         ▼                       ▼
+┌─────────────────┐     ┌─────────────────┐
+│ B.OnClose()     │     │ A.OnResume()    │
+│ B.OnUnbindUI()  │     │ (A 恢复栈顶)    │
+│ B.OnRecycle()   │     └─────────────────┘
+│ (回收到对象池)   │
+└─────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+                  再次打开已打开的 A
+═══════════════════════════════════════════════════════════════════
+
+CY.UI.Open<PanelA>(newData)  // A 已经打开
+         │
+         ▼
+┌─────────────────┐
+│ A.OnRefresh()   │  ← 只刷新数据，不重新 Init/Open
+└─────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+                    隐藏/显示面板（不关闭）
+═══════════════════════════════════════════════════════════════════
+
+panel.InternalHide()          panel.InternalShow()
+         │                            │
+         ▼                            ▼
+┌─────────────────┐          ┌─────────────────┐
+│ OnHide()        │          │ OnShow()        │
+│ SetActive(false)│          │ SetActive(true) │
+└─────────────────┘          └─────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+                      关闭面板 A
+═══════════════════════════════════════════════════════════════════
+
+CY.UI.Close<PanelA>()
+         │
+         ▼
+┌─────────────────┐
+│ OnClose()       │  ← 清理资源
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ OnUnbindUI()    │  ← 解绑按钮事件
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ OnRecycle()     │  ← 回收到对象池（如果 IsPoolable）
+└─────────────────┘   或 Destroy（如果不可池化）
+```
+
+### 7.3 UI 层级说明
 
 ```
 ┌─────────────────────────────────────────────────────────┐

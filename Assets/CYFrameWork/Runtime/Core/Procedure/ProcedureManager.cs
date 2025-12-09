@@ -141,9 +141,21 @@ namespace CYFramework.Core.Procedure
         /// </summary>
         public void AutoRegisterAll(Assembly assembly = null)
         {
-            assembly ??= Assembly.GetCallingAssembly();
+            // 如果没有指定程序集，扫描所有已加载的程序集
+            var assemblies = assembly != null 
+                ? new[] { assembly } 
+                : AppDomain.CurrentDomain.GetAssemblies()
+                    .Where(a => !a.FullName.StartsWith("Unity") && 
+                                !a.FullName.StartsWith("System") && 
+                                !a.FullName.StartsWith("mscorlib") &&
+                                !a.FullName.StartsWith("netstandard"))
+                    .ToArray();
             
-            var procedureTypes = assembly.GetTypes()
+            var procedureTypes = assemblies
+                .SelectMany(a => {
+                    try { return a.GetTypes(); }
+                    catch { return Array.Empty<Type>(); }
+                })
                 .Where(t => t.IsClass && !t.IsAbstract && typeof(ProcedureBase).IsAssignableFrom(t))
                 .Where(t => t.GetCustomAttribute<AutoRegisterProcedureAttribute>() != null)
                 .OrderBy(t => t.GetCustomAttribute<AutoRegisterProcedureAttribute>()?.Order ?? 0)

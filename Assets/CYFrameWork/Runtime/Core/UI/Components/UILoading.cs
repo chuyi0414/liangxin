@@ -55,10 +55,10 @@ namespace CYFramework.Core.UI.Components
         
         #region 生命周期
         
-        protected override void OnShow(object data)
+        protected override void OnOpen(object userData)
         {
             _instance = this;
-            _config = data as LoadingConfig ?? new LoadingConfig();
+            _config = userData as LoadingConfig ?? new LoadingConfig();
             
             // 初始化状态
             _currentProgress = 0f;

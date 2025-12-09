@@ -4,360 +4,166 @@
 // ============================================================================
 
 using System;
+using CYFramework.Core.Audio;
 using CYFramework.Core.Event;
 using CYFramework.Core.FSM;
 using CYFramework.Core.DataTable;
 using CYFramework.Core.Entity;
+using CYFramework.Core.Pool;
 using CYFramework.Core.Procedure;
+using CYFramework.Core.Save;
 using CYFramework.Core.Timer;
+using CYFramework.Core.UI;
 using CYFramework.Infrastructure;
+using UnityEngine;
 
 namespace CYFramework
 {
     /// <summary>
     /// CYFramework 统一入口
+    /// 所有系统直接暴露 Manager/Service，无中间方法
+    /// 使用 partial 支持游戏项目扩展自定义系统
     /// </summary>
-    public static class CY
+    public static partial class CY
     {
+        // ==================== 缓存字段 ====================
+        private static EventBus _event;
+        private static TimerManager _timer;
+        private static ProcedureManager _procedure;
+        private static EntityManager _entity;
+        private static UIManager _ui;
+        private static DataTableManager _data;
+        private static IAudioService _audio;
+        
         // ==================== 核心服务 ====================
         
         /// <summary>
-        /// 事件系统
+        /// 事件系统 - 解耦模块间通信
+        /// 场景：玩家死亡通知UI更新、敌人击杀触发成就、购买道具刷新背包
+        /// 用法：CY.Event.Post(ref evt) 发布, Subscribe() 订阅
         /// </summary>
-        public static class Event
-        {
-            private static EventBus _eventBus;
-            private static EventBus EventBus => _eventBus ??= ServiceLocator.Get<EventBus>();
-            
-            /// <summary>
-            /// 订阅事件
-            /// </summary>
-            public static void Subscribe<T>(Core.Event.EventHandler<T> handler, object owner = null) where T : struct
-            {
-                EventBus.Subscribe(handler, owner);
-            }
-            
-            /// <summary>
-            /// 取消订阅
-            /// </summary>
-            public static void Unsubscribe<T>(Core.Event.EventHandler<T> handler) where T : struct
-            {
-                EventBus.Unsubscribe(handler);
-            }
-            
-            /// <summary>
-            /// 发布事件
-            /// </summary>
-            public static void Fire<T>(T evt) where T : struct
-            {
-                EventBus.Post(ref evt);
-            }
-            
-            /// <summary>
-            /// 发布事件（ref 版本，避免装箱）
-            /// </summary>
-            public static void Fire<T>(ref T evt) where T : struct
-            {
-                EventBus.Post(ref evt);
-            }
-            
-            /// <summary>
-            /// 取消所有订阅
-            /// </summary>
-            public static void UnsubscribeAll(object owner)
-            {
-                EventBus.UnsubscribeAll(owner);
-            }
-            
-            /// <summary>
-            /// 自动扫描并订阅所有标记 [OnEvent] 的方法
-            /// </summary>
-            public static void SubscribeAll(object target)
-            {
-                EventBus.SubscribeAll(target);
-            }
-        }
+        public static EventBus Event => _event ??= ServiceLocator.Get<EventBus>();
         
         /// <summary>
-        /// 日志系统
+        /// 计时器系统 - 延时/循环执行，不依赖MonoBehaviour
+        /// 场景：技能冷却、Buff持续时间、定时刷怪、UI倒计时
+        /// 用法：CY.Timer.Delay(2f, callback), Loop(1f, callback)
         /// </summary>
-        public static class Log
-        {
-            public static void Info(string message) => CYLog.Info(message);
-            public static void Warning(string message) => CYLog.Warning(message);
-            public static void Error(string message) => CYLog.Error(message);
-            public static void Info(string tag, string message) => CYLog.Info($"[{tag}] {message}");
-        }
+        public static TimerManager Timer => _timer ??= GetOrCreateTimerManager();
         
         /// <summary>
-        /// 计时器系统
+        /// 流程系统 - 管理游戏主流程状态机
+        /// 场景：启动→菜单→准备→战斗→结算→菜单
+        /// 用法：CY.Procedure.Start("Menu"), Change("Battle")
         /// </summary>
-        public static class Timer
-        {
-            private static TimerManager _timerManager;
-            internal static TimerManager Manager => _timerManager ??= GetOrCreateTimerManager();
-            
-            private static TimerManager GetOrCreateTimerManager()
-            {
-                var manager = ServiceLocator.Get<TimerManager>();
-                if (manager == null)
-                {
-                    manager = new TimerManager();
-                    ServiceLocator.RegisterInstance(manager);
-                    // 注册生命周期
-                    CYBootstrap.Instance?.RegisterLifecycle(manager);
-                }
-                return manager;
-            }
-            
-            /// <summary>
-            /// 延迟执行
-            /// </summary>
-            public static Core.Timer.Timer Delay(float seconds, Action onComplete, bool useUnscaledTime = false)
-            {
-                return Manager.Delay(seconds, onComplete, useUnscaledTime);
-            }
-            
-            /// <summary>
-            /// 循环执行
-            /// </summary>
-            public static Core.Timer.Timer Loop(float interval, Action onTick, bool useUnscaledTime = false)
-            {
-                return Manager.Loop(interval, onTick, useUnscaledTime);
-            }
-            
-            /// <summary>
-            /// 下一帧执行
-            /// </summary>
-            public static Core.Timer.Timer NextFrame(Action onComplete)
-            {
-                return Manager.NextFrame(onComplete);
-            }
-            
-            /// <summary>
-            /// 取消所有计时器
-            /// </summary>
-            public static void CancelAll()
-            {
-                Manager.CancelAll();
-            }
-        }
+        public static ProcedureManager Procedure => _procedure ??= GetOrCreateProcedureManager();
         
         /// <summary>
-        /// 流程系统
+        /// 实体系统 - 管理游戏中的动态对象（带对象池）
+        /// 场景：敌人、子弹、特效、掉落物、NPC
+        /// 用法：CY.Entity.ShowEntity("Enemy"), HideEntity(id), PauseEntity(id)
         /// </summary>
-        public static class Procedure
-        {
-            private static ProcedureManager _procedureManager;
-            internal static ProcedureManager Manager => _procedureManager ??= GetOrCreateProcedureManager();
-            
-            private static ProcedureManager GetOrCreateProcedureManager()
-            {
-                var manager = ServiceLocator.Get<ProcedureManager>();
-                if (manager == null)
-                {
-                    manager = new ProcedureManager();
-                    ServiceLocator.RegisterInstance(manager);
-                    // 注册生命周期
-                    CYBootstrap.Instance?.RegisterLifecycle(manager);
-                }
-                return manager;
-            }
-            
-            /// <summary>
-            /// 注册流程
-            /// </summary>
-            public static void Add<T>(string name = null) where T : ProcedureBase, new()
-            {
-                Manager.AddProcedure<T>(name);
-            }
-            
-            /// <summary>
-            /// 自动扫描注册所有标记 [AutoRegisterProcedure] 的流程
-            /// </summary>
-            public static void AutoRegisterAll(System.Reflection.Assembly assembly = null)
-            {
-                Manager.AutoRegisterAll(assembly);
-            }
-            
-            /// <summary>
-            /// 启动流程系统
-            /// </summary>
-            public static void Start<T>() where T : ProcedureBase
-            {
-                Manager.Start<T>();
-            }
-            
-            /// <summary>
-            /// 按名称启动流程系统
-            /// </summary>
-            public static void Start(string procedureName)
-            {
-                Manager.Start(procedureName);
-            }
-            
-            /// <summary>
-            /// 切换流程
-            /// </summary>
-            public static void Change<T>() where T : ProcedureBase
-            {
-                Manager.ChangeProcedure<T>();
-            }
-            
-            /// <summary>
-            /// 切换流程（带参数）
-            /// </summary>
-            public static void Change<T>(object userData) where T : ProcedureBase
-            {
-                Manager.ChangeProcedure<T>(userData);
-            }
-            
-            /// <summary>
-            /// 按名称切换流程
-            /// </summary>
-            public static void Change(string procedureName, object userData = null)
-            {
-                Manager.Change(procedureName, userData);
-            }
-            
-            /// <summary>
-            /// 获取当前流程
-            /// </summary>
-            public static ProcedureBase Current => Manager.CurrentProcedure;
-            
-            /// <summary>
-            /// 获取当前流程名称
-            /// </summary>
-            public static string CurrentName => Manager.CurrentProcedureName;
-        }
+        public static EntityManager Entity => _entity ??= GetOrCreateEntityManager();
         
         /// <summary>
-        /// 实体系统
+        /// UI系统 - 管理所有UI面板的生命周期
+        /// 场景：主界面、背包、商店、设置、对话框、Toast提示
+        /// 用法：CY.UI.Open&lt;ShopUI&gt;(), Close&lt;T&gt;(), ShowConfirm(), ShowToast()
         /// </summary>
-        public static class Entity
-        {
-            private static EntityManager _entityManager;
-            internal static EntityManager Manager => _entityManager ??= GetOrCreateEntityManager();
-            
-            private static EntityManager GetOrCreateEntityManager()
-            {
-                var manager = ServiceLocator.Get<EntityManager>();
-                if (manager == null)
-                {
-                    manager = new EntityManager();
-                    manager.Initialize();
-                    ServiceLocator.RegisterInstance(manager);
-                    CYBootstrap.Instance?.RegisterLifecycle(manager);
-                }
-                return manager;
-            }
-            
-            /// <summary>
-            /// 注册实体类型
-            /// </summary>
-            public static void Register(string entityType, UnityEngine.GameObject prefab, int preloadCount = 0)
-            {
-                Manager.RegisterEntity(entityType, prefab, preloadCount);
-            }
-            
-            /// <summary>
-            /// 显示实体
-            /// </summary>
-            public static T Show<T>(string entityType, object userData = null) where T : class, IEntity
-            {
-                return Manager.ShowEntity<T>(entityType, userData);
-            }
-            
-            /// <summary>
-            /// 显示实体
-            /// </summary>
-            public static IEntity Show(string entityType, object userData = null)
-            {
-                return Manager.ShowEntity(entityType, userData);
-            }
-            
-            /// <summary>
-            /// 隐藏实体
-            /// </summary>
-            public static void Hide(int entityId) => Manager.HideEntity(entityId);
-            
-            /// <summary>
-            /// 隐藏实体
-            /// </summary>
-            public static void Hide(IEntity entity) => Manager.HideEntity(entity);
-            
-            /// <summary>
-            /// 隐藏所有指定类型的实体
-            /// </summary>
-            public static void HideAll(string entityType) => Manager.HideAllEntities(entityType);
-            
-            /// <summary>
-            /// 隐藏所有实体
-            /// </summary>
-            public static void HideAll() => Manager.HideAllEntities();
-            
-            /// <summary>
-            /// 获取实体
-            /// </summary>
-            public static T Get<T>(int entityId) where T : class, IEntity => Manager.GetEntity<T>(entityId);
-            
-            /// <summary>
-            /// 获取实体数量
-            /// </summary>
-            public static int Count(string entityType = null) => Manager.GetEntityCount(entityType);
-        }
+        public static UIManager UI => _ui ??= GetOrCreateUIManager();
         
         /// <summary>
-        /// 数据表系统
+        /// 数据表系统 - 读取配置表数据
+        /// 场景：怪物属性表、道具表、技能表、关卡配置
+        /// 用法：CY.Data.LoadFromCsv&lt;ItemData&gt;(csv), GetDataTable&lt;T&gt;().GetRow(id)
         /// </summary>
-        public static class Data
+        public static DataTableManager Data => _data ??= GetOrCreateDataTableManager();
+        
+        /// <summary>
+        /// 音频系统 - 播放背景音乐和音效
+        /// 场景：BGM切换、按钮点击音、技能音效、环境音
+        /// 用法：CY.Audio.PlayBGM("battle"), PlaySFX("click"), SetBGMVolume(0.5f)
+        /// </summary>
+        public static IAudioService Audio => _audio ??= ServiceLocator.Get<IAudioService>();
+        
+        /// <summary>
+        /// 存档系统 - 本地数据持久化（支持加密、版本迁移）
+        /// 场景：玩家进度、设置选项、成就记录
+        /// 用法：CY.Save.Save(key, data), Load&lt;T&gt;(key)
+        /// </summary>
+        public static SaveService Save => ServiceLocator.Get<SaveService>();
+        
+        /// <summary>
+        /// 对象池系统 - 复用GameObject减少GC
+        /// 场景：大量生成销毁的对象（子弹、特效、UI元素）
+        /// 用法：CY.Pool.GetOrCreatePool("Bullet", prefab).Get(), Release(go)
+        /// </summary>
+        public static PoolManager Pool => ServiceLocator.Get<PoolManager>();
+        
+        /// <summary>
+        /// 游戏入口 - 获取当前游戏实例
+        /// 场景：访问游戏全局数据、自定义子系统
+        /// 用法：CY.Game 获取 GameEntryBase 实例
+        /// </summary>
+        public static Core.GameEntryBase Game => Core.GameEntryBase.Instance;
+        
+        // ==================== 懒加载创建方法 ====================
+        
+        private static TimerManager GetOrCreateTimerManager()
         {
-            private static DataTableManager _dataTableManager;
-            internal static DataTableManager Manager => _dataTableManager ??= GetOrCreateDataTableManager();
-            
-            private static DataTableManager GetOrCreateDataTableManager()
+            if (!ServiceLocator.TryGet<TimerManager>(out var manager))
             {
-                var manager = ServiceLocator.Get<DataTableManager>();
-                if (manager == null)
-                {
-                    manager = new DataTableManager();
-                    ServiceLocator.RegisterInstance(manager);
-                    CYBootstrap.Instance?.RegisterLifecycle(manager);
-                }
-                return manager;
+                manager = new TimerManager();
+                ServiceLocator.RegisterInstance(manager);
+                CYBootstrap.Instance?.RegisterLifecycle(manager);
             }
-            
-            /// <summary>
-            /// 创建数据表
-            /// </summary>
-            public static DataTable<T> Create<T>(string name = null) where T : class, IDataRow, new()
+            return manager;
+        }
+        
+        private static ProcedureManager GetOrCreateProcedureManager()
+        {
+            if (!ServiceLocator.TryGet<ProcedureManager>(out var manager))
             {
-                return Manager.CreateDataTable<T>(name);
+                manager = new ProcedureManager();
+                ServiceLocator.RegisterInstance(manager);
+                CYBootstrap.Instance?.RegisterLifecycle(manager);
             }
-            
-            /// <summary>
-            /// 获取数据表
-            /// </summary>
-            public static DataTable<T> GetTable<T>(string name = null) where T : class, IDataRow, new()
+            return manager;
+        }
+        
+        private static EntityManager GetOrCreateEntityManager()
+        {
+            if (!ServiceLocator.TryGet<EntityManager>(out var manager))
             {
-                return Manager.GetDataTable<T>(name);
+                manager = new EntityManager();
+                manager.Initialize();
+                ServiceLocator.RegisterInstance(manager);
+                CYBootstrap.Instance?.RegisterLifecycle(manager);
             }
-            
-            /// <summary>
-            /// 从 CSV 加载
-            /// </summary>
-            public static DataTable<T> LoadCsv<T>(string csvText, string name = null) where T : class, IDataRow, new()
+            return manager;
+        }
+        
+        private static UIManager GetOrCreateUIManager()
+        {
+            if (!ServiceLocator.TryGet<UIManager>(out var manager))
             {
-                return Manager.LoadFromCsv<T>(csvText, name);
+                manager = new UIManager();
+                manager.Initialize();
+                ServiceLocator.RegisterInstance(manager);
+                CYBootstrap.Instance?.RegisterLifecycle(manager);
             }
-            
-            /// <summary>
-            /// 获取数据行
-            /// </summary>
-            public static T GetRow<T>(int id, string tableName = null) where T : class, IDataRow, new()
+            return manager;
+        }
+        
+        private static DataTableManager GetOrCreateDataTableManager()
+        {
+            if (!ServiceLocator.TryGet<DataTableManager>(out var manager))
             {
-                return Manager.GetDataTable<T>(tableName)?.GetRow(id);
+                manager = new DataTableManager();
+                ServiceLocator.RegisterInstance(manager);
+                CYBootstrap.Instance?.RegisterLifecycle(manager);
             }
+            return manager;
         }
         
         // ==================== 服务定位器快捷方法 ====================
@@ -376,24 +182,6 @@ namespace CYFramework
         public static void Register<T>(T service) where T : class
         {
             ServiceLocator.RegisterInstance(service);
-        }
-        
-        // ==================== 游戏入口 ====================
-        
-        /// <summary>
-        /// 游戏入口快捷访问
-        /// </summary>
-        public static class Game
-        {
-            /// <summary>
-            /// 获取游戏入口实例
-            /// </summary>
-            public static Core.GameEntryBase Entry => Core.GameEntryBase.Instance;
-            
-            /// <summary>
-            /// 获取类型化的游戏入口
-            /// </summary>
-            public static T GetEntry<T>() where T : Core.GameEntryBase => Core.GameEntryBase.Get<T>();
         }
     }
 }

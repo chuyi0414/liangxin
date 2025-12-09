@@ -1,54 +1,32 @@
+using CYFramework;
+using CYFramework.Core;
 using CYFramework.Core.Event;
+using CYFramework.Infrastructure;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// 游戏资源管理（金币、良心值、波次）
-/// </summary>
-public class GameResourceManager
-{
-    private readonly EventBus _eventBus;
-
-    public int Gold { get; private set; } = 100;
-    public int Conscience { get; private set; } = 50;
-    public int CurrentWave { get; private set; } = 0;
-
-    public GameResourceManager(EventBus eventBus)
+public class LiangXinGame : GameEntryBase
     {
-        _eventBus = eventBus;
-    }
-
-    public void AddGold(int amount)
-    {
-        int oldAmount = Gold;
-        Gold += amount;
-
-        var evt = new GoldChangedEvent
+        // 开启自动注册流程（扫描 [AutoRegisterProcedure] 特性）
+        protected override bool AutoRegisterProcedures => true;
+        
+        // 子系统
+        public GameResourceManager Resources { get; private set; }
+        
+        // 便捷访问
+        public static LiangXinGame Game => Get<LiangXinGame>();
+        public static int Gold => Game?.Resources?.Gold ?? 0;
+        public static int CurrentWave => Game?.Resources?.CurrentWave ?? 0;
+        
+        protected override void OnGameInit()
         {
-            OldAmount = oldAmount,
-            NewAmount = Gold,
-            Delta = amount
-        };
-        _eventBus.Post(ref evt);
+            Resources = new GameResourceManager();
+        }
+        
+        protected override void OnGameStart()
+        {
+            // 按名称启动流程（不用写泛型）
+            CY.Procedure.Start("Menu");
+        }
     }
-
-    public bool SpendGold(int amount)
-    {
-        if (Gold < amount) return false;
-        AddGold(-amount);
-        return true;
-    }
-
-    public void NextWave()
-    {
-        CurrentWave++;
-    }
-
-    public void Reset()
-    {
-        Gold = 100;
-        Conscience = 50;
-        CurrentWave = 0;
-    }
-}

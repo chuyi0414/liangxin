@@ -150,7 +150,7 @@ namespace CYFramework.Core
         /// </summary>
         protected void ChangeProcedure<T>(object userData = null) where T : ProcedureBase, new()
         {
-            CY.Procedure.Change<T>(userData);
+            CY.Procedure.ChangeProcedure<T>(userData);
         }
         
         /// <summary>
