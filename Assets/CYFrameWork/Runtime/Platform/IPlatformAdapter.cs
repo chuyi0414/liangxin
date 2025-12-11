@@ -254,7 +254,9 @@ namespace CYFramework.Platform
     
     /// <summary>
     /// 音频适配器接口
+    /// ⚠️ 已废弃：请使用 CYFramework.Core.Audio.IAudioService
     /// </summary>
+    [System.Obsolete("请使用 CYFramework.Core.Audio.IAudioService")]
     public interface IAudioAdapter : IPlatformAdapter
     {
         /// <summary>

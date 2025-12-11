@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using CYFramework.Core.Config;
 using CYFramework.Infrastructure;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -66,11 +67,30 @@ namespace CYFramework.Core.Resource
         // 加载中的资源（防止重复加载）
         private readonly Dictionary<string, List<Action<Object>>> _loadingCallbacks = new();
         
+        // 配置
+        private ResourceLoadMode _loadMode = ResourceLoadMode.Resources;
+        private int _cacheSizeMB = 100;
+        private bool _enableRefCount = true;
+        
         public int InitOrder => -40;
         public int DisposeOrder => 40;
         
         public void Initialize()
         {
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var config = configurator.GetConfig<ResourceLoaderConfig>();
+                if (config != null)
+                {
+                    _loadMode = config.LoadMode;
+                    _cacheSizeMB = config.CacheSizeMB;
+                    _enableRefCount = config.EnableRefCount;
+                    CYLog.Debug($"[ResourceLoader] 使用 CYConfigurator 配置, 模式: {_loadMode}");
+                }
+            }
+            
             CYLog.Debug("[ResourceLoader] 初始化完成");
         }
         

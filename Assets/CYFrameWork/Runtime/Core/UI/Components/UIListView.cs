@@ -84,7 +84,10 @@ namespace CYFramework.Core.UI.Components
         [Header("配置")]
         [SerializeField] private GameObject _itemPrefab;
         [SerializeField] private Transform _content;
+        [SerializeField] private UnityEngine.UI.ScrollRect _scrollRect;
         [SerializeField] private int _poolCapacity = 20;
+        [SerializeField] private float _itemHeight = 100f; // 默认项高度
+        [SerializeField] private float _scrollDuration = 0.3f; // 滚动动画时长
         
         // 对象池
         private readonly Queue<UIListItem> _pool = new();
@@ -263,9 +266,80 @@ namespace CYFramework.Core.UI.Components
         /// <summary>
         /// 滚动到指定索引
         /// </summary>
-        public void ScrollToIndex(int index)
+        public void ScrollToIndex(int index, bool animated = true)
         {
-            // TODO: 实现滚动逻辑
+            if (_scrollRect == null || _dataSource == null || _dataSource.Count == 0)
+            {
+                return;
+            }
+            
+            // 确保索引有效
+            index = Mathf.Clamp(index, 0, _dataSource.Count - 1);
+            
+            // 计算目标位置
+            float contentHeight = _content is RectTransform contentRect ? contentRect.rect.height : 0;
+            float viewportHeight = _scrollRect.viewport != null ? _scrollRect.viewport.rect.height : contentHeight;
+            
+            // 计算归一化位置 (0 = 顶部, 1 = 底部)
+            float totalScrollableHeight = contentHeight - viewportHeight;
+            if (totalScrollableHeight <= 0)
+            {
+                return; // 内容不足以滚动
+            }
+            
+            float targetY = index * _itemHeight;
+            float normalizedPosition = 1f - Mathf.Clamp01(targetY / totalScrollableHeight);
+            
+            if (animated && _scrollDuration > 0)
+            {
+                // 启动滚动动画协程
+                StopAllCoroutines();
+                StartCoroutine(ScrollToPositionCoroutine(normalizedPosition));
+            }
+            else
+            {
+                // 直接跳转
+                _scrollRect.verticalNormalizedPosition = normalizedPosition;
+            }
+        }
+        
+        /// <summary>
+        /// 滚动到顶部
+        /// </summary>
+        public void ScrollToTop(bool animated = true)
+        {
+            ScrollToIndex(0, animated);
+        }
+        
+        /// <summary>
+        /// 滚动到底部
+        /// </summary>
+        public void ScrollToBottom(bool animated = true)
+        {
+            if (_dataSource != null && _dataSource.Count > 0)
+            {
+                ScrollToIndex(_dataSource.Count - 1, animated);
+            }
+        }
+        
+        private System.Collections.IEnumerator ScrollToPositionCoroutine(float targetPosition)
+        {
+            float startPosition = _scrollRect.verticalNormalizedPosition;
+            float elapsed = 0f;
+            
+            while (elapsed < _scrollDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / _scrollDuration);
+                
+                // 使用 EaseOutCubic 缓动
+                float eased = 1f - Mathf.Pow(1f - t, 3f);
+                _scrollRect.verticalNormalizedPosition = Mathf.Lerp(startPosition, targetPosition, eased);
+                
+                yield return null;
+            }
+            
+            _scrollRect.verticalNormalizedPosition = targetPosition;
         }
         
         #endregion

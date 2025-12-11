@@ -9,6 +9,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
+using CYFramework.Core.Config;
 using CYFramework.Infrastructure;
 using CYFramework.Platform;
 using UnityEngine;
@@ -133,7 +134,30 @@ namespace CYFramework.Core.Network
         
         public void Initialize()
         {
-            CYLog.Debug("[NetworkService] 初始化完成");
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var externalConfig = configurator.GetConfig<NetworkServiceConfig>();
+                if (externalConfig != null)
+                {
+                    _config.HttpTimeout = (int)externalConfig.HttpTimeout;
+                    _config.HeartbeatInterval = externalConfig.HeartbeatInterval;
+                    _config.MaxReconnectAttempts = externalConfig.MaxReconnectAttempts;
+                    _config.ReconnectBaseInterval = externalConfig.ReconnectInterval;
+                    _config.CircuitBreakerThreshold = externalConfig.CircuitBreakerThreshold;
+                    _config.CircuitBreakerRecoveryTime = externalConfig.CircuitBreakerResetTime;
+                    CYLog.Debug("[NetworkService] 使用 CYConfigurator 配置");
+                }
+            }
+            
+            // 获取平台网络适配器
+            if (ServiceLocator.TryGet<INetworkAdapter>(out var adapter))
+            {
+                _adapter = adapter;
+            }
+            
+            CYLog.Debug($"[NetworkService] 初始化完成，适配器: {_adapter?.GetType().Name ?? "无"}");
         }
         
         public void Tick(float deltaTime)
@@ -262,16 +286,30 @@ namespace CYFramework.Core.Network
             
             try
             {
-                // 这里需要根据平台创建不同的 WebSocket 实现
-                // 简化示例，实际需要注入 INetworkAdapter
                 CYLog.Info($"[NetworkService] 正在连接 WebSocket: {url}");
                 
-                // TODO: 实际的 WebSocket 连接逻辑
-                _wsState = NetworkState.Connected;
-                OnStateChanged?.Invoke(_wsState);
-                _reconnectAttempts = 0;
+                // 使用平台适配器创建 WebSocket
+                if (_adapter != null)
+                {
+                    _webSocket = _adapter.CreateWebSocket(url);
+                }
+                else
+                {
+                    CYLog.Error("[NetworkService] INetworkAdapter 未注册");
+                    _wsState = NetworkState.Disconnected;
+                    OnStateChanged?.Invoke(_wsState);
+                    return;
+                }
                 
-                CYLog.Info("[NetworkService] WebSocket 连接成功");
+                // 绑定事件
+                _webSocket.OnOpen += OnWebSocketOpen;
+                _webSocket.OnMessage += OnWebSocketMessage;
+                _webSocket.OnBinaryMessage += OnWebSocketBinaryMessage;
+                _webSocket.OnClose += OnWebSocketClose;
+                _webSocket.OnError += OnWebSocketError;
+                
+                // 连接
+                await _webSocket.Connect();
             }
             catch (Exception ex)
             {
@@ -280,6 +318,50 @@ namespace CYFramework.Core.Network
                 OnStateChanged?.Invoke(_wsState);
                 StartReconnect();
             }
+        }
+        
+        private void OnWebSocketOpen()
+        {
+            _wsState = NetworkState.Connected;
+            _reconnectAttempts = 0;
+            _missedHeartbeats = 0;
+            OnStateChanged?.Invoke(_wsState);
+            CYLog.Info("[NetworkService] WebSocket 连接成功");
+        }
+        
+        private void OnWebSocketMessage(string message)
+        {
+            // 处理心跳响应
+            if (message == "pong" || message == "{\"type\":\"pong\"}")
+            {
+                _missedHeartbeats = 0;
+                return;
+            }
+            
+            OnMessage?.Invoke(message);
+        }
+        
+        private void OnWebSocketBinaryMessage(byte[] data)
+        {
+            OnBinaryMessage?.Invoke(data);
+        }
+        
+        private void OnWebSocketClose(string reason)
+        {
+            CYLog.Warning($"[NetworkService] WebSocket 关闭: {reason}");
+            _wsState = NetworkState.Disconnected;
+            OnStateChanged?.Invoke(_wsState);
+            
+            // 如果不是主动关闭，尝试重连
+            if (reason != "正常关闭" && reason != "Client closed")
+            {
+                StartReconnect();
+            }
+        }
+        
+        private void OnWebSocketError(string error)
+        {
+            CYLog.Error($"[NetworkService] WebSocket 错误: {error}");
         }
         
         /// <summary>
@@ -422,8 +504,27 @@ namespace CYFramework.Core.Network
         /// </summary>
         private void SendHeartbeat()
         {
-            // TODO: 发送心跳包
-            CYLog.Trace("[NetworkService] 发送心跳");
+            if (_webSocket == null || _wsState != NetworkState.Connected) return;
+            
+            _missedHeartbeats++;
+            
+            // 检查是否超时
+            if (_missedHeartbeats >= _config.HeartbeatTimeoutCount)
+            {
+                OnHeartbeatTimeout();
+                return;
+            }
+            
+            // 发送心跳包
+            try
+            {
+                _webSocket.Send("{\"type\":\"ping\"}");
+                CYLog.Trace("[NetworkService] 发送心跳");
+            }
+            catch (Exception ex)
+            {
+                CYLog.Warning($"[NetworkService] 发送心跳失败: {ex.Message}");
+            }
         }
         
         /// <summary>

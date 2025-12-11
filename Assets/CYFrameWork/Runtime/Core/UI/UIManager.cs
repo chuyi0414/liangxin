@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using CYFramework.Core.Config;
 using CYFramework.Core.Pool;
 using CYFramework.Core.Resource;
 using CYFramework.Infrastructure;
@@ -97,6 +98,9 @@ namespace CYFramework.Core.UI
         // 层级容器
         private readonly Dictionary<UILayer, Transform> _layerContainers = new();
         
+        // 自定义层级容器
+        private readonly Dictionary<string, Transform> _customLayers = new();
+        
         // 已打开的面板
         private readonly Dictionary<Type, UIPanel> _openedPanels = new();
         
@@ -124,8 +128,46 @@ namespace CYFramework.Core.UI
             _config = new UIConfig();
             _resourceLoader = ServiceLocator.Get<IResourceLoader>();
             
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                // 读取资源路径配置
+                var resourceConfig = configurator.GetConfig<ResourceLoaderConfig>();
+                if (resourceConfig != null)
+                {
+                    _config.PrefabPathPrefix = resourceConfig.UIPanelPath;
+                }
+                
+                // 读取 UI 管理器配置
+                var externalConfig = configurator.GetConfig<UIManagerConfig>();
+                if (externalConfig != null)
+                {
+                    _config.EnablePool = externalConfig.EnablePanelPool;
+                    _config.PoolCapacity = externalConfig.PanelPoolCapacity;
+                    _config.DefaultFadeDuration = externalConfig.DefaultAnimDuration;
+                    CYLog.Debug("[UIManager] 使用 CYConfigurator 配置");
+                }
+            }
+            
             // 创建 UI 根节点
             CreateUIRoot();
+            
+            // 创建配置中的自定义层级
+            if (configurator != null)
+            {
+                var uiConfig = configurator.GetConfig<UIManagerConfig>();
+                if (uiConfig?.CustomLayers != null)
+                {
+                    foreach (var layer in uiConfig.CustomLayers)
+                    {
+                        if (!string.IsNullOrEmpty(layer.Name))
+                        {
+                            CreateLayer(layer.Name, layer.SortOrder);
+                        }
+                    }
+                }
+            }
             
             CYLog.Info("[UIManager] 初始化完成");
         }
@@ -365,8 +407,61 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void ShowToast(string message, float duration = 2f)
         {
-            // TODO: 实现 Toast 系统
-            CYLog.Info($"[Toast] {message}");
+            // 使用 UIToast 组件
+            if (Components.UIToast.Instance != null)
+            {
+                Components.UIToast.Show(message, duration);
+            }
+            else
+            {
+                // 回退到日志输出
+                CYLog.Info($"[Toast] {message}");
+            }
+        }
+        
+        /// <summary>
+        /// 显示成功提示
+        /// </summary>
+        public void ShowSuccess(string message)
+        {
+            if (Components.UIToast.Instance != null)
+            {
+                Components.UIToast.ShowSuccess(message);
+            }
+            else
+            {
+                CYLog.Info($"[Toast-Success] {message}");
+            }
+        }
+        
+        /// <summary>
+        /// 显示错误提示
+        /// </summary>
+        public void ShowError(string message)
+        {
+            if (Components.UIToast.Instance != null)
+            {
+                Components.UIToast.ShowError(message);
+            }
+            else
+            {
+                CYLog.Warning($"[Toast-Error] {message}");
+            }
+        }
+        
+        /// <summary>
+        /// 显示警告提示
+        /// </summary>
+        public void ShowWarning(string message)
+        {
+            if (Components.UIToast.Instance != null)
+            {
+                Components.UIToast.ShowWarning(message);
+            }
+            else
+            {
+                CYLog.Warning($"[Toast-Warning] {message}");
+            }
         }
         
         /// <summary>
@@ -402,13 +497,136 @@ namespace CYFramework.Core.UI
         
         #endregion
         
+        #region 自定义层级 API
+        
+        /// <summary>
+        /// 创建自定义 UI 层级
+        /// </summary>
+        /// <param name="layerName">层级名称</param>
+        /// <param name="sortOrder">排序顺序（越大越靠前）</param>
+        /// <returns>层级 Transform</returns>
+        public Transform CreateLayer(string layerName, int sortOrder = 0)
+        {
+            if (_customLayers.TryGetValue(layerName, out var existing))
+            {
+                CYLog.Warning($"[UIManager] 层级已存在: {layerName}");
+                return existing;
+            }
+            
+            var layerGo = new GameObject(layerName);
+            layerGo.layer = LayerMask.NameToLayer("UI");
+            
+            var rectTransform = layerGo.AddComponent<RectTransform>();
+            rectTransform.SetParent(_rootCanvas.transform, false);
+            rectTransform.anchorMin = Vector2.zero;
+            rectTransform.anchorMax = Vector2.one;
+            rectTransform.offsetMin = Vector2.zero;
+            rectTransform.offsetMax = Vector2.zero;
+            
+            // 设置排序顺序
+            var canvas = layerGo.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = sortOrder;
+            layerGo.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            
+            _customLayers[layerName] = rectTransform;
+            CYLog.Debug($"[UIManager] 创建自定义层级: {layerName}, SortOrder: {sortOrder}");
+            return rectTransform;
+        }
+        
+        /// <summary>
+        /// 批量创建自定义层级
+        /// </summary>
+        public void CreateLayers(params (string name, int sortOrder)[] layers)
+        {
+            foreach (var (name, sortOrder) in layers)
+            {
+                CreateLayer(name, sortOrder);
+            }
+        }
+        
+        /// <summary>
+        /// 获取自定义层级容器
+        /// </summary>
+        public Transform GetLayerContainer(string layerName)
+        {
+            if (_customLayers.TryGetValue(layerName, out var container))
+            {
+                return container;
+            }
+            
+            // 不存在则创建
+            return CreateLayer(layerName, 0);
+        }
+        
+        /// <summary>
+        /// 获取预设层级容器
+        /// </summary>
+        public Transform GetLayerContainer(UILayer layer)
+        {
+            return _layerContainers.TryGetValue(layer, out var container) ? container : null;
+        }
+        
+        /// <summary>
+        /// 检查自定义层级是否存在
+        /// </summary>
+        public bool HasLayer(string layerName)
+        {
+            return _customLayers.ContainsKey(layerName);
+        }
+        
+        /// <summary>
+        /// 获取所有自定义层级名称
+        /// </summary>
+        public string[] GetAllCustomLayerNames()
+        {
+            var names = new string[_customLayers.Count];
+            _customLayers.Keys.CopyTo(names, 0);
+            return names;
+        }
+        
+        #endregion
+        
         #region 私有方法
         
         /// <summary>
-        /// 创建 UI 根节点
+        /// 创建或获取 UI 根节点
         /// </summary>
         private void CreateUIRoot()
         {
+            // 先尝试查找场景中已存在的 UIRoot
+            var existingRoot = GameObject.Find("UIRoot");
+            if (existingRoot != null)
+            {
+                _uiRoot = existingRoot.transform;
+                UnityEngine.Object.DontDestroyOnLoad(existingRoot);
+                
+                // 查找已存在的组件
+                _uiCamera = existingRoot.GetComponentInChildren<Camera>();
+                _rootCanvas = existingRoot.GetComponentInChildren<Canvas>();
+                
+                // 查找层级容器
+                if (_rootCanvas != null)
+                {
+                    foreach (UILayer layer in Enum.GetValues(typeof(UILayer)))
+                    {
+                        var layerTransform = _rootCanvas.transform.Find(layer.ToString());
+                        if (layerTransform != null)
+                        {
+                            _layerContainers[layer] = layerTransform;
+                        }
+                        else
+                        {
+                            // 如果层级不存在，创建它
+                            _layerContainers[layer] = CreateLayerContainer(layer);
+                        }
+                    }
+                }
+                
+                CYLog.Debug("[UIManager] 使用场景中已存在的 UIRoot");
+                return;
+            }
+            
             // 创建根对象
             var rootGo = new GameObject("UIRoot");
             UnityEngine.Object.DontDestroyOnLoad(rootGo);
@@ -443,20 +661,28 @@ namespace CYFramework.Core.UI
             // 创建层级容器
             foreach (UILayer layer in Enum.GetValues(typeof(UILayer)))
             {
-                var layerGo = new GameObject(layer.ToString());
-                layerGo.layer = LayerMask.NameToLayer("UI");
-                
-                var rectTransform = layerGo.AddComponent<RectTransform>();
-                rectTransform.SetParent(_rootCanvas.transform, false);
-                rectTransform.anchorMin = Vector2.zero;
-                rectTransform.anchorMax = Vector2.one;
-                rectTransform.offsetMin = Vector2.zero;
-                rectTransform.offsetMax = Vector2.zero;
-                
-                _layerContainers[layer] = layerGo.transform;
+                _layerContainers[layer] = CreateLayerContainer(layer);
             }
             
             CYLog.Debug("[UIManager] UI 根节点创建完成");
+        }
+        
+        /// <summary>
+        /// 创建层级容器
+        /// </summary>
+        private Transform CreateLayerContainer(UILayer layer)
+        {
+            var layerGo = new GameObject(layer.ToString());
+            layerGo.layer = LayerMask.NameToLayer("UI");
+            
+            var rectTransform = layerGo.AddComponent<RectTransform>();
+            rectTransform.SetParent(_rootCanvas.transform, false);
+            rectTransform.anchorMin = Vector2.zero;
+            rectTransform.anchorMax = Vector2.one;
+            rectTransform.offsetMin = Vector2.zero;
+            rectTransform.offsetMax = Vector2.zero;
+            
+            return layerGo.transform;
         }
         
         /// <summary>

@@ -23,7 +23,7 @@ namespace CYFramework.Gameplay.Hybrid
     /// Hybrid DOTS 玩法世界
     /// 文档：大脑用 C# 写，肌肉用 Job System + Burst
     /// </summary>
-    public class HybridGameplayWorld : IGameplayWorld, IInitializable, IDisposableEx
+    public class HybridGameplayWorld : IGameplayWorld, IQuery, ICommand, IInitializable, IDisposableEx
     {
         // 最大单位数
         private const int MAX_UNITS = 2000;
@@ -71,14 +71,7 @@ namespace CYFramework.Gameplay.Hybrid
             // 初始化快照
             for (int i = 0; i < 3; i++)
             {
-                _snapshots[i] = new RenderSnapshot
-                {
-                    IDs = new int[MAX_UNITS],
-                    Positions = new Vector3[MAX_UNITS],
-                    Rotations = new Quaternion[MAX_UNITS],
-                    HPs = new float[MAX_UNITS],
-                    States = new int[MAX_UNITS]
-                };
+                _snapshots[i] = RenderSnapshot.Create(MAX_UNITS);
             }
             
             CYLog.Info("[HybridGameplayWorld] 初始化完成 (DOTS 模式)");
@@ -213,7 +206,7 @@ namespace CYFramework.Gameplay.Hybrid
                 snapshot.Positions[i] = positions[i];
                 snapshot.Rotations[i] = Quaternion.identity;
                 snapshot.HPs[i] = _brainData[i].HP;
-                snapshot.States[i] = (int)_brainData[i].State;
+                snapshot.StateIDs[i] = (int)_brainData[i].State;
             }
         }
         
@@ -223,6 +216,162 @@ namespace CYFramework.Gameplay.Hybrid
             _frontIdx = _backIdx;
             _backIdx = _idleIdx;
             _idleIdx = temp;
+        }
+        
+        #endregion
+        
+        #region IQuery 实现
+        
+        public Vector3 GetPosition(int unitId)
+        {
+            for (int i = 0; i < _brainCount; i++)
+            {
+                if (_brainData[i].Id == unitId)
+                {
+                    var positions = _useBufferA ? _positionsB : _positionsA;
+                    return positions[i];
+                }
+            }
+            return Vector3.zero;
+        }
+        
+        public float GetHP(int unitId)
+        {
+            for (int i = 0; i < _brainCount; i++)
+            {
+                if (_brainData[i].Id == unitId)
+                {
+                    return _brainData[i].HP;
+                }
+            }
+            return 0f;
+        }
+        
+        public bool IsAlive(int unitId)
+        {
+            for (int i = 0; i < _brainCount; i++)
+            {
+                if (_brainData[i].Id == unitId)
+                {
+                    return _brainData[i].State != UnitState.Dead;
+                }
+            }
+            return false;
+        }
+        
+        public int GetUnitsInRange(Vector3 center, float radius, int[] resultBuffer)
+        {
+            int count = 0;
+            var positions = _useBufferA ? _positionsB : _positionsA;
+            
+            for (int i = 0; i < _brainCount && count < resultBuffer.Length; i++)
+            {
+                if (_brainData[i].State == UnitState.Dead) continue;
+                
+                float distance = Vector3.Distance(center, positions[i]);
+                if (distance <= radius)
+                {
+                    resultBuffer[count++] = _brainData[i].Id;
+                }
+            }
+            return count;
+        }
+        
+        #endregion
+        
+        #region ICommand 实现
+        
+        private int _nextUnitId = 1;
+        
+        public int SpawnUnit(int configId, Vector3 position, Quaternion rotation)
+        {
+            if (_brainCount >= MAX_UNITS)
+            {
+                CYLog.Warning("[HybridGameplayWorld] 单位数量已达上限");
+                return -1;
+            }
+            
+            int id = _nextUnitId++;
+            int idx = _brainCount++;
+            
+            _brainData[idx] = new BrainData
+            {
+                Id = id,
+                HP = 100f, // TODO: 从配置读取
+                State = UnitState.Idle,
+                MoveSpeed = 5f
+            };
+            
+            // 设置初始位置
+            if (_useBufferA)
+            {
+                _positionsA[idx] = position;
+            }
+            else
+            {
+                _positionsB[idx] = position;
+            }
+            
+            return id;
+        }
+        
+        public void DestroyUnit(int unitId)
+        {
+            for (int i = 0; i < _brainCount; i++)
+            {
+                if (_brainData[i].Id == unitId)
+                {
+                    _brainData[i].State = UnitState.Dead;
+                    break;
+                }
+            }
+        }
+        
+        public void MoveUnit(int unitId, Vector3 targetPosition)
+        {
+            for (int i = 0; i < _brainCount; i++)
+            {
+                if (_brainData[i].Id == unitId)
+                {
+                    var currentPos = _useBufferA ? _positionsB[i] : _positionsA[i];
+                    var direction = (targetPosition - currentPos).normalized;
+                    
+                    _brainData[i].HasMoveIntent = true;
+                    _brainData[i].MoveDirection = direction;
+                    _brainData[i].State = UnitState.Moving;
+                    break;
+                }
+            }
+        }
+        
+        public void DamageUnit(int unitId, float damage)
+        {
+            for (int i = 0; i < _brainCount; i++)
+            {
+                if (_brainData[i].Id == unitId)
+                {
+                    _brainData[i].HP -= damage;
+                    if (_brainData[i].HP <= 0)
+                    {
+                        _brainData[i].HP = 0;
+                        _brainData[i].State = UnitState.Dead;
+                    }
+                    break;
+                }
+            }
+        }
+        
+        public void HealUnit(int unitId, float amount)
+        {
+            for (int i = 0; i < _brainCount; i++)
+            {
+                if (_brainData[i].Id == unitId)
+                {
+                    _brainData[i].HP += amount;
+                    // TODO: 限制最大生命值
+                    break;
+                }
+            }
         }
         
         #endregion

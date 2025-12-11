@@ -170,6 +170,23 @@ namespace CYFramework.Infrastructure
             return _registrations.ContainsKey(typeof(T));
         }
         
+        /// <summary>
+        /// 获取所有已实例化的服务
+        /// 用于生命周期注册
+        /// </summary>
+        public static IEnumerable<object> GetAllInstances()
+        {
+            var instances = new List<object>();
+            foreach (var reg in _registrations.Values)
+            {
+                if (reg.Instance != null)
+                {
+                    instances.Add(reg.Instance);
+                }
+            }
+            return instances;
+        }
+        
         #endregion
         
         #region 生命周期管理

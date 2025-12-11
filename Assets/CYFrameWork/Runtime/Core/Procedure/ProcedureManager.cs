@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using CYFramework.Core.Config;
 using CYFramework.Infrastructure;
 using UnityEngine;
 
@@ -94,17 +95,47 @@ namespace CYFramework.Core.Procedure
     /// 流程管理器
     /// 实现 IUpdateable 由框架自动调度
     /// </summary>
-    public class ProcedureManager : IUpdateable
+    public class ProcedureManager : IInitializable, IUpdateable
     {
+        public int InitOrder => -30;
         public int UpdateOrder => -50; // 优先级较高，在 Timer 之后
+        
         private readonly Dictionary<Type, ProcedureBase> _procedures = new Dictionary<Type, ProcedureBase>();
         private readonly Dictionary<string, Type> _procedureNames = new Dictionary<string, Type>();
         private ProcedureBase _currentProcedure;
         private object _pendingUserData;
         
+        // 配置
+        private string _entryProcedure = "";
+        private bool _autoRegister = true;
+        
         public ProcedureBase CurrentProcedure => _currentProcedure;
         public string CurrentProcedureName => _currentProcedure?.GetType().Name;
         public bool IsRunning => _currentProcedure != null;
+        
+        public void Initialize()
+        {
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var config = configurator.GetConfig<ProcedureManagerConfig>();
+                if (config != null)
+                {
+                    _entryProcedure = config.EntryProcedure;
+                    _autoRegister = config.AutoRegisterProcedures;
+                    CYLog.Debug("[ProcedureManager] 使用 CYConfigurator 配置");
+                }
+            }
+            
+            // 自动注册流程
+            if (_autoRegister)
+            {
+                AutoRegisterAll();
+            }
+            
+            CYLog.Debug("[ProcedureManager] 初始化完成");
+        }
         
         /// <summary>
         /// 注册流程

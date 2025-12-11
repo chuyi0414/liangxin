@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using CYFramework.Core.Config;
 using CYFramework.Core.Pool;
 using CYFramework.Infrastructure;
 using UnityEngine;
@@ -161,19 +162,157 @@ namespace CYFramework.Core.Entity
         private int _nextEntityId = 1;
         private Transform _entityRoot;
         
+        // 配置
+        private string _entityPrefabPath = "Entities/";
+        private int _defaultPreloadCount = 5;
+        private int _maxPoolSize = 100;
+        private string[] _entityGroupNames = { "Players", "Enemies", "NPCs", "Props", "Effects" };
+        
+        // 分组容器
+        private readonly Dictionary<string, Transform> _groupContainers = new();
+        
         /// <summary>
         /// 初始化
         /// </summary>
         public void Initialize(Transform entityRoot = null)
         {
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                // 读取资源路径配置
+                var resourceConfig = configurator.GetConfig<ResourceLoaderConfig>();
+                if (resourceConfig != null)
+                {
+                    _entityPrefabPath = resourceConfig.EntityPath;
+                }
+                
+                // 读取实体管理器配置
+                var config = configurator.GetConfig<EntityManagerConfig>();
+                if (config != null)
+                {
+                    _defaultPreloadCount = config.DefaultPreloadCount;
+                    _maxPoolSize = config.MaxPoolSize;
+                    if (config.EntityGroups != null && config.EntityGroups.Length > 0)
+                    {
+                        _entityGroupNames = config.EntityGroups;
+                    }
+                    CYLog.Debug("[EntityManager] 使用 CYConfigurator 配置");
+                }
+            }
+            
             _entityRoot = entityRoot;
             if (_entityRoot == null)
             {
-                var go = new GameObject("[Entities]");
-                GameObject.DontDestroyOnLoad(go);
-                _entityRoot = go.transform;
+                // 先尝试查找场景中已存在的实体根节点
+                var existingRoot = GameObject.Find("[Entities]");
+                if (existingRoot != null)
+                {
+                    _entityRoot = existingRoot.transform;
+                    GameObject.DontDestroyOnLoad(existingRoot);
+                    CYLog.Debug("[EntityManager] 使用场景中已存在的 [Entities]");
+                }
+                else
+                {
+                    var go = new GameObject("[Entities]");
+                    GameObject.DontDestroyOnLoad(go);
+                    _entityRoot = go.transform;
+                    CYLog.Debug("[EntityManager] 创建新的 [Entities] 根节点");
+                }
             }
+            
+            // 创建实体分组容器
+            CreateEntityGroupContainers();
+            
             CYLog.Debug("[EntityManager] 初始化完成");
+        }
+        
+        /// <summary>
+        /// 创建实体分组容器
+        /// </summary>
+        private void CreateEntityGroupContainers()
+        {
+            foreach (var groupName in _entityGroupNames)
+            {
+                // 先查找已存在的分组
+                var existing = _entityRoot.Find(groupName);
+                if (existing != null)
+                {
+                    _groupContainers[groupName] = existing;
+                }
+                else
+                {
+                    // 创建新分组
+                    var groupGo = new GameObject(groupName);
+                    groupGo.transform.SetParent(_entityRoot);
+                    _groupContainers[groupName] = groupGo.transform;
+                }
+            }
+            CYLog.Debug($"[EntityManager] 已创建 {_groupContainers.Count} 个实体分组");
+        }
+        
+        /// <summary>
+        /// 获取实体分组容器
+        /// </summary>
+        public Transform GetGroupContainer(string groupName)
+        {
+            if (_groupContainers.TryGetValue(groupName, out var container))
+            {
+                return container;
+            }
+            
+            // 如果分组不存在，动态创建
+            return CreateGroup(groupName);
+        }
+        
+        /// <summary>
+        /// 创建新的实体分组
+        /// </summary>
+        /// <param name="groupName">分组名称</param>
+        /// <returns>分组 Transform</returns>
+        public Transform CreateGroup(string groupName)
+        {
+            if (_groupContainers.TryGetValue(groupName, out var existing))
+            {
+                CYLog.Warning($"[EntityManager] 分组已存在: {groupName}");
+                return existing;
+            }
+            
+            var groupGo = new GameObject(groupName);
+            groupGo.transform.SetParent(_entityRoot);
+            _groupContainers[groupName] = groupGo.transform;
+            CYLog.Debug($"[EntityManager] 创建分组: {groupName}");
+            return groupGo.transform;
+        }
+        
+        /// <summary>
+        /// 批量创建实体分组
+        /// </summary>
+        /// <param name="groupNames">分组名称数组</param>
+        public void CreateGroups(params string[] groupNames)
+        {
+            foreach (var name in groupNames)
+            {
+                CreateGroup(name);
+            }
+        }
+        
+        /// <summary>
+        /// 检查分组是否存在
+        /// </summary>
+        public bool HasGroup(string groupName)
+        {
+            return _groupContainers.ContainsKey(groupName);
+        }
+        
+        /// <summary>
+        /// 获取所有分组名称
+        /// </summary>
+        public string[] GetAllGroupNames()
+        {
+            var names = new string[_groupContainers.Count];
+            _groupContainers.Keys.CopyTo(names, 0);
+            return names;
         }
         
         /// <summary>

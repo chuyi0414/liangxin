@@ -133,4 +133,123 @@ namespace CYFramework.Core.FSM
             _currentState = null;
         }
     }
+    
+    /// <summary>
+    /// 有限状态机管理器
+    /// 管理多个 FSM 实例
+    /// </summary>
+    public class FSMManager : IInitializable, IUpdateable, IDisposableEx
+    {
+        private readonly Dictionary<string, object> _fsmInstances = new();
+        
+        public int InitOrder => 10;
+        public int UpdateOrder => 50;
+        public int DisposeOrder => 10;
+        
+        public void Initialize()
+        {
+            CYLog.Debug("[FSMManager] 初始化完成");
+        }
+        
+        public void OnUpdate(float deltaTime)
+        {
+            // 更新所有注册的 FSM
+            // 注意：实际使用中可能需要手动调用各 FSM 的 Update
+        }
+        
+        public void Dispose()
+        {
+            DestroyAll();
+            CYLog.Debug("[FSMManager] 已销毁");
+        }
+        
+        /// <summary>
+        /// 创建并注册 FSM
+        /// </summary>
+        /// <typeparam name="T">状态枚举类型</typeparam>
+        /// <param name="name">FSM 名称</param>
+        /// <returns>新建的 FSM 实例</returns>
+        public FSM<T> Create<T>(string name) where T : Enum
+        {
+            if (_fsmInstances.ContainsKey(name))
+            {
+                CYLog.Warning($"[FSMManager] FSM 已存在: {name}");
+                return _fsmInstances[name] as FSM<T>;
+            }
+            
+            var fsm = new FSM<T>();
+            _fsmInstances[name] = fsm;
+            CYLog.Debug($"[FSMManager] 创建 FSM: {name}");
+            return fsm;
+        }
+        
+        /// <summary>
+        /// 获取 FSM
+        /// </summary>
+        public FSM<T> Get<T>(string name) where T : Enum
+        {
+            if (_fsmInstances.TryGetValue(name, out var fsm))
+            {
+                return fsm as FSM<T>;
+            }
+            
+            CYLog.Warning($"[FSMManager] 未找到 FSM: {name}");
+            return null;
+        }
+        
+        /// <summary>
+        /// 获取或创建 FSM
+        /// </summary>
+        public FSM<T> GetOrCreate<T>(string name) where T : Enum
+        {
+            return Get<T>(name) ?? Create<T>(name);
+        }
+        
+        /// <summary>
+        /// 检查 FSM 是否存在
+        /// </summary>
+        public bool Has(string name)
+        {
+            return _fsmInstances.ContainsKey(name);
+        }
+        
+        /// <summary>
+        /// 销毁 FSM
+        /// </summary>
+        public void Destroy(string name)
+        {
+            if (_fsmInstances.TryGetValue(name, out var fsm))
+            {
+                // 尝试停止 FSM
+                var stopMethod = fsm.GetType().GetMethod("Stop");
+                stopMethod?.Invoke(fsm, null);
+                
+                _fsmInstances.Remove(name);
+                CYLog.Debug($"[FSMManager] 销毁 FSM: {name}");
+            }
+        }
+        
+        /// <summary>
+        /// 销毁所有 FSM
+        /// </summary>
+        public void DestroyAll()
+        {
+            foreach (var kvp in _fsmInstances)
+            {
+                var stopMethod = kvp.Value.GetType().GetMethod("Stop");
+                stopMethod?.Invoke(kvp.Value, null);
+            }
+            _fsmInstances.Clear();
+        }
+        
+        /// <summary>
+        /// 获取所有 FSM 名称
+        /// </summary>
+        public string[] GetAllNames()
+        {
+            var names = new string[_fsmInstances.Count];
+            _fsmInstances.Keys.CopyTo(names, 0);
+            return names;
+        }
+    }
 }

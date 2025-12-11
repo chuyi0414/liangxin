@@ -336,16 +336,81 @@ namespace CYFramework.Gameplay.Logic_OOP
         /// </summary>
         private void ProcessInputCommand(InputCommand cmd)
         {
-            // TODO: 根据输入类型执行对应逻辑
             switch (cmd.Type)
             {
                 case InputType.Move:
-                    // 移动玩家控制的单位
+                    HandleMoveInput(cmd);
                     break;
                 case InputType.Attack:
-                    // 执行攻击
+                    HandleAttackInput(cmd);
+                    break;
+                case InputType.Skill:
+                    HandleSkillInput(cmd);
+                    break;
+                case InputType.Jump:
+                    HandleJumpInput(cmd);
+                    break;
+                case InputType.Interact:
+                    HandleInteractInput(cmd);
                     break;
             }
+        }
+        
+        private void HandleMoveInput(InputCommand cmd)
+        {
+            // 假设 TargetId 是玩家控制的单位 ID
+            // 或者使用第一个活着的单位
+            int unitId = cmd.SkillId > 0 ? cmd.SkillId : GetFirstAliveUnitId();
+            if (unitId <= 0) return;
+            
+            if (!_idToIndex.TryGetValue(unitId, out int idx)) return;
+            if (!_units.Alive[idx]) return;
+            
+            // 设置移动目标
+            Vector3 moveDir = new Vector3(cmd.Direction.x, 0, cmd.Direction.y).normalized;
+            float moveDistance = 10f; // 移动距离
+            _units.TargetPositions[idx] = _units.Positions[idx] + moveDir * moveDistance;
+            _units.States[idx] = UnitState.Moving;
+        }
+        
+        private void HandleAttackInput(InputCommand cmd)
+        {
+            int unitId = cmd.SkillId > 0 ? cmd.SkillId : GetFirstAliveUnitId();
+            if (unitId <= 0) return;
+            
+            if (!_idToIndex.TryGetValue(unitId, out int idx)) return;
+            if (!_units.Alive[idx]) return;
+            
+            // 设置攻击状态
+            _units.States[idx] = UnitState.Attacking;
+        }
+        
+        private void HandleSkillInput(InputCommand cmd)
+        {
+            // 技能输入处理
+            // cmd.SkillId 包含技能 ID
+        }
+        
+        private void HandleJumpInput(InputCommand cmd)
+        {
+            // 跳跃输入处理
+        }
+        
+        private void HandleInteractInput(InputCommand cmd)
+        {
+            // 交互输入处理
+        }
+        
+        private int GetFirstAliveUnitId()
+        {
+            for (int i = 0; i < _units.Count; i++)
+            {
+                if (_units.Alive[i])
+                {
+                    return _units.IDs[i];
+                }
+            }
+            return -1;
         }
         
         /// <summary>
@@ -470,15 +535,89 @@ namespace CYFramework.Gameplay.Logic_OOP
     {
         private readonly OOPGameplayWorld _world;
         
+        // 攻击配置
+        private const float ATTACK_RANGE = 2f;
+        private const float ATTACK_DAMAGE = 10f;
+        private const float ATTACK_COOLDOWN = 1f;
+        
+        // 攻击冷却计时器
+        private readonly float[] _attackCooldowns;
+        
         public CombatSystem(OOPGameplayWorld world)
         {
             _world = world;
+            _attackCooldowns = new float[1000]; // 与 MAX_UNITS 保持一致
         }
         
         public void Tick(UnitDataArrays units, float deltaTime)
         {
-            // TODO: 实现战斗逻辑
-            // 如自动攻击、技能 CD 等
+            for (int i = 0; i < units.Count; i++)
+            {
+                if (!units.Alive[i]) continue;
+                
+                // 更新攻击冷却
+                if (_attackCooldowns[i] > 0)
+                {
+                    _attackCooldowns[i] -= deltaTime;
+                }
+                
+                // 处理攻击状态
+                if (units.States[i] == UnitState.Attacking)
+                {
+                    ProcessAttack(units, i, deltaTime);
+                }
+            }
+        }
+        
+        private void ProcessAttack(UnitDataArrays units, int attackerIdx, float deltaTime)
+        {
+            // 检查冷却
+            if (_attackCooldowns[attackerIdx] > 0)
+            {
+                // 冷却中，返回空闲状态
+                units.States[attackerIdx] = UnitState.Idle;
+                return;
+            }
+            
+            Vector3 attackerPos = units.Positions[attackerIdx];
+            int attackerId = units.IDs[attackerIdx];
+            
+            // 寻找范围内的敌人（简化实现：攻击最近的单位）
+            int targetIdx = -1;
+            float minDistance = float.MaxValue;
+            
+            for (int i = 0; i < units.Count; i++)
+            {
+                if (i == attackerIdx) continue;
+                if (!units.Alive[i]) continue;
+                
+                float distance = Vector3.Distance(attackerPos, units.Positions[i]);
+                if (distance <= ATTACK_RANGE && distance < minDistance)
+                {
+                    minDistance = distance;
+                    targetIdx = i;
+                }
+            }
+            
+            if (targetIdx >= 0)
+            {
+                // 造成伤害
+                units.HPs[targetIdx] -= ATTACK_DAMAGE;
+                
+                // 检查死亡
+                if (units.HPs[targetIdx] <= 0)
+                {
+                    units.HPs[targetIdx] = 0;
+                    units.States[targetIdx] = UnitState.Dead;
+                    units.Alive[targetIdx] = false;
+                }
+                
+                // 设置攻击冷却
+                _attackCooldowns[attackerIdx] = ATTACK_COOLDOWN;
+            }
+            
+            // 攻击完成，返回空闲
+            units.States[attackerIdx] = UnitState.Idle;
         }
     }
     

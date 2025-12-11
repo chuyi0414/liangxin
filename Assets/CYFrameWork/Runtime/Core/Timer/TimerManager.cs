@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using CYFramework.Core.Config;
 using CYFramework.Infrastructure;
 using UnityEngine;
 
@@ -95,12 +96,36 @@ namespace CYFramework.Core.Timer
     /// 计时器管理器
     /// 实现 IUpdateable 由框架自动调度
     /// </summary>
-    public class TimerManager : IUpdateable
+    public class TimerManager : IInitializable, IUpdateable
     {
+        public int InitOrder => -50;
         public int UpdateOrder => -100; // 优先级高，先于其他系统更新
-        private readonly List<Timer> _timers = new List<Timer>();
+        
+        private List<Timer> _timers;
         private readonly List<Timer> _toRemove = new List<Timer>();
         private int _nextId = 1;
+        private bool _defaultUseUnscaledTime;
+        
+        public void Initialize()
+        {
+            int initialCapacity = 32;
+            
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var config = configurator.GetConfig<TimerManagerConfig>();
+                if (config != null)
+                {
+                    initialCapacity = config.InitialCapacity;
+                    _defaultUseUnscaledTime = config.UseUnscaledTime;
+                    CYLog.Debug("[TimerManager] 使用 CYConfigurator 配置");
+                }
+            }
+            
+            _timers = new List<Timer>(initialCapacity);
+            CYLog.Debug("[TimerManager] 初始化完成");
+        }
         
         /// <summary>
         /// 延迟执行
@@ -136,6 +161,39 @@ namespace CYFramework.Core.Timer
         public void Cancel(Timer timer)
         {
             timer?.Stop();
+        }
+        
+        /// <summary>
+        /// 通过 ID 取消计时器
+        /// </summary>
+        public void Cancel(int timerId)
+        {
+            var timer = _timers.Find(t => t.Id == timerId);
+            timer?.Stop();
+        }
+        
+        /// <summary>
+        /// 获取计时器
+        /// </summary>
+        public Timer GetTimer(int timerId)
+        {
+            return _timers.Find(t => t.Id == timerId);
+        }
+        
+        /// <summary>
+        /// 暂停计时器
+        /// </summary>
+        public void Pause(int timerId)
+        {
+            GetTimer(timerId)?.Pause();
+        }
+        
+        /// <summary>
+        /// 恢复计时器
+        /// </summary>
+        public void Resume(int timerId)
+        {
+            GetTimer(timerId)?.Resume();
         }
         
         /// <summary>

@@ -6,7 +6,9 @@
 
 using System;
 using System.Collections.Generic;
+using CYFramework.Core.Config;
 using CYFramework.Core.Pool;
+using CYFramework.Core.Resource;
 using CYFramework.Infrastructure;
 using CYFramework.Platform;
 using UnityEngine;
@@ -60,7 +62,7 @@ namespace CYFramework.Core.Audio
     /// <summary>
     /// Unity 平台音频服务实现
     /// </summary>
-    public class UnityAudioService : IAudioService, IInitializable, IPausable, IDisposableEx
+    public class UnityAudioService : IAudioService, IInitializable, IUpdateable, IPausable, IDisposableEx
     {
         private AudioConfig _config;
         
@@ -69,6 +71,12 @@ namespace CYFramework.Core.Audio
         private string _currentBGM;
         private float _bgmVolume;
         private bool _isBGMPaused;
+        
+        // 淡出相关
+        private bool _isFadingOut;
+        private float _fadeOutDuration;
+        private float _fadeOutTimer;
+        private float _fadeStartVolume;
         
         // SFX 池
         private readonly List<AudioSource> _sfxPool = new();
@@ -82,12 +90,19 @@ namespace CYFramework.Core.Audio
         // 音频解锁状态（iOS WebAudio 限制）
         private bool _audioUnlocked;
         
+        // 资源加载器
+        private IResourceLoader _resourceLoader;
+        
         // 资源缓存
         private readonly Dictionary<string, AudioClip> _clipCache = new();
+        
+        // 音频资源路径前缀
+        private string _audioPath = "Audio/";
         
         public bool IsMuted => _isMuted;
         
         public int InitOrder => 30;
+        public int UpdateOrder => 100;
         public int DisposeOrder => 30;
         
         /// <summary>
@@ -106,27 +121,98 @@ namespace CYFramework.Core.Audio
         
         public void Initialize()
         {
-            // 创建音频根节点
-            var audioRoot = new GameObject("AudioService");
-            UnityEngine.Object.DontDestroyOnLoad(audioRoot);
+            // 获取资源加载器
+            _resourceLoader = ServiceLocator.Get<IResourceLoader>();
             
-            // 创建 BGM 源
-            _bgmSource = audioRoot.AddComponent<AudioSource>();
-            _bgmSource.playOnAwake = false;
-            _bgmSource.loop = true;
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
             
-            // 创建 SFX 池
-            for (int i = 0; i < _config.SFXPoolSize; i++)
+            // 读取资源路径配置
+            if (configurator != null)
             {
-                var sfxSource = audioRoot.AddComponent<AudioSource>();
-                sfxSource.playOnAwake = false;
-                sfxSource.loop = false;
-                _sfxPool.Add(sfxSource);
+                var resourceConfig = configurator.GetConfig<ResourceLoaderConfig>();
+                if (resourceConfig != null)
+                {
+                    _audioPath = resourceConfig.AudioPath;
+                }
+            }
+            if (configurator != null)
+            {
+                var externalConfig = configurator.GetConfig<AudioConfig>();
+                if (externalConfig != null)
+                {
+                    _config = externalConfig;
+                    _bgmVolume = _config.DefaultBGMVolume;
+                    _sfxVolume = _config.DefaultSFXVolume;
+                    CYLog.Debug("[AudioService] 使用 CYConfigurator 配置");
+                }
+            }
+            
+            // 先尝试查找场景中已存在的 AudioService
+            var existingRoot = GameObject.Find("AudioService");
+            GameObject audioRoot;
+            
+            if (existingRoot != null)
+            {
+                audioRoot = existingRoot;
+                UnityEngine.Object.DontDestroyOnLoad(audioRoot);
+                
+                // 查找已存在的 AudioSource 组件
+                var existingSources = audioRoot.GetComponentsInChildren<AudioSource>();
+                if (existingSources.Length > 0)
+                {
+                    _bgmSource = existingSources[0];
+                    for (int i = 1; i < existingSources.Length && _sfxPool.Count < _config.SFXPoolSize; i++)
+                    {
+                        _sfxPool.Add(existingSources[i]);
+                    }
+                }
+                
+                // 如果 BGM 源不存在，创建它
+                if (_bgmSource == null)
+                {
+                    _bgmSource = audioRoot.AddComponent<AudioSource>();
+                    _bgmSource.playOnAwake = false;
+                    _bgmSource.loop = true;
+                }
+                
+                // 补充 SFX 池
+                while (_sfxPool.Count < _config.SFXPoolSize)
+                {
+                    var sfxSource = audioRoot.AddComponent<AudioSource>();
+                    sfxSource.playOnAwake = false;
+                    sfxSource.loop = false;
+                    _sfxPool.Add(sfxSource);
+                }
+                
+                CYLog.Debug("[AudioService] 使用场景中已存在的 AudioService");
+            }
+            else
+            {
+                // 创建音频根节点
+                audioRoot = new GameObject("AudioService");
+                UnityEngine.Object.DontDestroyOnLoad(audioRoot);
+                
+                // 创建 BGM 源
+                _bgmSource = audioRoot.AddComponent<AudioSource>();
+                _bgmSource.playOnAwake = false;
+                _bgmSource.loop = true;
+                
+                // 创建 SFX 池
+                for (int i = 0; i < _config.SFXPoolSize; i++)
+                {
+                    var sfxSource = audioRoot.AddComponent<AudioSource>();
+                    sfxSource.playOnAwake = false;
+                    sfxSource.loop = false;
+                    _sfxPool.Add(sfxSource);
+                }
+                
+                CYLog.Debug("[AudioService] 音频根节点创建完成");
             }
             
             UpdateVolumes();
             
-            CYLog.Debug($"[AudioService] 初始化完成，SFX 池大小: {_config.SFXPoolSize}");
+            CYLog.Debug($"[AudioService] 初始化完成，SFX 池大小: {_sfxPool.Count}");
         }
         
         public void Dispose()
@@ -206,11 +292,47 @@ namespace CYFramework.Core.Audio
         {
             if (_bgmSource == null || !_bgmSource.isPlaying) return;
             
-            // TODO: 实现淡出
-            _bgmSource.Stop();
-            _currentBGM = null;
+            if (fadeOut <= 0)
+            {
+                // 立即停止
+                _bgmSource.Stop();
+                _currentBGM = null;
+            }
+            else
+            {
+                // 开始淡出
+                _isFadingOut = true;
+                _fadeOutDuration = fadeOut;
+                _fadeOutTimer = 0f;
+                _fadeStartVolume = _bgmSource.volume;
+            }
             
-            CYLog.Debug("[AudioService] 停止 BGM");
+            CYLog.Debug($"[AudioService] 停止 BGM, 淡出: {fadeOut}s");
+        }
+        
+        /// <summary>
+        /// IUpdateable 实现 - 驱动 BGM 淡出
+        /// </summary>
+        public void OnUpdate(float deltaTime)
+        {
+            if (!_isFadingOut) return;
+            
+            _fadeOutTimer += deltaTime;
+            float t = _fadeOutTimer / _fadeOutDuration;
+            
+            if (t >= 1f)
+            {
+                // 淡出完成
+                _bgmSource.Stop();
+                _bgmSource.volume = _fadeStartVolume;
+                _currentBGM = null;
+                _isFadingOut = false;
+            }
+            else
+            {
+                // 线性淡出
+                _bgmSource.volume = Mathf.Lerp(_fadeStartVolume, 0f, t);
+            }
         }
         
         public void PauseBGM()
@@ -316,8 +438,8 @@ namespace CYFramework.Core.Audio
                 return cached;
             }
             
-            // 从 Resources 加载（简化实现）
-            var clip = Resources.Load<AudioClip>($"Audio/{name}");
+            // 通过 ResourceLoader 统一加载
+            var clip = _resourceLoader?.Load<AudioClip>($"{_audioPath}{name}");
             
             if (clip != null)
             {

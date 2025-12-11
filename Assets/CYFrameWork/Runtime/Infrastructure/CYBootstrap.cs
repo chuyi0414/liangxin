@@ -32,14 +32,17 @@ namespace CYFramework.Infrastructure
     [DefaultExecutionOrder(-1000)]
     public class CYBootstrap : MonoBehaviour
     {
-        [Header("日志配置")]
+        [Header("配置来源")]
+        [Tooltip("如果场景中有 CYConfigurator，将自动使用其配置")]
+        [SerializeField] private bool _useConfigurator = true;
+        
+        [Header("备用配置 (无 CYConfigurator 时使用)")]
         [SerializeField] private LogLevel _logLevel = LogLevel.Debug;
+        [SerializeField] private int _fixedTickRate = 30;
+        [SerializeField] private float _maxPauseTolerance = 5f;
         
-        [Header("逻辑帧配置")]
-        [SerializeField] private int _fixedTickRate = 30;  // 逻辑帧率 (30/60Hz)
-        
-        [Header("暂停配置")]
-        [SerializeField] private float _maxPauseTolerance = 5f;  // 最大暂停容忍时间
+        // 配置器引用
+        private CYConfigurator _configurator;
         
         // 单例
         public static CYBootstrap Instance { get; private set; }
@@ -141,14 +144,40 @@ namespace CYFramework.Infrastructure
         /// </summary>
         private void InitializeFramework()
         {
+            // 0. 获取配置器
+            if (_useConfigurator)
+            {
+                _configurator = GetComponent<CYConfigurator>();
+                if (_configurator == null)
+                {
+                    _configurator = FindObjectOfType<CYConfigurator>();
+                }
+            }
+            
+            // 读取配置
+            var bootstrapConfig = _configurator?.GetConfig<BootstrapConfig>();
+            var logConfig = _configurator?.GetConfig<LogServiceConfig>();
+            
+            var logLevel = logConfig?.Level ?? _logLevel;
+            var fixedTickRate = bootstrapConfig?.FixedTickRate ?? _fixedTickRate;
+            var targetFrameRate = bootstrapConfig?.TargetFrameRate ?? 60;
+            var vSync = bootstrapConfig?.VSync ?? false;
+            var runInBackground = bootstrapConfig?.RunInBackground ?? true;
+            var screenNeverSleep = bootstrapConfig?.ScreenNeverSleep ?? true;
+            
             // 1. 初始化日志系统
-            CYLog.Initialize(_logLevel);
+            CYLog.Initialize(logLevel);
             CYLog.Info("=== CYFramework 2.2 启动 ===");
             CYLog.Info($"平台: {Application.platform}");
-            CYLog.Info($"逻辑帧率: {_fixedTickRate}Hz");
+            CYLog.Info($"逻辑帧率: {fixedTickRate}Hz");
+            CYLog.Info($"配置来源: {(_configurator != null ? "CYConfigurator" : "默认配置")}");
             
-            // 2. 设置固定帧率
-            Time.fixedDeltaTime = 1f / _fixedTickRate;
+            // 2. 应用配置
+            Time.fixedDeltaTime = 1f / fixedTickRate;
+            Application.targetFrameRate = targetFrameRate;
+            QualitySettings.vSyncCount = vSync ? 1 : 0;
+            Application.runInBackground = runInBackground;
+            Screen.sleepTimeout = screenNeverSleep ? SleepTimeout.NeverSleep : SleepTimeout.SystemSetting;
             
             // 3. 注册核心服务
             RegisterCoreServices();
@@ -175,12 +204,13 @@ namespace CYFramework.Infrastructure
 #if CY_WECHAT || UNITY_WEBGL
             // 微信/WebGL 平台
             ServiceLocator.Register<IStorageAdapter, WeChatStorageAdapter>();
-            // ServiceLocator.Register<INetworkAdapter, WeChatNetworkAdapter>(); // 需要时启用
+            ServiceLocator.Register<INetworkAdapter, WeChatNetworkAdapter>();
             CYLog.Debug("[CYBootstrap] 平台: 微信/WebGL");
 #else
             // Native 平台 (PC/Android/iOS)
             ServiceLocator.Register<IFileSystem, UnityFileSystem>();
             ServiceLocator.Register<IStorageAdapter, UnityStorageAdapter>();
+            ServiceLocator.Register<INetworkAdapter, UnityNetworkAdapter>();
             CYLog.Debug("[CYBootstrap] 平台: Native");
 #endif
             
@@ -217,33 +247,30 @@ namespace CYFramework.Infrastructure
             // UIManager - UI 管理器
             ServiceLocator.Register<UIManager, UIManager>();
             
+            // VibrationAdapter - 震动适配器
+#if CY_WECHAT || UNITY_WEBGL
+            ServiceLocator.Register<IVibrationAdapter, WeChatVibrationAdapter>();
+#elif !UNITY_EDITOR || UNITY_ANDROID || UNITY_IOS
+            ServiceLocator.Register<IVibrationAdapter, UnityVibrationAdapter>();
+#endif
+            
             CYLog.Debug("[CYBootstrap] 核心服务注册完成");
         }
         
         /// <summary>
         /// 收集生命周期接口
+        /// 自动遍历所有已注册服务，注册实现了生命周期接口的服务
         /// </summary>
         private void CollectLifecycleInterfaces()
         {
-            // 从 ServiceLocator 收集所有实现了生命周期接口的服务
-            
-            // EventBus
-            if (ServiceLocator.TryGet<EventBus>(out var eventBus))
+            // 从 ServiceLocator 获取所有已实例化的服务并注册生命周期
+            var allServices = ServiceLocator.GetAllInstances();
+            foreach (var service in allServices)
             {
-                RegisterLifecycle(eventBus);
+                RegisterLifecycle(service);
             }
             
-            // NetworkService
-            if (ServiceLocator.TryGet<NetworkService>(out var network))
-            {
-                RegisterLifecycle(network);
-            }
-            
-            // AudioService
-            if (ServiceLocator.TryGet<IAudioService>(out var audio))
-            {
-                RegisterLifecycle(audio);
-            }
+            CYLog.Debug($"[CYBootstrap] 生命周期注册完成: Tickable={_tickables.Count}, Updateable={_updateables.Count}, LateUpdateable={_lateUpdateables.Count}, Pausable={_pausables.Count}");
         }
         
         /// <summary>

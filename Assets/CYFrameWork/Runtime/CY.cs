@@ -9,13 +9,17 @@ using CYFramework.Core.Event;
 using CYFramework.Core.FSM;
 using CYFramework.Core.DataTable;
 using CYFramework.Core.Entity;
+using CYFramework.Core.Network;
 using CYFramework.Core.Pool;
 using CYFramework.Core.Procedure;
+using CYFramework.Core.Resource;
 using CYFramework.Core.Save;
+using CYFramework.Core.Scene;
 using CYFramework.Core.Timer;
 using CYFramework.Core.UI;
 using CYFramework.Infrastructure;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace CYFramework
 {
@@ -101,6 +105,34 @@ namespace CYFramework
         public static PoolManager Pool => ServiceLocator.Get<PoolManager>();
         
         /// <summary>
+        /// 资源加载系统 - 统一资源加载（支持 Resources/Addressables/AssetBundle）
+        /// 场景：加载预制体、音频、图片、配置文件
+        /// 用法：CY.Resource.Load&lt;T&gt;(path), LoadAsync&lt;T&gt;(path, callback)
+        /// </summary>
+        public static IResourceLoader Resource => ServiceLocator.Get<IResourceLoader>();
+        
+        /// <summary>
+        /// 场景加载系统 - 场景切换与管理
+        /// 场景：关卡切换、主菜单跳转、Loading界面
+        /// 用法：CY.Scene.LoadScene("Battle"), LoadSceneAsync("Menu", progress => {})
+        /// </summary>
+        public static SceneLoader Scene => ServiceLocator.Get<SceneLoader>();
+        
+        /// <summary>
+        /// 网络服务 - HTTP/WebSocket 请求
+        /// 场景：登录、排行榜、多人游戏、实时对战
+        /// 用法：CY.Network.HttpGet(url, callback), WebSocketConnect(url)
+        /// </summary>
+        public static NetworkService Network => ServiceLocator.Get<NetworkService>();
+        
+        /// <summary>
+        /// 有限状态机工厂 - 创建和管理 FSM
+        /// 场景：角色AI、动画状态、游戏模式
+        /// 用法：CY.FSM.Create&lt;T&gt;("PlayerFSM"), Get&lt;T&gt;("PlayerFSM")
+        /// </summary>
+        public static FSMManager FSM => ServiceLocator.Get<FSMManager>();
+        
+        /// <summary>
         /// 游戏入口 - 获取当前游戏实例
         /// 场景：访问游戏全局数据、自定义子系统
         /// 用法：CY.Game 获取 GameEntryBase 实例
@@ -183,5 +215,202 @@ namespace CYFramework
         {
             ServiceLocator.RegisterInstance(service);
         }
+        
+        // ==================== 常用快捷方法 ====================
+        
+        #region 日志快捷方法
+        
+        /// <summary>日志 - Debug 级别</summary>
+        public static void Log(string message) => CYLog.Debug(message);
+        
+        /// <summary>日志 - Info 级别</summary>
+        public static void LogInfo(string message) => CYLog.Info(message);
+        
+        /// <summary>日志 - Warning 级别</summary>
+        public static void LogWarning(string message) => CYLog.Warning(message);
+        
+        /// <summary>日志 - Error 级别</summary>
+        public static void LogError(string message) => CYLog.Error(message);
+        
+        #endregion
+        
+        #region 计时器快捷方法
+        
+        /// <summary>
+        /// 延时执行
+        /// </summary>
+        /// <param name="delay">延时秒数</param>
+        /// <param name="callback">回调</param>
+        /// <returns>计时器实例</returns>
+        public static Core.Timer.Timer Delay(float delay, Action callback)
+        {
+            return Timer.Delay(delay, callback);
+        }
+        
+        /// <summary>
+        /// 循环执行
+        /// </summary>
+        /// <param name="interval">间隔秒数</param>
+        /// <param name="callback">回调</param>
+        /// <returns>计时器实例</returns>
+        public static Core.Timer.Timer Loop(float interval, Action callback)
+        {
+            return Timer.Loop(interval, callback);
+        }
+        
+        /// <summary>
+        /// 下一帧执行
+        /// </summary>
+        public static Core.Timer.Timer NextFrame(Action callback)
+        {
+            return Timer.NextFrame(callback);
+        }
+        
+        /// <summary>
+        /// 取消计时器（通过ID）
+        /// </summary>
+        public static void CancelTimer(int timerId)
+        {
+            Timer.Cancel(timerId);
+        }
+        
+        /// <summary>
+        /// 取消计时器（通过实例）
+        /// </summary>
+        public static void CancelTimer(Core.Timer.Timer timer)
+        {
+            Timer.Cancel(timer);
+        }
+        
+        #endregion
+        
+        #region 事件快捷方法
+        
+        /// <summary>
+        /// 订阅事件
+        /// </summary>
+        /// <typeparam name="T">事件类型</typeparam>
+        /// <param name="handler">事件处理器</param>
+        /// <param name="target">订阅者对象（用于自动解绑）</param>
+        public static void Subscribe<T>(Core.Event.EventHandler<T> handler, object target = null) where T : struct
+        {
+            Event.Subscribe(handler, target);
+        }
+        
+        /// <summary>
+        /// 取消订阅
+        /// </summary>
+        public static void Unsubscribe<T>(Core.Event.EventHandler<T> handler) where T : struct
+        {
+            Event.Unsubscribe(handler);
+        }
+        
+        /// <summary>
+        /// 发布事件
+        /// </summary>
+        public static void Publish<T>(ref T evt) where T : struct
+        {
+            Event.Post(ref evt);
+        }
+        
+        #endregion
+        
+        #region 资源快捷方法
+        
+        /// <summary>
+        /// 加载资源
+        /// </summary>
+        public static T Load<T>(string path) where T : Object
+        {
+            return Resource?.Load<T>(path);
+        }
+        
+        /// <summary>
+        /// 异步加载资源
+        /// </summary>
+        public static void LoadAsync<T>(string path, Action<T> callback) where T : Object
+        {
+            Resource?.LoadAsync(path, callback);
+        }
+        
+        #endregion
+        
+        #region 音频快捷方法
+        
+        /// <summary>
+        /// 播放背景音乐
+        /// </summary>
+        /// <param name="name">音乐名称</param>
+        /// <param name="volume">音量 (0-1)</param>
+        /// <param name="loop">是否循环</param>
+        public static void PlayBGM(string name, float volume = 1f, bool loop = true)
+        {
+            Audio?.PlayBGM(name, volume, loop);
+        }
+        
+        /// <summary>
+        /// 播放音效
+        /// </summary>
+        /// <param name="name">音效名称</param>
+        /// <param name="volume">音量 (0-1)</param>
+        public static void PlaySFX(string name, float volume = 1f)
+        {
+            Audio?.PlaySFX(name, volume);
+        }
+        
+        /// <summary>
+        /// 停止背景音乐
+        /// </summary>
+        /// <param name="fadeOut">淡出时间（秒）</param>
+        public static void StopBGM(float fadeOut = 0.5f)
+        {
+            Audio?.StopBGM(fadeOut);
+        }
+        
+        /// <summary>
+        /// 暂停背景音乐
+        /// </summary>
+        public static void PauseBGM()
+        {
+            Audio?.PauseBGM();
+        }
+        
+        /// <summary>
+        /// 恢复背景音乐
+        /// </summary>
+        public static void ResumeBGM()
+        {
+            Audio?.ResumeBGM();
+        }
+        
+        #endregion
+        
+        #region UI 快捷方法
+        
+        /// <summary>
+        /// 显示 Toast 提示
+        /// </summary>
+        public static void Toast(string message)
+        {
+            UI?.ShowToast(message);
+        }
+        
+        /// <summary>
+        /// 显示确认对话框
+        /// </summary>
+        public static void Confirm(string title, string content, Action onConfirm, Action onCancel = null)
+        {
+            UI?.ShowConfirm(title, content, onConfirm, onCancel);
+        }
+        
+        /// <summary>
+        /// 显示提示对话框
+        /// </summary>
+        public static void Alert(string title, string content, Action onConfirm = null)
+        {
+            UI?.ShowAlert(title, content, onConfirm);
+        }
+        
+        #endregion
     }
 }

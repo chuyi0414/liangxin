@@ -5,6 +5,8 @@
 
 using System;
 using System.Collections;
+using CYFramework.Core.Resource;
+using CYFramework.Infrastructure;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -103,11 +105,12 @@ namespace CYFramework.Core.UI.Components
         #region Image 扩展
         
         /// <summary>
-        /// 设置精灵（从 Resources 加载）
+        /// 设置精灵（通过 ResourceLoader 加载）
         /// </summary>
         public static void SetSprite(this Image image, string path)
         {
-            var sprite = Resources.Load<Sprite>(path);
+            var resourceLoader = ServiceLocator.Get<IResourceLoader>();
+            var sprite = resourceLoader?.Load<Sprite>(path);
             if (sprite != null)
             {
                 image.sprite = sprite;

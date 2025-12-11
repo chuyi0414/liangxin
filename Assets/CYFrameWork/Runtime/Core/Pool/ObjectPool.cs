@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using CYFramework.Core.Config;
 using CYFramework.Infrastructure;
 using UnityEngine;
 
@@ -450,11 +451,30 @@ namespace CYFramework.Core.Pool
         private readonly Dictionary<Type, object> _genericPools = new();
         private readonly Dictionary<string, GameObjectPool> _goPools = new();
         
+        // 配置
+        private int _defaultInitialCapacity = 16;
+        private int _defaultMaxCapacity = 256;
+        private int _defaultWarmupCount = 8;
+        
         public int InitOrder => 0;
         public int DisposeOrder => 0;
         
         public void Initialize()
         {
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var config = configurator.GetConfig<PoolManagerConfig>();
+                if (config != null)
+                {
+                    _defaultInitialCapacity = config.DefaultInitialCapacity;
+                    _defaultMaxCapacity = config.DefaultMaxCapacity;
+                    _defaultWarmupCount = config.DefaultWarmupCount;
+                    CYLog.Debug("[PoolManager] 使用 CYConfigurator 配置");
+                }
+            }
+            
             // 注册低内存回调
             Application.lowMemory += OnLowMemory;
             CYLog.Debug("[PoolManager] 初始化完成");

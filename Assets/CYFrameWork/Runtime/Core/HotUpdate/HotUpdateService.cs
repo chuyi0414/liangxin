@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using CYFramework.Core.Config;
 using CYFramework.Core.Network;
 using CYFramework.Infrastructure;
 using UnityEngine;
@@ -157,6 +158,22 @@ namespace CYFramework.Core.HotUpdate
         
         public void Initialize()
         {
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var externalConfig = configurator.GetConfig<HotUpdateServiceConfig>();
+                if (externalConfig != null)
+                {
+                    _config.CdnBaseUrl = externalConfig.CdnBaseUrl;
+                    _config.VersionUrl = externalConfig.CdnBaseUrl + externalConfig.VersionFileName;
+                    _config.DownloadTimeout = (int)externalConfig.DownloadTimeout;
+                    _config.MaxConcurrentDownloads = externalConfig.MaxConcurrentDownloads;
+                    _config.EnableIncrementalUpdate = externalConfig.EnableIncrementalUpdate;
+                    CYLog.Debug("[HotUpdateService] 使用 CYConfigurator 配置");
+                }
+            }
+            
             if (ServiceLocator.TryGet<NetworkService>(out var network))
             {
                 _network = network;
@@ -378,12 +395,40 @@ namespace CYFramework.Core.HotUpdate
             
             foreach (var bundle in _remoteVersion.bundles)
             {
-                // TODO: 检查本地是否已有该版本的资源
-                // 简化实现：全部加入下载列表
-                _pendingDownloads.Add(bundle);
+                // 检查本地是否已有该版本的资源
+                if (!IsLocalBundleValid(bundle))
+                {
+                    _pendingDownloads.Add(bundle);
+                }
             }
             
             CYLog.Debug($"[HotUpdateService] 待下载资源: {_pendingDownloads.Count} 个");
+        }
+        
+        /// <summary>
+        /// 检查本地资源是否有效
+        /// </summary>
+        private bool IsLocalBundleValid(AssetBundle bundle)
+        {
+            string localPath = System.IO.Path.Combine(Application.persistentDataPath, "Bundles", bundle.name);
+            string hashPath = localPath + ".hash";
+            
+            // 检查文件是否存在
+            if (!System.IO.File.Exists(localPath) || !System.IO.File.Exists(hashPath))
+            {
+                return false;
+            }
+            
+            // 检查 hash 是否匹配
+            try
+            {
+                string localHash = System.IO.File.ReadAllText(hashPath).Trim();
+                return localHash == bundle.hash;
+            }
+            catch
+            {
+                return false;
+            }
         }
         
         /// <summary>
@@ -392,14 +437,51 @@ namespace CYFramework.Core.HotUpdate
         private async Task<bool> DownloadBundle(AssetBundle bundle)
         {
             string url = _config.CdnBaseUrl + bundle.name;
+            string localDir = System.IO.Path.Combine(Application.persistentDataPath, "Bundles");
+            string localPath = System.IO.Path.Combine(localDir, bundle.name);
+            string hashPath = localPath + ".hash";
             
             CYLog.Debug($"[HotUpdateService] 下载: {url}");
             
-            // TODO: 实际下载逻辑
-            // 使用 UnityWebRequest 下载到本地
-            await Task.Delay(100); // 模拟下载
-            
-            return true;
+            try
+            {
+                // 确保目录存在
+                if (!System.IO.Directory.Exists(localDir))
+                {
+                    System.IO.Directory.CreateDirectory(localDir);
+                }
+                
+                // 使用 UnityWebRequest 下载
+                using var request = UnityEngine.Networking.UnityWebRequest.Get(url);
+                request.timeout = _config.DownloadTimeout;
+                
+                var operation = request.SendWebRequest();
+                while (!operation.isDone)
+                {
+                    await Task.Yield();
+                }
+                
+                if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+                {
+                    CYLog.Error($"[HotUpdateService] 下载失败: {request.error}");
+                    return false;
+                }
+                
+                // 保存文件
+                byte[] data = request.downloadHandler.data;
+                await System.IO.File.WriteAllBytesAsync(localPath, data);
+                
+                // 保存 hash
+                await System.IO.File.WriteAllTextAsync(hashPath, bundle.hash);
+                
+                CYLog.Debug($"[HotUpdateService] 下载完成: {bundle.name}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                CYLog.Error($"[HotUpdateService] 下载异常: {ex.Message}");
+                return false;
+            }
         }
         
         /// <summary>

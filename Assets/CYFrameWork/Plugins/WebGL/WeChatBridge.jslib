@@ -235,16 +235,21 @@ mergeInto(LibraryManager.library, {
     
     // ==================== 系统 API ====================
     
-    WX_VibrateShort: function() {
+    WX_VibrateShort: function(typePtr) {
         try {
-            wx.vibrateShort({ type: 'medium' });
-        } catch (e) {}
+            var vibrateType = typePtr ? UTF8ToString(typePtr) : 'medium';
+            wx.vibrateShort({ type: vibrateType });
+        } catch (e) {
+            console.error('[WeChatBridge] WX_VibrateShort error:', e);
+        }
     },
     
     WX_VibrateLong: function() {
         try {
             wx.vibrateLong();
-        } catch (e) {}
+        } catch (e) {
+            console.error('[WeChatBridge] WX_VibrateLong error:', e);
+        }
     },
     
     WX_GetSystemInfo: function() {

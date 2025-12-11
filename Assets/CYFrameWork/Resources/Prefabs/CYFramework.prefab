@@ -1,0 +1,153 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &3070879480950586534
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3585407034631369419}
+  - component: {fileID: 1236403112803150626}
+  - component: {fileID: 1933756738092286752}
+  m_Layer: 0
+  m_Name: CYFramework
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3585407034631369419
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3070879480950586534}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1236403112803150626
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3070879480950586534}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: abbf708c7da09b549aaec418efe2cd84, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _useConfigurator: 1
+  _logLevel: 1
+  _fixedTickRate: 30
+  _maxPauseTolerance: 5
+--- !u!114 &1933756738092286752
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3070879480950586534}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6dd6cd0c17a19fe41816a7f5d016105c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ConfigAsset: {fileID: 0}
+  Bootstrap:
+    FixedTickRate: 30
+    TargetFrameRate: 60
+    VSync: 0
+    RunInBackground: 1
+    ScreenNeverSleep: 1
+    MaxPauseTolerance: 5
+  Log:
+    Level: 1
+    ShowTimestamp: 1
+    ShowStackTrace: 0
+    WriteToFile: 0
+    LogFilePath: Logs/game.log
+    MaxLogFileSizeMB: 10
+  Audio:
+    SFXPoolSize: 16
+    DefaultBGMVolume: 0.8
+    DefaultSFXVolume: 1
+    BGMFadeTime: 0.5
+  UI:
+    EnablePanelPool: 1
+    PanelPoolCapacity: 5
+    DefaultAnimDuration: 0.25
+    ToastDuration: 2
+    MaxToastCount: 3
+  Network:
+    HttpTimeout: 10
+    HttpMaxRetry: 3
+    HeartbeatInterval: 30
+    HeartbeatTimeout: 10
+    MaxReconnectAttempts: 5
+    ReconnectInterval: 3
+    CircuitBreakerThreshold: 5
+    CircuitBreakerResetTime: 30
+  Save:
+    SaveFileName: save.dat
+    EnableEncryption: 1
+    EncryptionKey: CYFramework2024!
+    AutoSaveInterval: 60
+    MaxSaveSlots: 3
+    SaveVersion: 1
+  HotUpdate:
+    CdnBaseUrl: 
+    VersionFileName: version.json
+    DownloadTimeout: 30
+    MaxConcurrentDownloads: 3
+    MaxDownloadRetry: 3
+    EnableIncrementalUpdate: 1
+  Pool:
+    DefaultInitialCapacity: 16
+    DefaultMaxCapacity: 256
+    DefaultWarmupCount: 8
+    CleanupInterval: 60
+    IdleTimeout: 120
+  Entity:
+    DefaultPreloadCount: 5
+    MaxPoolSize: 100
+    UpdateInterval: 1
+  Resource:
+    LoadMode: 0
+    AddressablesLabel: default
+    CacheSizeMB: 100
+    AsyncLoadPriority: 100
+    EnableRefCount: 1
+    UIPanelPath: UI/Panels/
+    EntityPath: Entities/
+    AudioPath: Audio/
+    BGMPath: Audio/BGM/
+    SFXPath: Audio/SFX/
+    SpritePath: Sprites/
+    IconPath: Sprites/Icons/
+    PrefabPath: Prefabs/
+    EffectPath: Effects/
+    ConfigPath: Config/
+    MaterialPath: Materials/
+    AnimationPath: Animations/
+    ScenePath: Scenes/
+  Timer:
+    InitialCapacity: 32
+    UseUnscaledTime: 0
+  Procedure:
+    EntryProcedure: 
+    AutoRegisterProcedures: 1
+  Debug:
+    EnableConsole: 1
+    ConsoleToggleKey: 96
+    ShowFPS: 1
+    ShowMemory: 1
+    EnableGMCommands: 1

@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using CYFramework.Core.Config;
 using CYFramework.Infrastructure;
 using CYFramework.Platform;
 using UnityEngine;
@@ -124,6 +125,21 @@ namespace CYFramework.Core.Save
         
         public void Initialize()
         {
+            // 从 CYConfigurator 读取配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var externalConfig = configurator.GetConfig<SaveServiceConfig>();
+                if (externalConfig != null)
+                {
+                    _config.EnableEncryption = externalConfig.EnableEncryption;
+                    _config.EncryptionKey = externalConfig.EncryptionKey;
+                    _config.MaxBackupCount = externalConfig.MaxSaveSlots;
+                    _currentVersion = externalConfig.SaveVersion;
+                    CYLog.Debug("[SaveService] 使用 CYConfigurator 配置");
+                }
+            }
+            
             // 获取平台适配器
             if (ServiceLocator.TryGet<IFileSystem>(out var fs))
             {
