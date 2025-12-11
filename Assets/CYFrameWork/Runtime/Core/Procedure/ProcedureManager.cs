@@ -273,6 +273,30 @@ namespace CYFramework.Core.Procedure
             }
         }
         
+        /// <summary>
+        /// 启动入口流程（使用配置的入口流程，如果未配置则使用第一个注册的流程）
+        /// </summary>
+        public void StartEntry()
+        {
+            // 如果配置了入口流程名称，使用它
+            if (!string.IsNullOrEmpty(_entryProcedure))
+            {
+                Start(_entryProcedure);
+                return;
+            }
+            
+            // 否则使用第一个注册的流程
+            if (_procedureNames.Count > 0)
+            {
+                var firstProcedure = _procedureNames.Keys.First();
+                Start(firstProcedure);
+            }
+            else
+            {
+                CYLog.Warning("[Procedure] 没有注册任何流程，无法启动");
+            }
+        }
+        
         private void ChangeProcedureInternal(Type procedureType, object userData)
         {
             if (!_procedures.TryGetValue(procedureType, out var nextProcedure))

@@ -32,14 +32,12 @@ MonoBehaviour:
     DefaultSFXVolume: 1
     BGMFadeTime: 0.5
   UI:
-    DesignResolution: {x: 1920, y: 1080}
-    MatchWidthOrHeight: 0.5
-    PanelPrefabPath: UI/Panels/
     EnablePanelPool: 1
     PanelPoolCapacity: 5
     DefaultAnimDuration: 0.25
     ToastDuration: 2
     MaxToastCount: 3
+    CustomLayers: []
   Network:
     HttpTimeout: 10
     HttpMaxRetry: 3
@@ -69,17 +67,43 @@ MonoBehaviour:
     DefaultWarmupCount: 8
     CleanupInterval: 60
     IdleTimeout: 120
+    PoolGroups:
+    - Bullets
+    - Effects
+    - UI
+    - Audio
+    - Misc
   Entity:
-    EntityPrefabPath: Entities/
     DefaultPreloadCount: 5
     MaxPoolSize: 100
     UpdateInterval: 1
+    EntityGroups:
+    - Players
+    - Enemies
+    - NPCs
+    - Props
+    - Effects
+    - Projectiles
+    - Items
   Resource:
     LoadMode: 0
     AddressablesLabel: default
     CacheSizeMB: 100
     AsyncLoadPriority: 100
     EnableRefCount: 1
+    UIPanelPath: UI/
+    EntityPath: Entities/
+    AudioPath: Audio/
+    BGMPath: Audio/BGM/
+    SFXPath: Audio/SFX/
+    SpritePath: Sprites/
+    IconPath: Sprites/Icons/
+    PrefabPath: Prefabs/
+    EffectPath: Effects/
+    ConfigPath: Config/
+    MaterialPath: Materials/
+    AnimationPath: Animations/
+    ScenePath: Scenes/
   Timer:
     InitialCapacity: 32
     UseUnscaledTime: 0

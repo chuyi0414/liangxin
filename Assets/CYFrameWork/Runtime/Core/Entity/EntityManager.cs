@@ -147,8 +147,9 @@ namespace CYFramework.Core.Entity
     /// <summary>
     /// 实体管理器
     /// </summary>
-    public class EntityManager : ITickable, IUpdateable, ILateUpdateable, IDisposableEx
+    public class EntityManager : IInitializable, ITickable, IUpdateable, ILateUpdateable, IDisposableEx
     {
+        public int InitOrder => 60;  // 在 UIManager 之后初始化
         public int TickOrder => 0;
         public int UpdateOrder => 0;
         public int LateUpdateOrder => 0;
@@ -172,9 +173,17 @@ namespace CYFramework.Core.Entity
         private readonly Dictionary<string, Transform> _groupContainers = new();
         
         /// <summary>
-        /// 初始化
+        /// 初始化（IInitializable 接口）
         /// </summary>
-        public void Initialize(Transform entityRoot = null)
+        public void Initialize()
+        {
+            Initialize(null);
+        }
+        
+        /// <summary>
+        /// 初始化（带实体根节点参数）
+        /// </summary>
+        public void Initialize(Transform entityRoot)
         {
             // 从 CYConfigurator 读取配置
             var configurator = CYConfigurator.Instance;

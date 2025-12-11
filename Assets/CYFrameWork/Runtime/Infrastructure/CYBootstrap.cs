@@ -15,6 +15,7 @@ using CYFramework.Core.Save;
 using CYFramework.Core.Timer;
 using CYFramework.Core.Audio;
 using CYFramework.Core.UI;
+using CYFramework.Core.Entity;
 using CYFramework.Platform;
 using CYFramework.Platform.Unity;
 using UnityEngine;
@@ -182,7 +183,7 @@ namespace CYFramework.Infrastructure
             // 3. 注册核心服务
             RegisterCoreServices();
             
-            // 4. 初始化所有服务
+            // 4. 初始化所有服务（包括流程自动注册）
             ServiceLocator.InitializeAll();
             
             // 5. 收集生命周期接口
@@ -190,6 +191,10 @@ namespace CYFramework.Infrastructure
             
             // 6. 注册全局异常处理
             RegisterExceptionHandler();
+            
+            // 7. 启动入口流程
+            var procedureManager = ServiceLocator.Get<ProcedureManager>();
+            procedureManager?.StartEntry();
             
             CYLog.Info("=== CYFramework 初始化完成 ===");
         }
@@ -246,6 +251,15 @@ namespace CYFramework.Infrastructure
             
             // UIManager - UI 管理器
             ServiceLocator.Register<UIManager, UIManager>();
+            
+            // ProcedureManager - 流程管理器
+            ServiceLocator.Register<ProcedureManager, ProcedureManager>();
+            
+            // TimerManager - 计时器管理器
+            ServiceLocator.Register<TimerManager, TimerManager>();
+            
+            // EntityManager - 实体管理器
+            ServiceLocator.Register<EntityManager, EntityManager>();
             
             // VibrationAdapter - 震动适配器
 #if CY_WECHAT || UNITY_WEBGL

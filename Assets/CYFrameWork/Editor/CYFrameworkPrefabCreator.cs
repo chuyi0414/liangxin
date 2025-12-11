@@ -96,9 +96,11 @@ namespace CYFramework.Editor
         public static void CreateUIRoot()
         {
             var uiRoot = new GameObject("UIRoot");
+            uiRoot.layer = 5; // UI层
             
             // UICamera
             var uiCameraGo = CreateChild(uiRoot, "UICamera");
+            uiCameraGo.layer = 5; // UI层
             var uiCamera = uiCameraGo.AddComponent<Camera>();
             uiCamera.clearFlags = CameraClearFlags.Depth;
             uiCamera.cullingMask = 1 << LayerMask.NameToLayer("UI");
@@ -109,6 +111,7 @@ namespace CYFramework.Editor
             
             // Canvas
             var canvasGo = CreateChild(uiRoot, "Canvas");
+            canvasGo.layer = 5; // UI层
             var canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = uiCamera;
@@ -132,7 +135,8 @@ namespace CYFramework.Editor
             CreateUILayer(canvasGo, "System", 600);
             
             // Debug Updater (可选)
-            CreateChild(uiRoot, "[Debug Updater]");
+            var debugUpdater = CreateChild(uiRoot, "[Debug Updater]");
+            debugUpdater.layer = 5; // UI层
             
             SavePrefab(uiRoot, "UIRoot.prefab");
             UnityEngine.Debug.Log("[CYFramework] UIRoot 预制体已创建");
@@ -614,10 +618,12 @@ namespace CYFramework.Editor
         private static void CreateUIRootInScene(Transform parent)
         {
             var uiRoot = new GameObject("UIRoot");
+            uiRoot.layer = 5; // UI层
             uiRoot.transform.SetParent(parent);
             
             // UICamera
             var uiCameraGo = CreateChild(uiRoot, "UICamera");
+            uiCameraGo.layer = 5; // UI层
             var uiCamera = uiCameraGo.AddComponent<Camera>();
             uiCamera.clearFlags = CameraClearFlags.Depth;
             uiCamera.cullingMask = 1 << 5; // UI layer
@@ -626,6 +632,7 @@ namespace CYFramework.Editor
             
             // Canvas
             var canvasGo = CreateChild(uiRoot, "Canvas");
+            canvasGo.layer = 5; // UI层
             var canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = uiCamera;
@@ -673,6 +680,7 @@ namespace CYFramework.Editor
         private static void CreateUILayer(GameObject canvas, string name, int sortingOrder)
         {
             var layer = new GameObject(name);
+            layer.layer = 5; // UI层
             layer.transform.SetParent(canvas.transform, false);
             
             var rect = layer.AddComponent<RectTransform>();

@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 836594370932326136}
   - component: {fileID: 903512430346014831}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: UICamera
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -94,7 +94,7 @@ GameObject:
   - component: {fileID: 541070763574915997}
   - component: {fileID: 8083110670408395103}
   - component: {fileID: 643095204797454005}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: System
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -171,7 +171,7 @@ GameObject:
   - component: {fileID: 2743659803535520202}
   - component: {fileID: 3006571806827258882}
   - component: {fileID: 4938804163544289154}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Background
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -248,7 +248,7 @@ GameObject:
   - component: {fileID: 7275897633764823814}
   - component: {fileID: 1348110282022797113}
   - component: {fileID: 262131573517386839}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Guide
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -323,7 +323,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8430082847440073191}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: UIRoot
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -359,7 +359,7 @@ GameObject:
   - component: {fileID: 7814628098438532041}
   - component: {fileID: 2278609248895243824}
   - component: {fileID: 8917831852920714528}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Main
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -436,7 +436,7 @@ GameObject:
   - component: {fileID: 7312201928993651782}
   - component: {fileID: 3144464036299025660}
   - component: {fileID: 3463657229607935534}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Tips
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -513,7 +513,7 @@ GameObject:
   - component: {fileID: 5176612818898321793}
   - component: {fileID: 3002694919928718164}
   - component: {fileID: 1783199126223196087}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Popup
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -590,7 +590,7 @@ GameObject:
   - component: {fileID: 6630971154694639434}
   - component: {fileID: 5585100269531166109}
   - component: {fileID: 6028231169604994223}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Loading
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -668,7 +668,7 @@ GameObject:
   - component: {fileID: 1004758783391930690}
   - component: {fileID: 7961756795996781407}
   - component: {fileID: 7815574893889992368}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -773,7 +773,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8389676189214850573}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: '[Debug Updater]'
   m_TagString: Untagged
   m_Icon: {fileID: 0}

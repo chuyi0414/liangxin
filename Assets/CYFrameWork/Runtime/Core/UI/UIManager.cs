@@ -71,9 +71,9 @@ namespace CYFramework.Core.UI
         public bool EnablePool = true;
         
         /// <summary>
-        /// 对象池默认容量
+        /// 对象池默认容量（每种面板类型最多缓存数量）
         /// </summary>
-        public int PoolCapacity = 5;
+        public int PoolCapacity = 1;
         
         /// <summary>
         /// 默认淡入淡出时间
@@ -224,7 +224,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         /// <typeparam name="T">面板类型</typeparam>
         /// <param name="data">传递给面板的数据</param>
-        /// <returns>面板实例</returns>
+        /// <returns>面板实例，可直接操作</returns>
         public T Open<T>(object data = null) where T : UIPanel
         {
             var panelType = typeof(T);
@@ -279,6 +279,19 @@ namespace CYFramework.Core.UI
             CYLog.Debug($"[UIManager] 打开面板: {panelType.Name}");
             
             return panel;
+        }
+        
+        /// <summary>
+        /// 打开面板（强类型数据，避免装箱）
+        /// </summary>
+        /// <typeparam name="T">面板类型</typeparam>
+        /// <typeparam name="TData">数据类型（推荐使用 struct）</typeparam>
+        /// <param name="data">传递给面板的数据</param>
+        /// <returns>面板实例，可直接操作</returns>
+        public T Open<T, TData>(TData data) where T : UIPanel where TData : struct
+        {
+            // TData 约束为 struct，避免装箱
+            return Open<T>(data);
         }
         
         /// <summary>
