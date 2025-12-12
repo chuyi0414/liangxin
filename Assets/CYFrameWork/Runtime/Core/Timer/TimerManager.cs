@@ -129,8 +129,17 @@ namespace CYFramework.Core.Timer
         
         /// <summary>
         /// 延迟执行
+        /// 默认使用配置中的 UseUnscaledTime 设置
         /// </summary>
-        public Timer Delay(float seconds, Action onComplete, bool useUnscaledTime = false)
+        public Timer Delay(float seconds, Action onComplete)
+        {
+            return Delay(seconds, onComplete, _defaultUseUnscaledTime);
+        }
+        
+        /// <summary>
+        /// 延迟执行（显式指定时间模式）
+        /// </summary>
+        public Timer Delay(float seconds, Action onComplete, bool useUnscaledTime)
         {
             var timer = new Timer(seconds, onComplete, false, useUnscaledTime) { Id = _nextId++ };
             _timers.Add(timer);
@@ -139,20 +148,43 @@ namespace CYFramework.Core.Timer
         
         /// <summary>
         /// 循环执行
+        /// 默认使用配置中的 UseUnscaledTime 设置
         /// </summary>
-        public Timer Loop(float interval, Action onTick, bool useUnscaledTime = false)
+        public Timer Loop(float interval, Action onTick)
+        {
+            return Loop(interval, onTick, _defaultUseUnscaledTime);
+        }
+        
+        /// <summary>
+        /// 循环执行（显式指定时间模式）
+        /// </summary>
+        public Timer Loop(float interval, Action onTick, bool useUnscaledTime)
         {
             var timer = new Timer(interval, onTick, true, useUnscaledTime) { Id = _nextId++ };
             _timers.Add(timer);
             return timer;
         }
         
+        private readonly List<Action> _nextFrameActions = new();
+        private readonly List<Action> _executingActions = new();
+        
         /// <summary>
-        /// 下一帧执行
+        /// 下一帧执行（真正的下一帧，非延迟）
         /// </summary>
-        public Timer NextFrame(Action onComplete)
+        public void NextFrame(Action onComplete)
         {
-            return Delay(0.001f, onComplete);
+            if (onComplete != null)
+            {
+                _nextFrameActions.Add(onComplete);
+            }
+        }
+        
+        /// <summary>
+        /// 下一帧执行（返回 Timer 以保持兼容性）
+        /// </summary>
+        public Timer NextFrameTimer(Action onComplete)
+        {
+            return Delay(0f, onComplete, true);
         }
         
         /// <summary>
@@ -214,6 +246,27 @@ namespace CYFramework.Core.Timer
         {
             float unscaledDeltaTime = Time.unscaledDeltaTime;
             
+            // 执行下一帧回调
+            if (_nextFrameActions.Count > 0)
+            {
+                _executingActions.Clear();
+                _executingActions.AddRange(_nextFrameActions);
+                _nextFrameActions.Clear();
+                
+                foreach (var action in _executingActions)
+                {
+                    try
+                    {
+                        action?.Invoke();
+                    }
+                    catch (Exception ex)
+                    {
+                        CYLog.Error($"[TimerManager] NextFrame 回调异常: {ex.Message}");
+                    }
+                }
+            }
+            
+            // 更新计时器
             _toRemove.Clear();
             
             foreach (var timer in _timers)

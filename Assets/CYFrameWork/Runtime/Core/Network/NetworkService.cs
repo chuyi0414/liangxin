@@ -185,6 +185,7 @@ namespace CYFramework.Core.Network
         
         /// <summary>
         /// HTTP GET 请求
+        /// 统一走 INetworkAdapter，确保平台一致性
         /// </summary>
         public async Task<HttpResponse> Get(string url)
         {
@@ -195,24 +196,28 @@ namespace CYFramework.Core.Network
             
             try
             {
-                using var request = UnityWebRequest.Get(url);
-                request.timeout = _config.HttpTimeout;
+                string data;
                 
-                var operation = request.SendWebRequest();
-                while (!operation.isDone)
+                // 优先使用平台适配器（确保微信/WebGL 路径一致）
+                if (_adapter != null)
                 {
-                    await Task.Yield();
+                    data = await _adapter.HttpGet(url, _config.HttpTimeout);
+                }
+                else
+                {
+                    // Fallback: 直接使用 UnityWebRequest
+                    data = await HttpGetFallback(url);
                 }
                 
                 var response = new HttpResponse
                 {
-                    StatusCode = (int)request.responseCode,
-                    IsSuccess = request.result == UnityWebRequest.Result.Success,
-                    Data = request.downloadHandler?.text,
-                    Error = request.error
+                    StatusCode = 200,
+                    IsSuccess = true,
+                    Data = data,
+                    Error = null
                 };
                 
-                HandleRequestResult(response.IsSuccess);
+                HandleRequestResult(true);
                 return response;
             }
             catch (Exception ex)
@@ -224,6 +229,7 @@ namespace CYFramework.Core.Network
         
         /// <summary>
         /// HTTP POST 请求
+        /// 统一走 INetworkAdapter，确保平台一致性
         /// </summary>
         public async Task<HttpResponse> Post(string url, string body, string contentType = "application/json")
         {
@@ -234,28 +240,28 @@ namespace CYFramework.Core.Network
             
             try
             {
-                using var request = new UnityWebRequest(url, "POST");
-                byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
-                request.uploadHandler = new UploadHandlerRaw(bodyBytes);
-                request.downloadHandler = new DownloadHandlerBuffer();
-                request.SetRequestHeader("Content-Type", contentType);
-                request.timeout = _config.HttpTimeout;
+                string data;
                 
-                var operation = request.SendWebRequest();
-                while (!operation.isDone)
+                // 优先使用平台适配器（确保微信/WebGL 路径一致）
+                if (_adapter != null)
                 {
-                    await Task.Yield();
+                    data = await _adapter.HttpPost(url, body, contentType, _config.HttpTimeout);
+                }
+                else
+                {
+                    // Fallback: 直接使用 UnityWebRequest
+                    data = await HttpPostFallback(url, body, contentType);
                 }
                 
                 var response = new HttpResponse
                 {
-                    StatusCode = (int)request.responseCode,
-                    IsSuccess = request.result == UnityWebRequest.Result.Success,
-                    Data = request.downloadHandler?.text,
-                    Error = request.error
+                    StatusCode = 200,
+                    IsSuccess = true,
+                    Data = data,
+                    Error = null
                 };
                 
-                HandleRequestResult(response.IsSuccess);
+                HandleRequestResult(true);
                 return response;
             }
             catch (Exception ex)
@@ -263,6 +269,54 @@ namespace CYFramework.Core.Network
                 HandleRequestResult(false);
                 return new HttpResponse { IsSuccess = false, Error = ex.Message };
             }
+        }
+        
+        /// <summary>
+        /// HTTP GET Fallback（无适配器时使用）
+        /// </summary>
+        private async Task<string> HttpGetFallback(string url)
+        {
+            using var request = UnityWebRequest.Get(url);
+            request.timeout = _config.HttpTimeout;
+            
+            var operation = request.SendWebRequest();
+            while (!operation.isDone)
+            {
+                await Task.Yield();
+            }
+            
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                throw new Exception(request.error);
+            }
+            
+            return request.downloadHandler?.text;
+        }
+        
+        /// <summary>
+        /// HTTP POST Fallback（无适配器时使用）
+        /// </summary>
+        private async Task<string> HttpPostFallback(string url, string body, string contentType)
+        {
+            using var request = new UnityWebRequest(url, "POST");
+            byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
+            request.uploadHandler = new UploadHandlerRaw(bodyBytes);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", contentType);
+            request.timeout = _config.HttpTimeout;
+            
+            var operation = request.SendWebRequest();
+            while (!operation.isDone)
+            {
+                await Task.Yield();
+            }
+            
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                throw new Exception(request.error);
+            }
+            
+            return request.downloadHandler?.text;
         }
         
         #endregion

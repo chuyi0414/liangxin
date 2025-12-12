@@ -106,6 +106,12 @@ namespace CYFramework.Core.UI
         
         // 面板栈（用于返回逻辑）
         private readonly Stack<UIPanel> _panelStack = new();
+
+        // 面板栈整理用临时缓冲（避免频繁分配）
+        private readonly List<UIPanel> _stackBuffer = new();
+        
+        // 更新循环用临时列表（避免遍历时集合被修改导致崩溃）
+        private readonly List<UIPanel> _updateBuffer = new();
         
         // 缓存的面板（对象池）
         private readonly Dictionary<Type, Queue<UIPanel>> _panelPool = new();
@@ -175,9 +181,15 @@ namespace CYFramework.Core.UI
         public void OnUpdate(float deltaTime)
         {
             // 驱动所有已打开面板的 Update
+            // 使用临时列表避免遍历时集合被修改导致 InvalidOperationException
             float realDeltaTime = Time.unscaledDeltaTime;
-            foreach (var panel in _openedPanels.Values)
+            
+            _updateBuffer.Clear();
+            _updateBuffer.AddRange(_openedPanels.Values);
+            
+            for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                var panel = _updateBuffer[i];
                 if (panel != null && panel.IsOpened)
                 {
                     panel.InternalUpdate(deltaTime, realDeltaTime);
@@ -188,9 +200,15 @@ namespace CYFramework.Core.UI
         public void OnLateUpdate(float deltaTime)
         {
             // 驱动所有已打开面板的 LateUpdate
+            // 使用临时列表避免遍历时集合被修改导致 InvalidOperationException
             float realDeltaTime = Time.unscaledDeltaTime;
-            foreach (var panel in _openedPanels.Values)
+            
+            _updateBuffer.Clear();
+            _updateBuffer.AddRange(_openedPanels.Values);
+            
+            for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                var panel = _updateBuffer[i];
                 if (panel != null && panel.IsOpened)
                 {
                     panel.InternalLateUpdate(deltaTime, realDeltaTime);
@@ -330,13 +348,16 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void Back()
         {
+            // 清理栈顶无效项（null / 已关闭），避免 Back 到失效面板
+            CleanupStackTop();
+
             if (_panelStack.Count == 0)
             {
                 CYLog.Debug("[UIManager] 面板栈为空，无法返回");
                 return;
             }
             
-            var topPanel = _panelStack.Pop();
+            var topPanel = _panelStack.Peek();
             ClosePanel(topPanel);
         }
         
@@ -394,6 +415,286 @@ namespace CYFramework.Core.UI
         public bool IsOpened<T>() where T : UIPanel
         {
             return _openedPanels.ContainsKey(typeof(T));
+        }
+
+        /// <summary>
+        /// 检查面板是否已打开（按类型）
+        /// </summary>
+        public bool IsOpened(Type panelType)
+        {
+            return _openedPanels.ContainsKey(panelType);
+        }
+
+        /// <summary>
+        /// 是否存在面板（IsOpened 的别名）
+        /// </summary>
+        public bool Has<T>() where T : UIPanel
+        {
+            return IsOpened<T>();
+        }
+
+        /// <summary>
+        /// 是否存在面板（IsOpened 的别名，按类型）
+        /// </summary>
+        public bool Has(Type panelType)
+        {
+            return IsOpened(panelType);
+        }
+
+        /// <summary>
+        /// 尝试获取已打开的面板（泛型版）
+        /// </summary>
+        public bool TryGet<T>(out T panel) where T : UIPanel
+        {
+            if (_openedPanels.TryGetValue(typeof(T), out var p))
+            {
+                panel = p as T;
+                return panel != null;
+            }
+
+            panel = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试获取已打开的面板（按类型）
+        /// </summary>
+        public bool TryGet(Type panelType, out UIPanel panel)
+        {
+            return _openedPanels.TryGetValue(panelType, out panel);
+        }
+
+        /// <summary>
+        /// 获取已打开的面板（按类型，不存在则返回 null）
+        /// </summary>
+        public UIPanel Get(Type panelType)
+        {
+            return _openedPanels.TryGetValue(panelType, out var panel) ? panel : null;
+        }
+
+        /// <summary>
+        /// 打开面板：如果已打开则直接返回（不触发 Refresh）
+        /// </summary>
+        public T OpenIfNotOpened<T>(object data = null) where T : UIPanel
+        {
+            if (_openedPanels.TryGetValue(typeof(T), out var existingPanel))
+            {
+                return existingPanel as T;
+            }
+
+            return Open<T>(data);
+        }
+
+        /// <summary>
+        /// 尝试打开面板，返回是否成功
+        /// </summary>
+        public bool TryOpen<T>(out T panel, object data = null) where T : UIPanel
+        {
+            panel = Open<T>(data);
+            return panel != null;
+        }
+
+        /// <summary>
+        /// 刷新面板（仅当已打开时才会执行 InternalRefresh）
+        /// </summary>
+        public bool Refresh<T>(object data = null) where T : UIPanel
+        {
+            if (_openedPanels.TryGetValue(typeof(T), out var panel))
+            {
+                panel.InternalRefresh(data);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 刷新面板（按类型，仅当已打开时才会执行 InternalRefresh）
+        /// </summary>
+        public bool Refresh(Type panelType, object data = null)
+        {
+            if (_openedPanels.TryGetValue(panelType, out var panel))
+            {
+                panel.InternalRefresh(data);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 切换面板：已打开则关闭，未打开则打开
+        /// </summary>
+        public bool Toggle<T>(object data = null) where T : UIPanel
+        {
+            if (IsOpened<T>())
+            {
+                Close<T>();
+                return false;
+            }
+
+            return Open<T>(data) != null;
+        }
+
+        /// <summary>
+        /// 获取或打开面板（等价于 Open；已打开时会走 Open 的刷新逻辑）
+        /// </summary>
+        public T GetOrOpen<T>(object data = null) where T : UIPanel
+        {
+            return Open<T>(data);
+        }
+
+        /// <summary>
+        /// 若已打开则关闭，并返回是否发生了关闭
+        /// </summary>
+        public bool CloseIfOpened<T>() where T : UIPanel
+        {
+            if (!_openedPanels.TryGetValue(typeof(T), out var panel))
+            {
+                return false;
+            }
+
+            ClosePanel(panel);
+            return true;
+        }
+
+        /// <summary>
+        /// 若已打开则关闭（按类型），并返回是否发生了关闭
+        /// </summary>
+        public bool CloseIfOpened(Type panelType)
+        {
+            if (!_openedPanels.TryGetValue(panelType, out var panel))
+            {
+                return false;
+            }
+
+            ClosePanel(panel);
+            return true;
+        }
+
+        /// <summary>
+        /// 若该实例当前由 UIManager 管理并处于打开状态，则关闭它
+        /// </summary>
+        public bool CloseIfOpened(UIPanel panel)
+        {
+            if (panel == null)
+            {
+                return false;
+            }
+
+            var panelType = panel.GetType();
+            if (!_openedPanels.TryGetValue(panelType, out var openedPanel) || openedPanel != panel)
+            {
+                return false;
+            }
+
+            ClosePanel(panel);
+            return true;
+        }
+
+        /// <summary>
+        /// 批量关闭指定类型的面板
+        /// </summary>
+        public void ClosePanels(params Type[] panelTypes)
+        {
+            if (panelTypes == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < panelTypes.Length; i++)
+            {
+                Close(panelTypes[i]);
+            }
+        }
+
+        /// <summary>
+        /// 批量关闭指定层级的所有面板
+        /// </summary>
+        public void CloseLayers(params UILayer[] layers)
+        {
+            if (layers == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < layers.Length; i++)
+            {
+                CloseLayer(layers[i]);
+            }
+        }
+
+        /// <summary>
+        /// 是否可以 Back（面板栈中是否存在可返回的有效面板）
+        /// </summary>
+        public bool CanBack
+        {
+            get
+            {
+                CleanupStackTop();
+                return _panelStack.Count > 0;
+            }
+        }
+
+        /// <summary>
+        /// 尝试 Back，成功返回 true
+        /// </summary>
+        public bool TryBack()
+        {
+            if (!CanBack)
+            {
+                return false;
+            }
+
+            Back();
+            return true;
+        }
+
+        /// <summary>
+        /// 异步打开面板（回调版）
+        /// 说明：
+        /// 1) 若已打开：会先 Refresh，然后立刻回调
+        /// 2) 若资源已缓存/或池中有实例：会同步 Open，然后立刻回调
+        /// 3) 否则：先异步加载预制体，再 Open，最后回调
+        /// </summary>
+        public void OpenAsync<T>(Action<T> onOpened, object data = null) where T : UIPanel
+        {
+            var panelType = typeof(T);
+
+            if (_openedPanels.TryGetValue(panelType, out var existingPanel))
+            {
+                existingPanel.InternalRefresh(data);
+                onOpened?.Invoke(existingPanel as T);
+                return;
+            }
+
+            bool hasPooledInstance = false;
+            if (_config.EnablePool && _panelPool.TryGetValue(panelType, out var pool) && pool.Count > 0)
+            {
+                hasPooledInstance = true;
+            }
+
+            var path = GetPrefabPath(panelType);
+            if (hasPooledInstance || _prefabCache.ContainsKey(path))
+            {
+                var panel = Open<T>(data);
+                onOpened?.Invoke(panel);
+                return;
+            }
+
+            _resourceLoader.LoadAsync<GameObject>(path, prefab =>
+            {
+                if (prefab == null)
+                {
+                    CYLog.Error($"[UIManager] 找不到预制体: {path}");
+                    onOpened?.Invoke(null);
+                    return;
+                }
+
+                _prefabCache[path] = prefab;
+                var panel = Open<T>(data);
+                onOpened?.Invoke(panel);
+            });
         }
         
         /// <summary>
@@ -746,6 +1047,18 @@ namespace CYFramework.Core.UI
         private void ClosePanel(UIPanel panel, bool isShutdown = false)
         {
             var panelType = panel.GetType();
+
+            // 只有关闭的是“当前栈顶”时，才需要在关闭后 Resume 新栈顶（返回到上一个面板）
+            bool shouldResume = false;
+            if (panel.IsStackable)
+            {
+                // 先清理栈顶的无效项，保证 Peek 是有效面板
+                CleanupStackTop();
+                // 判断本次关闭是否为栈顶（只有栈顶才触发 Resume）
+                shouldResume = _panelStack.Count > 0 && _panelStack.Peek() == panel;
+                // 将该面板从栈中移除，保持栈状态一致
+                RemoveFromStack(panel);
+            }
             
             // 调用关闭回调
             panel.InternalClose(isShutdown, null);
@@ -779,13 +1092,17 @@ namespace CYFramework.Core.UI
                 UnityEngine.Object.Destroy(panel.gameObject);
             }
             
-            // 恢复栈顶面板
-            if (_panelStack.Count > 0)
+            // 关闭栈顶后，恢复新的栈顶面板（触发 OnResume）
+            if (!isShutdown && shouldResume)
             {
-                var topPanel = _panelStack.Peek();
-                if (topPanel != null && topPanel.IsOpened)
+                CleanupStackTop();
+                if (_panelStack.Count > 0)
                 {
-                    topPanel.InternalResume();
+                    var topPanel = _panelStack.Peek();
+                    if (topPanel != null && topPanel.IsOpened)
+                    {
+                        topPanel.InternalResume();
+                    }
                 }
             }
             
@@ -806,6 +1123,66 @@ namespace CYFramework.Core.UI
             
             // 默认路径：UI/Panels/面板类名
             return $"{_config.PrefabPathPrefix}{panelType.Name}";
+        }
+
+        /// <summary>
+        /// 清理面板栈顶的无效项（null / 已关闭）
+        /// 目的：保证 Peek/Back/Resume 操作拿到的始终是有效面板
+        /// </summary>
+        private void CleanupStackTop()
+        {
+            while (_panelStack.Count > 0)
+            {
+                var top = _panelStack.Peek();
+                if (top == null || !top.IsOpened)
+                {
+                    // 栈顶已经无效，丢弃
+                    _panelStack.Pop();
+                    continue;
+                }
+
+                // 栈顶有效，结束清理
+                break;
+            }
+        }
+
+        /// <summary>
+        /// 从面板栈中移除指定面板（并清理无效项），保持原有顺序不变
+        /// 说明：Stack 只能 Pop/Push，所以用 _stackBuffer 做一次中转
+        /// </summary>
+        private void RemoveFromStack(UIPanel panel)
+        {
+            if (_panelStack.Count == 0)
+            {
+                return;
+            }
+
+            _stackBuffer.Clear();
+
+            while (_panelStack.Count > 0)
+            {
+                var p = _panelStack.Pop();
+                if (p == null || !p.IsOpened)
+                {
+                    // 丢弃无效项
+                    continue;
+                }
+
+                if (p == panel)
+                {
+                    // 跳过目标面板（相当于移除）
+                    continue;
+                }
+
+                // 暂存其它有效面板
+                _stackBuffer.Add(p);
+            }
+
+            // 逆序 push 回去，恢复原来的栈顺序
+            for (int i = _stackBuffer.Count - 1; i >= 0; i--)
+            {
+                _panelStack.Push(_stackBuffer[i]);
+            }
         }
         
         #endregion

@@ -20,6 +20,10 @@ namespace CYFramework.Infrastructure
         public Func<object> Factory;
         public object Instance;
         public bool IsLazy;
+        
+        // ❗ 注意：Dependencies 字段当前未被使用
+        // 拓扑排序依赖 InitOrder 字段，此字段为预留功能
+        // 若需启用依赖声明，可通过 [DependsOn] Attribute 填充
         public string[] Dependencies;
     }
     
@@ -112,6 +116,11 @@ namespace CYFramework.Infrastructure
         {
             var serviceType = typeof(TService);
             
+            if (_registrations.ContainsKey(serviceType))
+            {
+                CYLog.Warning($"[ServiceLocator] 服务已注册，将覆盖: {serviceType.Name}");
+            }
+            
             _registrations[serviceType] = new ServiceRegistration
             {
                 ServiceType = serviceType,
@@ -121,6 +130,13 @@ namespace CYFramework.Infrastructure
                 Instance = null,
                 IsLazy = true
             };
+            
+            if (scope == ServiceScope.Scoped)
+            {
+                _scopedServices.Add(serviceType);
+            }
+            
+            _initOrder = null;
         }
         
         #endregion
@@ -320,6 +336,7 @@ namespace CYFramework.Infrastructure
         
         /// <summary>
         /// 解析实例
+        /// 如果框架已初始化，新创建的实例会自动调用 Initialize
         /// </summary>
         private static object ResolveInstance(ServiceRegistration registration)
         {
@@ -341,6 +358,11 @@ namespace CYFramework.Infrastructure
                     try
                     {
                         registration.Instance = registration.Factory();
+                        // 如果框架已初始化，自动初始化新创建的实例（Lazy/Scoped 重建场景）
+                        if (_initialized)
+                        {
+                            InitializeInstanceIfNeeded(registration.Instance);
+                        }
                     }
                     finally
                     {
@@ -352,7 +374,13 @@ namespace CYFramework.Infrastructure
                     _resolvingStack.Add(registration.ServiceType);
                     try
                     {
-                        return registration.Factory();
+                        var instance = registration.Factory();
+                        // Transient 实例也需要初始化
+                        if (_initialized)
+                        {
+                            InitializeInstanceIfNeeded(instance);
+                        }
+                        return instance;
                     }
                     finally
                     {
@@ -361,6 +389,26 @@ namespace CYFramework.Infrastructure
                     
                 default:
                     throw new ArgumentOutOfRangeException();
+            }
+        }
+        
+        /// <summary>
+        /// 如果实例实现了 IInitializable，自动调用 Initialize
+        /// </summary>
+        private static void InitializeInstanceIfNeeded(object instance)
+        {
+            if (instance is IInitializable initializable)
+            {
+                try
+                {
+                    initializable.Initialize();
+                    CYLog.Debug($"[ServiceLocator] 延迟初始化完成: {instance.GetType().Name}");
+                }
+                catch (Exception ex)
+                {
+                    CYLog.Error($"[ServiceLocator] 延迟初始化失败: {instance.GetType().Name}", ex);
+                    throw;
+                }
             }
         }
         
@@ -384,6 +432,10 @@ namespace CYFramework.Infrastructure
         
         /// <summary>
         /// 构建初始化顺序（拓扑排序）
+        /// ❗ 当前实现说明：
+        /// - 实际初始化顺序主要依赖 IInitializable.InitOrder
+        /// - Dependencies 字段目前未被填充，拓扑排序逻辑为预留功能
+        /// - 若需启用显式依赖声明，可扩展 Register API 或添加 [DependsOn] Attribute
         /// </summary>
         private static void BuildInitOrder()
         {

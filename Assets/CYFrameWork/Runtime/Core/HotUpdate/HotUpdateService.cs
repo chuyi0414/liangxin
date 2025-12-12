@@ -211,8 +211,8 @@ namespace CYFramework.Core.HotUpdate
             
             try
             {
-#if CY_WECHAT
-                // 微信小游戏：使用微信 API 检查更新
+#if CY_WECHAT || UNITY_WEBGL
+                // WebGL/微信小游戏：使用微信 API 检查更新
                 return await CheckWeChatUpdate();
 #else
                 // Native: 从服务器获取版本信息
@@ -407,19 +407,29 @@ namespace CYFramework.Core.HotUpdate
         
         /// <summary>
         /// 检查本地资源是否有效
+        /// 文档：WebGL/微信不支持 System.IO
         /// </summary>
         private bool IsLocalBundleValid(AssetBundle bundle)
         {
+#if CY_WECHAT || UNITY_WEBGL
+            // WebGL/微信平台：使用 Storage 检查
+            if (ServiceLocator.TryGet<IStorageAdapter>(out var storage))
+            {
+                string hashKey = $"CYF_Bundle_{bundle.name}_hash";
+                string localHash = storage.GetString(hashKey, null);
+                return !string.IsNullOrEmpty(localHash) && localHash == bundle.hash;
+            }
+            return false;
+#else
+            // Native 平台：使用文件系统
             string localPath = System.IO.Path.Combine(Application.persistentDataPath, "Bundles", bundle.name);
             string hashPath = localPath + ".hash";
             
-            // 检查文件是否存在
             if (!System.IO.File.Exists(localPath) || !System.IO.File.Exists(hashPath))
             {
                 return false;
             }
             
-            // 检查 hash 是否匹配
             try
             {
                 string localHash = System.IO.File.ReadAllText(hashPath).Trim();
@@ -429,28 +439,20 @@ namespace CYFramework.Core.HotUpdate
             {
                 return false;
             }
+#endif
         }
         
         /// <summary>
         /// 下载单个资源包
+        /// 文档：WebGL/微信不支持 System.IO，使用 Storage 存储
         /// </summary>
         private async Task<bool> DownloadBundle(AssetBundle bundle)
         {
             string url = _config.CdnBaseUrl + bundle.name;
-            string localDir = System.IO.Path.Combine(Application.persistentDataPath, "Bundles");
-            string localPath = System.IO.Path.Combine(localDir, bundle.name);
-            string hashPath = localPath + ".hash";
-            
             CYLog.Debug($"[HotUpdateService] 下载: {url}");
             
             try
             {
-                // 确保目录存在
-                if (!System.IO.Directory.Exists(localDir))
-                {
-                    System.IO.Directory.CreateDirectory(localDir);
-                }
-                
                 // 使用 UnityWebRequest 下载
                 using var request = UnityEngine.Networking.UnityWebRequest.Get(url);
                 request.timeout = _config.DownloadTimeout;
@@ -467,15 +469,45 @@ namespace CYFramework.Core.HotUpdate
                     return false;
                 }
                 
-                // 保存文件
                 byte[] data = request.downloadHandler.data;
-                await System.IO.File.WriteAllBytesAsync(localPath, data);
                 
-                // 保存 hash
+#if CY_WECHAT || UNITY_WEBGL
+                // WebGL/微信平台：使用 Storage 存储
+                if (ServiceLocator.TryGet<IStorageAdapter>(out var storage))
+                {
+                    // 将二进制数据转为 Base64 存储
+                    string dataKey = $"CYF_Bundle_{bundle.name}";
+                    string hashKey = $"CYF_Bundle_{bundle.name}_hash";
+                    
+                    storage.SetString(dataKey, Convert.ToBase64String(data));
+                    storage.SetString(hashKey, bundle.hash);
+                    storage.Save();
+                    
+                    CYLog.Debug($"[HotUpdateService] 下载完成 (Storage): {bundle.name}");
+                    return true;
+                }
+                else
+                {
+                    CYLog.Error("[HotUpdateService] IStorageAdapter 未注册");
+                    return false;
+                }
+#else
+                // Native 平台：使用文件系统
+                string localDir = System.IO.Path.Combine(Application.persistentDataPath, "Bundles");
+                string localPath = System.IO.Path.Combine(localDir, bundle.name);
+                string hashPath = localPath + ".hash";
+                
+                if (!System.IO.Directory.Exists(localDir))
+                {
+                    System.IO.Directory.CreateDirectory(localDir);
+                }
+                
+                await System.IO.File.WriteAllBytesAsync(localPath, data);
                 await System.IO.File.WriteAllTextAsync(hashPath, bundle.hash);
                 
                 CYLog.Debug($"[HotUpdateService] 下载完成: {bundle.name}");
                 return true;
+#endif
             }
             catch (Exception ex)
             {

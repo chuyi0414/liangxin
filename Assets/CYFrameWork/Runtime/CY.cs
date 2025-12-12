@@ -261,9 +261,17 @@ namespace CYFramework
         /// <summary>
         /// 下一帧执行
         /// </summary>
-        public static Core.Timer.Timer NextFrame(Action callback)
+        public static void NextFrame(Action callback)
         {
-            return Timer.NextFrame(callback);
+            Timer.NextFrame(callback);
+        }
+        
+        /// <summary>
+        /// 下一帧执行（返回 Timer 以便取消）
+        /// </summary>
+        public static Core.Timer.Timer NextFrameTimer(Action callback)
+        {
+            return Timer.NextFrameTimer(callback);
         }
         
         /// <summary>

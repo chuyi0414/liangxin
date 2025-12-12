@@ -78,17 +78,25 @@ namespace CYFramework.Core.Procedure
     /// <summary>
     /// 可接收参数的流程基类
     /// </summary>
-    public abstract class ProcedureBase<TData> : ProcedureBase
+    public abstract class ProcedureBase<TData> : ProcedureBase, IUserDataReceiver
     {
         protected TData UserData { get; private set; }
         
-        internal void SetUserData(object data)
+        void IUserDataReceiver.SetUserData(object data)
         {
             if (data is TData typedData)
             {
                 UserData = typedData;
             }
         }
+    }
+    
+    /// <summary>
+    /// 用户数据接收器接口（避免反射）
+    /// </summary>
+    internal interface IUserDataReceiver
+    {
+        void SetUserData(object data);
     }
     
     /// <summary>
@@ -107,7 +115,15 @@ namespace CYFramework.Core.Procedure
         
         // 配置
         private string _entryProcedure = "";
+        
+        // 自动注册开关
+        // ❗ WebGL/微信平台不支持 AppDomain.GetAssemblies()，默认禁用自动扫描
+        // 建议使用显式注册: AddProcedure<T>() 或传入指定 Assembly
+#if UNITY_WEBGL || CY_WECHAT
+        private bool _autoRegister = false;
+#else
         private bool _autoRegister = true;
+#endif
         
         public ProcedureBase CurrentProcedure => _currentProcedure;
         public string CurrentProcedureName => _currentProcedure?.GetType().Name;
@@ -129,6 +145,8 @@ namespace CYFramework.Core.Procedure
             }
             
             // 自动注册流程
+            // ❗ WebGL/微信平台不支持 AppDomain，默认禁用自动扫描
+            // 若需要在这些平台使用，请通过 AddProcedure<T>() 显式注册
             if (_autoRegister)
             {
                 AutoRegisterAll();
@@ -169,10 +187,25 @@ namespace CYFramework.Core.Procedure
         
         /// <summary>
         /// 自动扫描并注册所有标记了 [AutoRegisterProcedure] 的流程
+        /// ❗ 注意：WebGL/微信平台不支持 AppDomain.GetAssemblies()，必须传入指定 Assembly
+        /// 推荐做法：
+        /// 1) 显式注册: AddProcedure&lt;MyProcedure&gt;()
+        /// 2) 传入指定程序集: AutoRegisterAll(typeof(MyProcedure).Assembly)
+        /// 3) Editor 生成注册表（未实现）
         /// </summary>
+        /// <param name="assembly">指定的程序集，不传则扫描所有程序集（仅 Native 端支持）</param>
         public void AutoRegisterAll(Assembly assembly = null)
         {
-            // 如果没有指定程序集，扫描所有已加载的程序集
+#if UNITY_WEBGL || CY_WECHAT
+            // WebGL/微信平台不支持 AppDomain，必须传入指定程序集
+            if (assembly == null)
+            {
+                CYLog.Warning("[ProcedureManager] WebGL/微信平台不支持自动扫描程序集，请使用 AddProcedure<T>() 显式注册或传入指定 Assembly");
+                return;
+            }
+#endif
+            
+            // 如果没有指定程序集，扫描所有已加载的程序集（仅 Native 端支持）
             var assemblies = assembly != null 
                 ? new[] { assembly } 
                 : AppDomain.CurrentDomain.GetAssemblies()
@@ -315,12 +348,10 @@ namespace CYFramework.Core.Procedure
             
             _currentProcedure?.InternalOnLeave(nextProcedure);
             
-            // 设置用户数据
-            if (userData != null && nextProcedure is ProcedureBase procedure)
+            // 设置用户数据（使用接口避免反射）
+            if (userData != null && nextProcedure is IUserDataReceiver receiver)
             {
-                var method = procedure.GetType().GetMethod("SetUserData", 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                method?.Invoke(procedure, new[] { userData });
+                receiver.SetUserData(userData);
             }
             
             _currentProcedure = nextProcedure;

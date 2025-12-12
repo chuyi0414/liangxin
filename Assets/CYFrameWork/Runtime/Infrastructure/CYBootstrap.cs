@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using CYFramework.Core.Config;
 using CYFramework.Core.Event;
 using CYFramework.Core.HotUpdate;
+using CYFramework.Core.Scene;
+using CYFramework.Core.FSM;
 using CYFramework.Core.Network;
 using CYFramework.Core.Pool;
 using CYFramework.Core.Procedure;
@@ -165,6 +167,8 @@ namespace CYFramework.Infrastructure
             var vSync = bootstrapConfig?.VSync ?? false;
             var runInBackground = bootstrapConfig?.RunInBackground ?? true;
             var screenNeverSleep = bootstrapConfig?.ScreenNeverSleep ?? true;
+            var maxPauseTolerance = bootstrapConfig?.MaxPauseTolerance ?? _maxPauseTolerance;
+            _maxPauseTolerance = maxPauseTolerance;
             
             // 1. 初始化日志系统
             CYLog.Initialize(logLevel);
@@ -233,16 +237,11 @@ namespace CYFramework.Infrastructure
             // ResourceLoader - 资源加载器
             ServiceLocator.Register<IResourceLoader, ResourceLoader>();
             
-            // NetworkService - 网络服务
-            ServiceLocator.Register<NetworkService>(() => new NetworkService());
+            // SceneLoader - 场景加载器
+            ServiceLocator.Register<SceneLoader, SceneLoader>();
             
-            // SaveService - 存档服务
-            ServiceLocator.Register<SaveService>(() => new SaveService());
+            ServiceLocator.Register<FSMManager, FSMManager>();
             
-            // HotUpdateService - 热更新服务
-            ServiceLocator.Register<IHotUpdateService, HotUpdateService>();
-            
-            // AudioService - 音频服务（根据平台选择实现）
 #if CY_WECHAT || UNITY_WEBGL
             ServiceLocator.Register<IAudioService, WeChatAudioService>();
 #else
@@ -260,6 +259,15 @@ namespace CYFramework.Infrastructure
             
             // EntityManager - 实体管理器
             ServiceLocator.Register<EntityManager, EntityManager>();
+            
+            // NetworkService - 网络服务
+            ServiceLocator.Register<NetworkService>(() => new NetworkService());
+            
+            // SaveService - 存档服务
+            ServiceLocator.Register<SaveService>(() => new SaveService());
+            
+            // HotUpdateService - 热更新服务
+            ServiceLocator.Register<IHotUpdateService, HotUpdateService>();
             
             // VibrationAdapter - 震动适配器
 #if CY_WECHAT || UNITY_WEBGL
@@ -289,14 +297,15 @@ namespace CYFramework.Infrastructure
         
         /// <summary>
         /// 注册全局异常处理
+        /// 文档：WebGL/微信不支持 AppDomain
         /// </summary>
         private void RegisterExceptionHandler()
         {
             Application.logMessageReceived += OnLogMessageReceived;
             
-            #if !UNITY_WEBGL
+#if !(CY_WECHAT || UNITY_WEBGL)
             System.AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
-            #endif
+#endif
         }
         
         /// <summary>
@@ -308,9 +317,9 @@ namespace CYFramework.Infrastructure
             
             Application.logMessageReceived -= OnLogMessageReceived;
             
-            #if !UNITY_WEBGL
+#if !(CY_WECHAT || UNITY_WEBGL)
             System.AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
-            #endif
+#endif
             
             ServiceLocator.DisposeAll();
             
@@ -451,4 +460,3 @@ namespace CYFramework.Infrastructure
         #endregion
     }
 }
-

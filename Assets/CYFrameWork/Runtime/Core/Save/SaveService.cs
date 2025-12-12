@@ -68,6 +68,7 @@ namespace CYFramework.Core.Save
     {
         /// <summary>
         /// 是否启用加密
+        /// 注意：WebGL/微信平台需要验证 AES 可用性
         /// </summary>
         public bool EnableEncryption = true;
         
@@ -82,7 +83,7 @@ namespace CYFramework.Core.Save
         public bool EnableChecksum = true;
         
         /// <summary>
-        /// 是否启用备份
+        /// 是否启用备份（仅 Native 平台有效）
         /// </summary>
         public bool EnableBackup = true;
         
@@ -341,8 +342,17 @@ namespace CYFramework.Core.Save
         {
             try
             {
-                string path = GetSavePath(key);
-                _fileSystem?.DeleteFile(path);
+                if (_useStorageMode)
+                {
+                    _storage?.DeleteKey(GetStorageKey(key));
+                    _storage?.Save();
+                }
+                else
+                {
+                    string path = GetSavePath(key);
+                    _fileSystem?.DeleteFile(path);
+                }
+
                 _cache.Remove(key);
                 
                 CYLog.Debug($"[SaveService] 删除成功: {key}");
@@ -512,15 +522,37 @@ namespace CYFramework.Core.Save
         
         /// <summary>
         /// AES 加密
-        /// 使用纯 C# 实现，兼容 WebGL
+        /// 使用纯 C# 实现，兼容 WebGL/微信（需要验证）
+        /// 如果平台不支持，会回退到明文存储
         /// </summary>
         private string Encrypt(string plainText)
+        {
+#if CY_WECHAT || UNITY_WEBGL
+            // WebGL/微信平台：尝试加密，失败则回退到明文
+            try
+            {
+                return EncryptInternal(plainText);
+            }
+            catch (Exception ex)
+            {
+                CYLog.Warning($"[SaveService] WebGL/微信平台加密失败，回退到明文: {ex.Message}");
+                return plainText;
+            }
+#else
+            return EncryptInternal(plainText);
+#endif
+        }
+        
+        /// <summary>
+        /// AES 加密内部实现
+        /// </summary>
+        private string EncryptInternal(string plainText)
         {
             try
             {
                 using var aes = Aes.Create();
                 aes.Key = Encoding.UTF8.GetBytes(_config.EncryptionKey.PadRight(16).Substring(0, 16));
-                aes.IV = new byte[16]; // 简化：使用零 IV
+                aes.IV = new byte[16];
                 aes.Mode = CipherMode.CBC;
                 aes.Padding = PaddingMode.PKCS7;
                 
@@ -539,8 +571,30 @@ namespace CYFramework.Core.Save
         
         /// <summary>
         /// AES 解密
+        /// WebGL/微信平台如果之前回退到明文，这里也会处理
         /// </summary>
         private string Decrypt(string cipherText)
+        {
+#if CY_WECHAT || UNITY_WEBGL
+            // WebGL/微信平台：尝试解密，失败则假定是明文
+            try
+            {
+                return DecryptInternal(cipherText);
+            }
+            catch
+            {
+                // 可能是明文存储，直接返回
+                return cipherText;
+            }
+#else
+            return DecryptInternal(cipherText);
+#endif
+        }
+        
+        /// <summary>
+        /// AES 解密内部实现
+        /// </summary>
+        private string DecryptInternal(string cipherText)
         {
             try
             {

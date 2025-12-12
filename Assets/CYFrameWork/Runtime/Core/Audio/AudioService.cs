@@ -30,6 +30,10 @@ namespace CYFramework.Core.Audio
         void SetSFXVolume(float volume);
         void Mute(bool mute);
         bool IsMuted { get; }
+        
+        void PreloadBGM(string name);
+        void PreloadSFX(string name);
+        void PreloadAsync(string[] names, Action onComplete = null);
     }
     
     /// <summary>
@@ -421,6 +425,58 @@ namespace CYFramework.Core.Audio
             if (_bgmSource != null)
             {
                 _bgmSource.volume = _bgmVolume * _masterVolume;
+            }
+        }
+        
+        #endregion
+        
+        #region 预加载 API
+        
+        /// <summary>
+        /// 预加载 BGM
+        /// </summary>
+        public void PreloadBGM(string name)
+        {
+            LoadClip(name);
+        }
+        
+        /// <summary>
+        /// 预加载 SFX
+        /// </summary>
+        public void PreloadSFX(string name)
+        {
+            LoadClip(name);
+        }
+        
+        /// <summary>
+        /// 批量预加载
+        /// </summary>
+        public void PreloadAsync(string[] names, Action onComplete = null)
+        {
+            if (names == null || names.Length == 0)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+            
+            int total = names.Length;
+            int loaded = 0;
+            
+            foreach (var name in names)
+            {
+                _resourceLoader?.LoadAsync<AudioClip>($"{_audioPath}{name}", clip =>
+                {
+                    if (clip != null)
+                    {
+                        _clipCache[name] = clip;
+                    }
+                    
+                    loaded++;
+                    if (loaded >= total)
+                    {
+                        onComplete?.Invoke();
+                    }
+                });
             }
         }
         

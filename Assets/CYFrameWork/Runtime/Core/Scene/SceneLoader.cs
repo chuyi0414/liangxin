@@ -100,6 +100,9 @@ namespace CYFramework.Core.Scene
         
         #region 异步加载
         
+        private Coroutine _currentLoadCoroutine;
+        private bool _cancelRequested;
+        
         /// <summary>
         /// 异步加载场景
         /// </summary>
@@ -107,21 +110,37 @@ namespace CYFramework.Core.Scene
         /// <param name="onProgress">进度回调 (0-1)</param>
         /// <param name="onComplete">完成回调</param>
         /// <param name="mode">加载模式</param>
+        /// <param name="onError">错误回调</param>
         public void LoadSceneAsync(string sceneName, Action<float> onProgress = null, 
-            Action onComplete = null, SceneLoadMode mode = SceneLoadMode.Single)
+            Action onComplete = null, SceneLoadMode mode = SceneLoadMode.Single,
+            Action<string> onError = null)
         {
             if (_isLoading)
             {
                 CYLog.Warning("[SceneLoader] 正在加载场景中，请等待");
+                onError?.Invoke("正在加载场景中");
                 return;
             }
             
-            CYBootstrap.Instance?.StartCoroutine(
-                LoadSceneCoroutine(sceneName, onProgress, onComplete, mode));
+            _cancelRequested = false;
+            _currentLoadCoroutine = CYBootstrap.Instance?.StartCoroutine(
+                LoadSceneCoroutine(sceneName, onProgress, onComplete, mode, onError));
+        }
+        
+        /// <summary>
+        /// 取消当前加载
+        /// </summary>
+        public void CancelLoading()
+        {
+            if (_isLoading && _currentLoadCoroutine != null)
+            {
+                _cancelRequested = true;
+                CYLog.Debug("[SceneLoader] 取消加载请求已发送");
+            }
         }
         
         private IEnumerator LoadSceneCoroutine(string sceneName, Action<float> onProgress, 
-            Action onComplete, SceneLoadMode mode)
+            Action onComplete, SceneLoadMode mode, Action<string> onError = null)
         {
             _isLoading = true;
             
@@ -129,14 +148,44 @@ namespace CYFramework.Core.Scene
                 ? LoadSceneMode.Single 
                 : LoadSceneMode.Additive;
             
-            var asyncOp = SceneManager.LoadSceneAsync(sceneName, loadMode);
+            AsyncOperation asyncOp = null;
+            
+            try
+            {
+                asyncOp = SceneManager.LoadSceneAsync(sceneName, loadMode);
+            }
+            catch (System.Exception ex)
+            {
+                _isLoading = false;
+                CYLog.Error($"[SceneLoader] 加载场景失败: {sceneName}", ex);
+                onError?.Invoke(ex.Message);
+                yield break;
+            }
+            
+            if (asyncOp == null)
+            {
+                _isLoading = false;
+                CYLog.Error($"[SceneLoader] 场景不存在: {sceneName}");
+                onError?.Invoke($"场景不存在: {sceneName}");
+                yield break;
+            }
+            
             asyncOp.allowSceneActivation = false;
             
             CYLog.Info($"[SceneLoader] 开始异步加载: {sceneName}");
             
             while (!asyncOp.isDone)
             {
-                // Unity 异步加载进度在 0.9 时暂停等待 allowSceneActivation
+                // 检查取消请求
+                if (_cancelRequested)
+                {
+                    _isLoading = false;
+                    _cancelRequested = false;
+                    CYLog.Warning($"[SceneLoader] 加载已取消: {sceneName}");
+                    onError?.Invoke("加载已取消");
+                    yield break;
+                }
+                
                 float progress = Mathf.Clamp01(asyncOp.progress / 0.9f);
                 onProgress?.Invoke(progress);
                 
@@ -154,6 +203,7 @@ namespace CYFramework.Core.Scene
             }
             
             _isLoading = false;
+            _currentLoadCoroutine = null;
             onProgress?.Invoke(1f);
             onComplete?.Invoke();
             

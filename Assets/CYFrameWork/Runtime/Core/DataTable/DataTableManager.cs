@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using CYFramework.Infrastructure;
 using UnityEngine;
 
@@ -95,6 +96,7 @@ namespace CYFramework.Core.DataTable
         
         /// <summary>
         /// 获取所有数据行（条件查询）
+        /// 注意：每次调用会创建新 List，高频场景请使用 GetRowsNonAlloc
         /// </summary>
         public List<T> GetRows(Predicate<T> predicate)
         {
@@ -107,6 +109,21 @@ namespace CYFramework.Core.DataTable
                 }
             }
             return result;
+        }
+        
+        /// <summary>
+        /// 获取所有数据行（零 GC 版本，复用调用方传入的 List）
+        /// </summary>
+        public void GetRowsNonAlloc(Predicate<T> predicate, List<T> result)
+        {
+            result.Clear();
+            foreach (var row in _dataRowList)
+            {
+                if (predicate(row))
+                {
+                    result.Add(row);
+                }
+            }
         }
         
         /// <summary>
@@ -274,31 +291,39 @@ namespace CYFramework.Core.DataTable
             CYLog.Debug("[DataTableManager] 卸载所有数据表");
         }
         
+        private readonly StringBuilder _csvParseBuffer = new StringBuilder(256);
+        private readonly List<string> _csvParseResult = new List<string>(32);
+        
+        /// <summary>
+        /// 解析 CSV 行（使用 StringBuilder 降低 GC）
+        /// </summary>
         private string[] ParseCsvLine(string line, char separator)
         {
-            var result = new List<string>();
-            var current = "";
+            _csvParseResult.Clear();
+            _csvParseBuffer.Clear();
             var inQuotes = false;
             
-            foreach (var c in line)
+            for (int i = 0; i < line.Length; i++)
             {
+                char c = line[i];
+                
                 if (c == '"')
                 {
                     inQuotes = !inQuotes;
                 }
                 else if (c == separator && !inQuotes)
                 {
-                    result.Add(current.Trim());
-                    current = "";
+                    _csvParseResult.Add(_csvParseBuffer.ToString().Trim());
+                    _csvParseBuffer.Clear();
                 }
                 else
                 {
-                    current += c;
+                    _csvParseBuffer.Append(c);
                 }
             }
             
-            result.Add(current.Trim());
-            return result.ToArray();
+            _csvParseResult.Add(_csvParseBuffer.ToString().Trim());
+            return _csvParseResult.ToArray();
         }
         
         // IDisposableEx

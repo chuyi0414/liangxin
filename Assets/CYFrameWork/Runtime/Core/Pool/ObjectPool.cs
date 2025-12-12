@@ -248,6 +248,7 @@ namespace CYFramework.Core.Pool
     
     /// <summary>
     /// GameObject 对象池
+    /// 缓存 IPoolable 组件以避免高频 GetComponents 分配
     /// </summary>
     public class GameObjectPool
     {
@@ -259,6 +260,8 @@ namespace CYFramework.Core.Pool
         private int _totalCreated;
         private int _overflowCount;
         private readonly HashSet<GameObject> _overflowObjects = new();
+        
+        private readonly Dictionary<GameObject, IPoolable[]> _poolableCache = new();
         
         public int ActiveCount => _totalCreated - _pool.Count;
         public int PooledCount => _pool.Count;
@@ -339,11 +342,14 @@ namespace CYFramework.Core.Pool
             go.transform.rotation = rotation;
             go.SetActive(true);
             
-            // 调用 IPoolable
-            var poolables = go.GetComponents<IPoolable>();
-            foreach (var poolable in poolables)
+            // 调用 IPoolable（使用缓存避免 GC）
+            var poolables = GetCachedPoolables(go);
+            if (poolables != null)
             {
-                poolable.OnSpawn();
+                for (int i = 0; i < poolables.Length; i++)
+                {
+                    poolables[i].OnSpawn();
+                }
             }
             
             return go;
@@ -356,11 +362,14 @@ namespace CYFramework.Core.Pool
         {
             if (go == null) return;
             
-            // 调用 IPoolable
-            var poolables = go.GetComponents<IPoolable>();
-            foreach (var poolable in poolables)
+            // 调用 IPoolable（使用缓存避免 GC）
+            var poolables = GetCachedPoolables(go);
+            if (poolables != null)
             {
-                poolable.OnDespawn();
+                for (int i = 0; i < poolables.Length; i++)
+                {
+                    poolables[i].OnDespawn();
+                }
             }
             
             go.SetActive(false);
@@ -439,7 +448,35 @@ namespace CYFramework.Core.Pool
         {
             var go = UnityEngine.Object.Instantiate(_prefab);
             _totalCreated++;
+            
+            // 缓存 IPoolable 组件（避免高频 GetComponents 分配）
+            var poolables = go.GetComponents<IPoolable>();
+            if (poolables.Length > 0)
+            {
+                _poolableCache[go] = poolables;
+            }
+            
             return go;
+        }
+        
+        /// <summary>
+        /// 获取缓存的 IPoolable 组件（零 GC）
+        /// </summary>
+        private IPoolable[] GetCachedPoolables(GameObject go)
+        {
+            if (_poolableCache.TryGetValue(go, out var poolables))
+            {
+                return poolables;
+            }
+            return null;
+        }
+        
+        /// <summary>
+        /// 清理缓存
+        /// </summary>
+        private void RemoveFromCache(GameObject go)
+        {
+            _poolableCache.Remove(go);
         }
     }
     
@@ -497,6 +534,7 @@ namespace CYFramework.Core.Pool
         
         /// <summary>
         /// 获取或创建通用对象池
+        /// 如果未指定配置，使用默认配置
         /// </summary>
         public ObjectPool<T> GetOrCreatePool<T>(Func<T> factory, PoolConfig config = null) where T : class
         {
@@ -507,6 +545,9 @@ namespace CYFramework.Core.Pool
                 return (ObjectPool<T>)pool;
             }
             
+            // 使用默认配置
+            config ??= CreateDefaultConfig();
+            
             var newPool = new ObjectPool<T>(factory, config);
             _genericPools[type] = newPool;
             return newPool;
@@ -514,6 +555,7 @@ namespace CYFramework.Core.Pool
         
         /// <summary>
         /// 获取或创建 GameObject 对象池
+        /// 如果未指定配置，使用默认配置
         /// </summary>
         public GameObjectPool GetOrCreatePool(string key, GameObject prefab, PoolConfig config = null)
         {
@@ -522,9 +564,25 @@ namespace CYFramework.Core.Pool
                 return pool;
             }
             
+            // 使用默认配置
+            config ??= CreateDefaultConfig();
+            
             var newPool = new GameObjectPool(prefab, null, config);
             _goPools[key] = newPool;
             return newPool;
+        }
+        
+        /// <summary>
+        /// 创建默认配置（使用 CYConfigurator 中的默认值）
+        /// </summary>
+        private PoolConfig CreateDefaultConfig()
+        {
+            return new PoolConfig
+            {
+                InitialCapacity = _defaultInitialCapacity,
+                MaxCapacity = _defaultMaxCapacity,
+                WarmupCount = _defaultWarmupCount
+            };
         }
         
         /// <summary>

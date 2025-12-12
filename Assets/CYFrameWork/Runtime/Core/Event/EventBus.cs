@@ -53,6 +53,7 @@ namespace CYFramework.Core.Event
         public int Priority;
         public object Target;  // 用于自动解绑
         public bool IsActive;
+        public Type EventType;  // 所属事件类型（用于快速定位移除）
     }
     
     /// <summary>
@@ -87,6 +88,10 @@ namespace CYFramework.Core.Event
         
         // 是否正在派发事件
         private bool _isDispatching;
+        
+        // 延迟事件反射缓存（避免每次 GetMethod/MakeGenericMethod）
+        private System.Reflection.MethodInfo _postBoxedMethod;
+        private readonly Dictionary<Type, System.Reflection.MethodInfo> _postBoxedGenericCache = new();
         
         public int InitOrder => -100; // 最先初始化
         public int TickOrder => -100; // 最先 Tick
@@ -151,7 +156,8 @@ namespace CYFramework.Core.Event
                 Handler = handler,
                 Priority = priority,
                 Target = target,
-                IsActive = true
+                IsActive = true,
+                EventType = eventType  // 记录所属事件类型，用于快速定位移除
             };
             
             // 按优先级插入
@@ -336,6 +342,7 @@ namespace CYFramework.Core.Event
         
         /// <summary>
         /// 处理延迟事件
+        /// ❗ 注意：延迟事件会产生装箱，不建议在高频场景大量使用
         /// </summary>
         private void ProcessDelayedEvents()
         {
@@ -346,11 +353,9 @@ namespace CYFramework.Core.Event
                 
                 if (delayed.FramesRemaining <= 0)
                 {
-                    // 通过反射调用 Post（延迟事件场景较少，可接受）
-                    var method = typeof(EventBus).GetMethod(nameof(PostBoxed), 
-                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    var generic = method.MakeGenericMethod(delayed.EventType);
-                    generic.Invoke(this, new[] { delayed.EventData });
+                    // 使用缓存的反射信息，避免每次 GetMethod/MakeGenericMethod
+                    var genericMethod = GetOrCreatePostBoxedMethod(delayed.EventType);
+                    genericMethod.Invoke(this, new[] { delayed.EventData });
                     
                     _delayedEvents.RemoveAt(i);
                 }
@@ -359,6 +364,28 @@ namespace CYFramework.Core.Event
                     _delayedEvents[i] = delayed;
                 }
             }
+        }
+        
+        /// <summary>
+        /// 获取或创建 PostBoxed 泛型方法缓存
+        /// </summary>
+        private System.Reflection.MethodInfo GetOrCreatePostBoxedMethod(Type eventType)
+        {
+            if (_postBoxedGenericCache.TryGetValue(eventType, out var cached))
+            {
+                return cached;
+            }
+            
+            // 缓存基础方法
+            if (_postBoxedMethod == null)
+            {
+                _postBoxedMethod = typeof(EventBus).GetMethod(nameof(PostBoxed), 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            }
+            
+            var genericMethod = _postBoxedMethod.MakeGenericMethod(eventType);
+            _postBoxedGenericCache[eventType] = genericMethod;
+            return genericMethod;
         }
         
         /// <summary>
@@ -372,6 +399,7 @@ namespace CYFramework.Core.Event
         
         /// <summary>
         /// 处理待移除的订阅
+        /// 使用 EventSubscription.EventType 直接定位列表，避免全量遍历
         /// </summary>
         private void ProcessPendingRemove()
         {
@@ -379,7 +407,8 @@ namespace CYFramework.Core.Event
             
             foreach (var sub in _pendingRemove)
             {
-                foreach (var list in _subscriptions.Values)
+                // 使用 EventType 直接定位列表，O(1) 查找 + O(n) 移除
+                if (sub.EventType != null && _subscriptions.TryGetValue(sub.EventType, out var list))
                 {
                     list.Remove(sub);
                 }

@@ -149,10 +149,7 @@ namespace CYFramework.Core.Config
             resourcePath = resourcePath.Replace(".asset", "");
             
             var request = Resources.LoadAsync<T>(resourcePath);
-            
-            // 使用协程等待（需要 MonoBehaviour）
-            // 简化实现：直接完成
-            if (request.isDone)
+            request.completed += _ =>
             {
                 var config = request.asset as T;
                 if (config != null)
@@ -160,7 +157,7 @@ namespace CYFramework.Core.Config
                     _cache[path] = config;
                 }
                 callback?.Invoke(config);
-            }
+            };
 #endif
         }
         

@@ -53,6 +53,26 @@ namespace CYFramework.Core.Resource
         /// 异步加载场景
         /// </summary>
         AsyncOperation LoadSceneAsync(string sceneName, LoadSceneMode mode = LoadSceneMode.Single);
+        
+        /// <summary>
+        /// 加载并实例化 GameObject
+        /// </summary>
+        GameObject Instantiate(string path, Transform parent = null);
+        
+        /// <summary>
+        /// 异步加载并实例化 GameObject
+        /// </summary>
+        void InstantiateAsync(string path, Action<GameObject> callback, Transform parent = null);
+        
+        /// <summary>
+        /// 预加载资源（不返回，只缓存）
+        /// </summary>
+        void Preload<T>(string path) where T : Object;
+        
+        /// <summary>
+        /// 批量预加载
+        /// </summary>
+        void PreloadAsync(string[] paths, Action onComplete = null, Action<float> onProgress = null);
     }
     
     /// <summary>
@@ -237,13 +257,30 @@ namespace CYFramework.Core.Resource
         
         /// <summary>
         /// 卸载未使用的资源
+        /// ❗ 注意：GC.Collect() 可能导致帧尖刺，默认仅在 Editor/Development 下执行
+        /// 建议在 Loading 场景或明确的内存清理时机调用
         /// </summary>
-        public void UnloadUnused()
+        /// <param name="forceGC">是否强制执行 GC（Release 下默认不执行，避免帧尖刺）</param>
+        public void UnloadUnused(bool forceGC = false)
         {
             Resources.UnloadUnusedAssets();
-            GC.Collect();
             
-            CYLog.Debug("[ResourceLoader] 卸载未使用资源");
+            // GC.Collect() 仅在 Editor/Development 或显式要求时执行
+            // 避免在 Release 下产生不可控的帧尖刺
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            GC.Collect();
+            CYLog.Debug("[ResourceLoader] 卸载未使用资源 (含 GC)");
+#else
+            if (forceGC)
+            {
+                GC.Collect();
+                CYLog.Debug("[ResourceLoader] 卸载未使用资源 (含 GC)");
+            }
+            else
+            {
+                CYLog.Debug("[ResourceLoader] 卸载未使用资源");
+            }
+#endif
         }
         
         #endregion
@@ -269,6 +306,86 @@ namespace CYFramework.Core.Resource
         public AsyncOperation LoadSceneAsync(string sceneName, LoadSceneMode mode = LoadSceneMode.Single)
         {
             return SceneManager.LoadSceneAsync(sceneName, mode);
+        }
+        
+        #endregion
+        
+        #region 实例化 API
+        
+        /// <summary>
+        /// 加载并实例化 GameObject
+        /// </summary>
+        public GameObject Instantiate(string path, Transform parent = null)
+        {
+            var prefab = Load<GameObject>(path);
+            if (prefab == null)
+            {
+                CYLog.Warning($"[ResourceLoader] 实例化失败，找不到资源: {path}");
+                return null;
+            }
+            
+            var go = Object.Instantiate(prefab, parent);
+            return go;
+        }
+        
+        /// <summary>
+        /// 异步加载并实例化 GameObject
+        /// </summary>
+        public void InstantiateAsync(string path, Action<GameObject> callback, Transform parent = null)
+        {
+            LoadAsync<GameObject>(path, prefab =>
+            {
+                if (prefab == null)
+                {
+                    CYLog.Warning($"[ResourceLoader] 异步实例化失败，找不到资源: {path}");
+                    callback?.Invoke(null);
+                    return;
+                }
+                
+                var go = Object.Instantiate(prefab, parent);
+                callback?.Invoke(go);
+            });
+        }
+        
+        #endregion
+        
+        #region 预加载 API
+        
+        /// <summary>
+        /// 预加载资源（不返回，只缓存）
+        /// </summary>
+        public void Preload<T>(string path) where T : Object
+        {
+            Load<T>(path);
+        }
+        
+        /// <summary>
+        /// 批量预加载
+        /// </summary>
+        public void PreloadAsync(string[] paths, Action onComplete = null, Action<float> onProgress = null)
+        {
+            if (paths == null || paths.Length == 0)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+            
+            int total = paths.Length;
+            int loaded = 0;
+            
+            foreach (var path in paths)
+            {
+                LoadAsync<Object>(path, _ =>
+                {
+                    loaded++;
+                    onProgress?.Invoke((float)loaded / total);
+                    
+                    if (loaded >= total)
+                    {
+                        onComplete?.Invoke();
+                    }
+                });
+            }
         }
         
         #endregion

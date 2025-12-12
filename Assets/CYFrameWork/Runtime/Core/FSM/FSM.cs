@@ -135,11 +135,35 @@ namespace CYFramework.Core.FSM
     }
     
     /// <summary>
+    /// FSM 包装器接口（避免反射）
+    /// </summary>
+    internal interface IFSMWrapper
+    {
+        void Update(float deltaTime);
+        void Stop();
+    }
+    
+    /// <summary>
+    /// FSM 包装器（避免反射调用）
+    /// </summary>
+    internal class FSMWrapper<T> : IFSMWrapper where T : Enum
+    {
+        private readonly FSM<T> _fsm;
+        
+        public FSMWrapper(FSM<T> fsm) => _fsm = fsm;
+        public FSM<T> FSM => _fsm;
+        
+        public void Update(float deltaTime) => _fsm.Update(deltaTime);
+        public void Stop() => _fsm.Stop();
+    }
+    
+    /// <summary>
     /// 有限状态机管理器
-    /// 管理多个 FSM 实例
+    /// 管理多个 FSM 实例，自动驱动更新
     /// </summary>
     public class FSMManager : IInitializable, IUpdateable, IDisposableEx
     {
+        private readonly Dictionary<string, IFSMWrapper> _fsmWrappers = new();
         private readonly Dictionary<string, object> _fsmInstances = new();
         
         public int InitOrder => 10;
@@ -151,10 +175,15 @@ namespace CYFramework.Core.FSM
             CYLog.Debug("[FSMManager] 初始化完成");
         }
         
+        /// <summary>
+        /// 更新所有注册的 FSM
+        /// </summary>
         public void OnUpdate(float deltaTime)
         {
-            // 更新所有注册的 FSM
-            // 注意：实际使用中可能需要手动调用各 FSM 的 Update
+            foreach (var wrapper in _fsmWrappers.Values)
+            {
+                wrapper.Update(deltaTime);
+            }
         }
         
         public void Dispose()
@@ -174,10 +203,12 @@ namespace CYFramework.Core.FSM
             if (_fsmInstances.ContainsKey(name))
             {
                 CYLog.Warning($"[FSMManager] FSM 已存在: {name}");
-                return _fsmInstances[name] as FSM<T>;
+                return (_fsmWrappers[name] as FSMWrapper<T>)?.FSM;
             }
             
             var fsm = new FSM<T>();
+            var wrapper = new FSMWrapper<T>(fsm);
+            _fsmWrappers[name] = wrapper;
             _fsmInstances[name] = fsm;
             CYLog.Debug($"[FSMManager] 创建 FSM: {name}");
             return fsm;
@@ -188,9 +219,9 @@ namespace CYFramework.Core.FSM
         /// </summary>
         public FSM<T> Get<T>(string name) where T : Enum
         {
-            if (_fsmInstances.TryGetValue(name, out var fsm))
+            if (_fsmWrappers.TryGetValue(name, out var wrapper))
             {
-                return fsm as FSM<T>;
+                return (wrapper as FSMWrapper<T>)?.FSM;
             }
             
             CYLog.Warning($"[FSMManager] 未找到 FSM: {name}");
@@ -214,31 +245,29 @@ namespace CYFramework.Core.FSM
         }
         
         /// <summary>
-        /// 销毁 FSM
+        /// 销毁 FSM（无反射）
         /// </summary>
         public void Destroy(string name)
         {
-            if (_fsmInstances.TryGetValue(name, out var fsm))
+            if (_fsmWrappers.TryGetValue(name, out var wrapper))
             {
-                // 尝试停止 FSM
-                var stopMethod = fsm.GetType().GetMethod("Stop");
-                stopMethod?.Invoke(fsm, null);
-                
+                wrapper.Stop();
+                _fsmWrappers.Remove(name);
                 _fsmInstances.Remove(name);
                 CYLog.Debug($"[FSMManager] 销毁 FSM: {name}");
             }
         }
         
         /// <summary>
-        /// 销毁所有 FSM
+        /// 销毁所有 FSM（无反射）
         /// </summary>
         public void DestroyAll()
         {
-            foreach (var kvp in _fsmInstances)
+            foreach (var wrapper in _fsmWrappers.Values)
             {
-                var stopMethod = kvp.Value.GetType().GetMethod("Stop");
-                stopMethod?.Invoke(kvp.Value, null);
+                wrapper.Stop();
             }
+            _fsmWrappers.Clear();
             _fsmInstances.Clear();
         }
         
