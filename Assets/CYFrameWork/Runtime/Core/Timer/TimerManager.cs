@@ -37,6 +37,7 @@ namespace CYFramework.Core.Timer
         /// <summary>
         /// 设置更新回调
         /// </summary>
+        /// <param name="onUpdate">回调函数（参数为 0~1 的进度）</param>
         public Timer OnUpdate(Action<float> onUpdate)
         {
             _onUpdate = onUpdate;
@@ -131,17 +132,37 @@ namespace CYFramework.Core.Timer
         /// 延迟执行
         /// 默认使用配置中的 UseUnscaledTime 设置
         /// </summary>
+        /// <param name="seconds">延迟秒数</param>
+        /// <param name="onComplete">完成回调</param>
+        /// <returns>计时器对象</returns>
         public Timer Delay(float seconds, Action onComplete)
         {
             return Delay(seconds, onComplete, _defaultUseUnscaledTime);
+        }
+
+        /// <summary>
+        /// 延迟执行（可指定是否使用不随 TimeScale 变化的时间）
+        /// </summary>
+        public Timer Delay(float seconds, Action onComplete, bool useUnscaledTime)
+        {
+            var timer = new Timer(seconds, onComplete, false, useUnscaledTime) { Id = _nextId++ };
+            _timers.Add(timer);
+            return timer;
         }
         
         /// <summary>
         /// 延迟执行（显式指定时间模式）
         /// </summary>
-        public Timer Delay(float seconds, Action onComplete, bool useUnscaledTime)
+        /// <summary>
+        /// 延迟执行（带进度回调，进度为 0~1）
+        /// </summary>
+        public Timer Delay(float seconds, Action onComplete, Action<float> onProgress, bool useUnscaledTime)
         {
             var timer = new Timer(seconds, onComplete, false, useUnscaledTime) { Id = _nextId++ };
+            if (onProgress != null)
+            {
+                timer.OnUpdate(onProgress);
+            }
             _timers.Add(timer);
             return timer;
         }
@@ -154,13 +175,30 @@ namespace CYFramework.Core.Timer
         {
             return Loop(interval, onTick, _defaultUseUnscaledTime);
         }
-        
+
         /// <summary>
-        /// 循环执行（显式指定时间模式）
+        /// 循环执行（可指定是否使用不随 TimeScale 变化的时间）
         /// </summary>
         public Timer Loop(float interval, Action onTick, bool useUnscaledTime)
         {
             var timer = new Timer(interval, onTick, true, useUnscaledTime) { Id = _nextId++ };
+            _timers.Add(timer);
+            return timer;
+        }
+        
+        /// <summary>
+        /// 循环执行（显式指定时间模式）
+        /// </summary>
+        /// <summary>
+        /// 循环执行（带进度回调，进度为 0~1）
+        /// </summary>
+        public Timer Loop(float interval, Action onTick, Action<float> onProgress, bool useUnscaledTime)
+        {
+            var timer = new Timer(interval, onTick, true, useUnscaledTime) { Id = _nextId++ };
+            if (onProgress != null)
+            {
+                timer.OnUpdate(onProgress);
+            }
             _timers.Add(timer);
             return timer;
         }
@@ -203,6 +241,17 @@ namespace CYFramework.Core.Timer
             var timer = _timers.Find(t => t.Id == timerId);
             timer?.Stop();
         }
+
+        /// <summary>
+        /// 尝试取消计时器（找不到则返回 false）
+        /// </summary>
+        public bool TryCancel(int timerId)
+        {
+            var timer = _timers.Find(t => t.Id == timerId);
+            if (timer == null) return false;
+            timer.Stop();
+            return true;
+        }
         
         /// <summary>
         /// 获取计时器
@@ -210,6 +259,15 @@ namespace CYFramework.Core.Timer
         public Timer GetTimer(int timerId)
         {
             return _timers.Find(t => t.Id == timerId);
+        }
+
+        /// <summary>
+        /// 是否存在指定计时器（未完成且未被移除）
+        /// </summary>
+        public bool HasTimer(int timerId)
+        {
+            var timer = _timers.Find(t => t.Id == timerId);
+            return timer != null && !timer.IsCompleted;
         }
         
         /// <summary>

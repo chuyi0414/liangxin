@@ -13,6 +13,9 @@ namespace CYFramework.Core.Config
     /// 挂载到场景中的 CYFramework GameObject 上
     /// </summary>
     [DisallowMultipleComponent]
+    // 必须早于 CYBootstrap.Awake 执行：框架启动器在 Awake 内初始化所有服务，服务会在 Initialize 时读取 CYConfigurator.Instance。
+    // 如果 CYConfigurator 的 Awake 晚于 CYBootstrap，就会出现“配置字段明明改了但运行时无效”的问题。
+    [DefaultExecutionOrder(-1100)]
     public class CYConfigurator : MonoBehaviour
     {
         [Header("框架配置文件")]

@@ -59,14 +59,29 @@ namespace CYFramework.Core.Config
         private readonly Dictionary<string, ScriptableObject> _cache = new();
         
         // 配置根路径
-        private const string CONFIG_PATH_PREFIX = "Assets/Resources/Config/";
-        private const string RESOURCES_PREFIX = "Config/";
+        // 配置根路径（由 ResourceLoaderConfig.ConfigPath 驱动）
+        // - Editor: 用于 AssetDatabase.LoadAssetAtPath 的前缀路径（必须是 Assets/...）
+        // - Runtime: 用于 Resources.Load 的前缀路径（相对于 Resources）
+        private string _assetPathPrefix = "Assets/Resources/Config/";
+        private string _resourcesPathPrefix = "Config/";
         
         public int InitOrder => -50;
         public int DisposeOrder => 50;
         
         public void Initialize()
         {
+            // 从 CYConfigurator 读取配置路径前缀（保持与 ResourceLoaderConfig 一致）
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var resourceConfig = configurator.GetConfig<ResourceLoaderConfig>();
+                if (resourceConfig != null && !string.IsNullOrEmpty(resourceConfig.ConfigPath))
+                {
+                    // 统一末尾斜杠，避免拼接出错
+                    _resourcesPathPrefix = EnsureEndsWithSlash(resourceConfig.ConfigPath);
+                    _assetPathPrefix = "Assets/Resources/" + _resourcesPathPrefix;
+                }
+            }
             CYLog.Debug("[ConfigLoader] 初始化完成");
         }
         
@@ -92,7 +107,7 @@ namespace CYFramework.Core.Config
             
 #if UNITY_EDITOR
             // Editor: 直接读 SO，无需烘焙
-            string fullPath = path.StartsWith("Assets/") ? path : CONFIG_PATH_PREFIX + path;
+            string fullPath = path.StartsWith("Assets/") ? path : _assetPathPrefix + path;
             if (!fullPath.EndsWith(".asset"))
             {
                 fullPath += ".asset";
@@ -107,7 +122,7 @@ namespace CYFramework.Core.Config
 #else
             // Runtime: 从 Resources 加载（简化版）
             // 生产环境可替换为 Addressables 或 BlobAsset
-            string resourcePath = path.StartsWith(RESOURCES_PREFIX) ? path : RESOURCES_PREFIX + path;
+            string resourcePath = path.StartsWith(_resourcesPathPrefix) ? path : _resourcesPathPrefix + path;
             resourcePath = resourcePath.Replace(".asset", "");
             
             config = Resources.Load<T>(resourcePath);
@@ -145,7 +160,7 @@ namespace CYFramework.Core.Config
             callback?.Invoke(config);
 #else
             // Runtime: 使用 Resources.LoadAsync
-            string resourcePath = path.StartsWith(RESOURCES_PREFIX) ? path : RESOURCES_PREFIX + path;
+            string resourcePath = path.StartsWith(_resourcesPathPrefix) ? path : _resourcesPathPrefix + path;
             resourcePath = resourcePath.Replace(".asset", "");
             
             var request = Resources.LoadAsync<T>(resourcePath);
@@ -201,6 +216,12 @@ namespace CYFramework.Core.Config
 #endif
             
             CYLog.Debug("[ConfigLoader] 缓存已清空");
+        }
+
+        private static string EnsureEndsWithSlash(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            return path.EndsWith("/") ? path : path + "/";
         }
     }
 }

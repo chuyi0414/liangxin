@@ -70,6 +70,19 @@ namespace CYFramework.Core.UI.Components
         #endregion
         
         #region 公共 API
+
+        /// <summary>
+        /// 应用框架配置（由 <see cref="UIManager"/> 在初始化时下发）。
+        /// </summary>
+        /// <remarks>
+        /// - 只覆盖“最大并发数量/默认时长”这两个高频需求，淡入淡出等细节仍由预制体侧调整。
+        /// - 该方法不会产生 GC；不要在 Update 高频调用。
+        /// </remarks>
+        public void ApplyConfig(int maxToasts, float defaultDuration)
+        {
+            _maxToasts = Mathf.Clamp(maxToasts, 1, 99);
+            _defaultDuration = Mathf.Max(0f, defaultDuration);
+        }
         
         /// <summary>
         /// 显示 Toast
@@ -265,4 +278,3 @@ namespace CYFramework.Core.UI.Components
         }
     }
 }
-

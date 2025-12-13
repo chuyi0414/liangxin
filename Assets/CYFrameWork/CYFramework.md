@@ -63,6 +63,25 @@
 └───────────────────────────────────────────────────────────────┘
 ```
 
+## 2.1 当前实现状态（以代码为准）
+
+> ⚠️ 本白皮书包含“架构愿景/规划”。**能否使用、有哪些 API、是否支持某平台**，以 `Assets/CYFramework/Runtime` 的代码实现为准。
+
+| 模块 | 入口/类型 | 当前状态 | 关键文件 |
+|------|----------|----------|----------|
+| 统一入口 | `CY` | ✅ 已实现 | `Assets/CYFramework/Runtime/CY.cs` |
+| 生命周期/服务定位 | `ServiceLocator` | ✅ 已实现（按 `IInitializable.InitOrder` 排序，无依赖图拓扑排序） | `Assets/CYFramework/Runtime/Infrastructure/ServiceLocator.cs` |
+| 事件系统 | `EventBus` | ✅ 已实现（struct 事件、优先级、延迟派发；需要显式解绑） | `Assets/CYFramework/Runtime/Core/Event/EventBus.cs` |
+| 计时器 | `TimerManager` | ✅ 已实现（Delay/Loop/NextFrame） | `Assets/CYFramework/Runtime/Core/Timer/TimerManager.cs` |
+| 流程 | `ProcedureManager` | ✅ 已实现（支持流程注册表资产） | `Assets/CYFramework/Runtime/Core/Procedure/ProcedureManager.cs` |
+| UI | `UIManager` | ✅ 已实现（含 MVVM/Typed MVVM） | `Assets/CYFramework/Runtime/Core/UI` |
+| 实体 | `EntityManager` | ✅ 已实现（含池化） | `Assets/CYFramework/Runtime/Core/Entity` |
+| 存档 | `SaveService` | ✅ 已实现（版本迁移、AES、校验；WebGL/微信失败回退明文） | `Assets/CYFramework/Runtime/Core/Save/SaveService.cs` |
+| 网络 | `NetworkService` | ✅ 已实现（HTTP/WS、重连/心跳/熔断、适配器） | `Assets/CYFramework/Runtime/Core/Network/NetworkService.cs` |
+| 资源 | `IResourceLoader`/`ResourceLoader` | ⚠️ 当前实现仅 Resources + 缓存；Addressables/AB 为预留接口/配置项 | `Assets/CYFramework/Runtime/Core/Resource/ResourceLoader.cs` |
+| 调试工具 | `RuntimeProfiler`/`CheatConsole` | ✅ 已实现（按配置开关） | `Assets/CYFramework/Runtime/Debug` |
+| 流程注册表生成 | Editor 菜单 | ✅ 已实现 | `Assets/CYFramework/Editor/ProcedureRegistryGenerator.cs` |
+
 ## 详细模块设计
 
 ### 3.1 核心服务与工具 (Core Services & Tools)
@@ -106,17 +125,17 @@ public T LoadConfig<T>(string path) where T : ScriptableObject
 
 - 支持三种作用域：`Singleton`（全局单例）、`Scoped`（场景级）、`Transient`（每次新建）
 
-- 循环依赖检测：注册时构建依赖图，启动时拓扑排序初始化
+- 初始化顺序：基于 `IInitializable.InitOrder` 进行排序初始化（当前实现不做依赖图拓扑排序）
 
 - 懒加载支持：通过 `Lazy<T>` 延迟实例化非关键服务
 
 **EventBus**：零 GC 结构体事件流
 
-- 事件优先级：支持 `Priority` 属性控制回调顺序
+- 事件优先级：支持 `Subscribe<T>(..., priority)`，以及 `[OnEvent(priority)]/[EventPriority(priority)]` 控制回调顺序
 
 - 延迟派发：`PostDelayed(evt, frames)` 支持跨帧安全派发
 
-- 自动解绑：监听者销毁时自动移除订阅，防止野指针
+- 解绑策略：事件系统**不会“自动感知对象销毁”**；请在 `OnDestroy/Dispose` 中调用 `Unsubscribe/UnsubscribeAll(this)` 主动清理（框架入口类如 `GameEntryBase` 已示范在生命周期钩子中清理）
 
 #### 3.1.3 网络层 (Network Layer)
 
@@ -406,7 +425,7 @@ UI 根据 Snapshot 中的 ID 进行 Update。如果 ID 消失，则回收 UI 节
 
 **收益**：彻底解耦 + 零 GC。UI 随便写，不会因为访问了被销毁的 Entity 而导致 Crash。
 
-## 4. CY 统一入口 (V2.4)
+## 4. CY 统一入口（以 `Runtime/CY.cs` 为准）
 
 ### 4.1 设计原则
 
@@ -453,8 +472,9 @@ namespace CYFramework
 
 // 使用
 CY.Quest.AcceptQuest(1001);
+```
 
-## 5. 目录结构规范 (V2.4)
+## 5. 目录结构规范（以仓库实际为准）
 
 ```
 Assets/CYFramework/
@@ -497,7 +517,7 @@ Assets/CYFramework/
     └── PlayMode/
 ```
 
-## 5. 关键工作流
+## 6. 关键工作流
 配置阶段：策划填写 Excel -> 导表工具生成 ScriptableObject -> 放入 Resources/Config。
 
 开发阶段：
@@ -516,7 +536,7 @@ Assets/CYFramework/
 
 切换入口为 HybridGameplayWorld。
 
-## 6. 性能红线 (Performance Budget)
+## 7. 性能红线 (Performance Budget)
 
 | 指标 | 微信/WebGL | Mobile | PC |
 |------|-----------|--------|----|
@@ -539,7 +559,7 @@ Assets/CYFramework/
 | Mobile Native | Burst 编译 + Job 并行 | ✅ 支持 |
 | PC | Burst + Job + SIMD | ✅ 支持 |
 
-## 6.1 WebGL/微信小游戏平台限制清单 [NEW]
+## 7.1 WebGL/微信小游戏平台限制清单 [NEW]
 
 | 技术 | 支持情况 | 替代方案 |
 |------|----------|----------|
@@ -549,7 +569,7 @@ Assets/CYFramework/
 | **Span<T>/stackalloc** | ⚠️ .NET 4.x 不支持 | 使用 `ArraySegment<T>` 或直接数组切片 |
 | **System.IO 文件操作** | ❌ 不支持 | `wx.getFileSystemManager` / IndexedDB |
 | **System.Net.Sockets** | ❌ 不支持 | 仅用 HTTP + WebSocket |
-| **AppDomain** | ❌ 不支持 | 使用 `Application.logMessageReceived` |
+| **AppDomain** | ❌ 不支持 | 使用 `Application.logMessageReceived`；流程系统推荐使用 Editor 生成的流程注册表替代运行时扫描 |
 | **动态程序集加载** | ❌ 不支持 | 不支持 HybridCLR，只能资源热更 |
 | **原生加密库** | ⚠️ 部分不支持 | 纯 C# AES 实现 或 JS 桥接 |
 | **PlayerPrefs** | ⚠️ 大小受限 | 微信: `wx.setStorageSync` (上限 10MB) |
@@ -558,16 +578,10 @@ Assets/CYFramework/
 
 **框架应对策略**：
 ```csharp
-// 统一的平台宏定义
-#if UNITY_WEBGL || CY_WECHAT
-    #define CY_SINGLE_THREAD    // 单线程模式
-    #define CY_NO_NATIVE        // 无 Native 容器
-#endif
-
 // 示例：Snapshot 封送的平台分支
 public void CopySnapshot()
 {
-#if CY_SINGLE_THREAD
+#if UNITY_WEBGL || CY_WECHAT
     // WebGL: 纯 C# 分帧复制
     CopyBatch(_currentBatchIndex, BATCH_SIZE);
     _currentBatchIndex = (_currentBatchIndex + 1) % _totalBatches;
@@ -579,9 +593,19 @@ public void CopySnapshot()
 }
 ```
 
-## 7. 错误处理与异常策略 [NEW]
+## 7.2 流程注册表工作流（Procedure Registry）
 
-### 7.1 全局异常捕获
+当你开启流程自动注册（例如 `AutoRegisterProcedures=true`）时，运行时会优先从 `Resources/CYFramework/ProcedureRegistry` 加载流程注册表完成注册，避免启动时扫描程序集。
+
+推荐工作流：在你新增/修改流程后，在 Unity 菜单执行：
+
+`CYFramework/Generate Procedure Registry`
+
+该操作会生成：`Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`。
+
+## 8. 错误处理与异常策略 [NEW]
+
+### 8.1 全局异常捕获
 
 ```csharp
 // 启动时注册
@@ -593,7 +617,7 @@ AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 #endif
 ```
 
-### 7.2 分级处理
+### 8.2 分级处理
 
 | 级别 | 处理方式 |
 |------|----------|
@@ -601,15 +625,15 @@ AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 | **中等** | 弹窗提示，尝试恢复（如网络重连） |
 | **严重** | 保存现场快照，强制重启/退出 |
 
-### 7.3 Crash 上报
+### 8.3 Crash 上报
 
 - 本地缓存崩溃日志，下次启动时上报
 - 包含：设备信息、堆栈、最近 N 条日志、玩家 ID
 - 微信端使用 `wx.reportMonitor` + 自建埋点
 
-## 8. 调试与监控 [NEW]
+## 9. 调试与监控 [NEW]
 
-### 8.1 运行时 Profiler 面板
+### 9.1 运行时 Profiler 面板
 
 内置轻量级调试面板（Development Build 可见）：
 - **FPS / 帧时间**：实时曲线
@@ -618,7 +642,7 @@ AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 - **对象池状态**：各类型活跃/空闲数量
 - **网络状态**：延迟 / 包量 / 连接状态
 
-### 8.2 命令控制台 (Cheat Console)
+### 9.2 命令控制台 (Cheat Console)
 
 开发环境下通过特定手势/按键呼出：
 - 加金币/道具
@@ -626,7 +650,7 @@ AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 - 切换服务器环境
 - 强制触发事件
 
-### 8.3 日志分级
+### 9.3 日志分级
 
 ```csharp
 public enum LogLevel { Trace, Debug, Info, Warning, Error, Fatal }
@@ -636,9 +660,9 @@ public enum LogLevel { Trace, Debug, Info, Warning, Error, Fatal }
 - **Release**：Warning 及以上 + 异步上报
 - 微信端自动映射到 `console.log` / `console.warn` / `console.error`
 
-## 9. 测试策略 [NEW]
+## 10. 测试策略 [NEW]
 
-### 9.1 测试分层
+### 10.1 测试分层
 
 | 层级 | 范围 | 工具 |
 |------|------|------|
@@ -646,23 +670,23 @@ public enum LogLevel { Trace, Debug, Info, Warning, Error, Fatal }
 | **集成测试** | 模块间交互 | Unity Test Framework (PlayMode) |
 | **性能测试** | Tick 耗时 / GC / 内存 | Unity Profiler + 自定义 Benchmark |
 
-### 9.2 Mock 策略
+### 10.2 Mock 策略
 
 - 所有平台适配器通过接口注入，测试时替换为 Mock 实现
 - 网络层支持本地 Mock Server 模式
 - 存档系统支持内存存储 Mock
 
-### 9.3 CI/CD 集成
+### 10.3 CI/CD 集成
 
 ```yaml
-# 示例 GitHub Actions
+#### 示例 GitHub Actions
 - name: Run Tests
   run: unity-editor -batchmode -runTests -testPlatform EditMode
 - name: Build WebGL
   run: unity-editor -batchmode -executeMethod BuildScript.BuildWebGL
 ```
 
-## 10. 里程碑规划
+## 11. 里程碑规划
 
 | 阶段 | 目标 | 交付物 |
 |------|------|--------|

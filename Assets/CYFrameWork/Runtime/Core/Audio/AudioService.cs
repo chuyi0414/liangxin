@@ -20,14 +20,49 @@ namespace CYFramework.Core.Audio
     /// </summary>
     public interface IAudioService
     {
+        /// <summary>
+        /// 播放背景音乐
+        /// </summary>
+        /// <param name="name">BGM 名称或路径</param>
+        /// <param name="volume">音量缩放（0~1）</param>
+        /// <param name="loop">是否循环</param>
         void PlayBGM(string name, float volume = 1f, bool loop = true);
-        void StopBGM(float fadeOut = 0.5f);
+        /// <summary>
+        /// 停止 BGM。
+        /// </summary>
+        /// <param name="fadeOut">
+        /// 淡出时长（秒）：
+        /// - &lt; 0：使用配置 <see cref="AudioConfig.BGMFadeTime"/>
+        /// - = 0：立即停止
+        /// - &gt; 0：按指定时长淡出
+        /// </param>
+        void StopBGM(float fadeOut = -1f);
         void PauseBGM();
         void ResumeBGM();
+        /// <summary>
+        /// 播放音效
+        /// </summary>
+        /// <param name="name">SFX 名称或路径</param>
+        /// <param name="volume">音量缩放（0~1）</param>
         void PlaySFX(string name, float volume = 1f);
+        /// <summary>
+        /// 设置主音量 (0~1)
+        /// </summary>
         void SetMasterVolume(float volume);
+        
+        /// <summary>
+        /// 设置 BGM 音量 (0~1)
+        /// </summary>
         void SetBGMVolume(float volume);
+        
+        /// <summary>
+        /// 设置 SFX 音量 (0~1)
+        /// </summary>
         void SetSFXVolume(float volume);
+        
+        /// <summary>
+        /// 静音所有音频
+        /// </summary>
         void Mute(bool mute);
         bool IsMuted { get; }
         
@@ -102,6 +137,8 @@ namespace CYFramework.Core.Audio
         
         // 音频资源路径前缀
         private string _audioPath = "Audio/";
+        private string _bgmPath = "Audio/BGM/";
+        private string _sfxPath = "Audio/SFX/";
         
         public bool IsMuted => _isMuted;
         
@@ -137,7 +174,9 @@ namespace CYFramework.Core.Audio
                 var resourceConfig = configurator.GetConfig<ResourceLoaderConfig>();
                 if (resourceConfig != null)
                 {
-                    _audioPath = resourceConfig.AudioPath;
+                    _audioPath = EnsureEndsWithSlash(resourceConfig.AudioPath);
+                    _bgmPath = EnsureEndsWithSlash(resourceConfig.BGMPath);
+                    _sfxPath = EnsureEndsWithSlash(resourceConfig.SFXPath);
                 }
             }
             if (configurator != null)
@@ -159,7 +198,10 @@ namespace CYFramework.Core.Audio
             if (existingRoot != null)
             {
                 audioRoot = existingRoot;
-                UnityEngine.Object.DontDestroyOnLoad(audioRoot);
+                if (audioRoot.transform.parent == null)
+                {
+                    UnityEngine.Object.DontDestroyOnLoad(audioRoot);
+                }
                 
                 // 查找已存在的 AudioSource 组件
                 var existingSources = audioRoot.GetComponentsInChildren<AudioSource>();
@@ -275,7 +317,7 @@ namespace CYFramework.Core.Audio
             // 尝试解锁音频
             TryUnlockAudio();
             
-            var clip = LoadClip(name);
+            var clip = LoadClip(BuildAudioPath(name, _bgmPath));
             if (clip == null)
             {
                 CYLog.Warning($"[AudioService] BGM 加载失败: {name}");
@@ -292,9 +334,15 @@ namespace CYFramework.Core.Audio
             CYLog.Debug($"[AudioService] 播放 BGM: {name}");
         }
         
-        public void StopBGM(float fadeOut = 0.5f)
+        public void StopBGM(float fadeOut = -1f)
         {
             if (_bgmSource == null || !_bgmSource.isPlaying) return;
+
+            // <0 表示使用配置默认淡出时间（避免 StopBGM() 还写死常量）
+            if (fadeOut < 0f)
+            {
+                fadeOut = _config != null ? _config.BGMFadeTime : 0.5f;
+            }
             
             if (fadeOut <= 0)
             {
@@ -368,7 +416,7 @@ namespace CYFramework.Core.Audio
             // 尝试解锁音频
             TryUnlockAudio();
             
-            var clip = LoadClip(name);
+            var clip = LoadClip(BuildAudioPath(name, _sfxPath));
             if (clip == null)
             {
                 CYLog.Warning($"[AudioService] SFX 加载失败: {name}");
@@ -437,7 +485,7 @@ namespace CYFramework.Core.Audio
         /// </summary>
         public void PreloadBGM(string name)
         {
-            LoadClip(name);
+            LoadClip(BuildAudioPath(name, _bgmPath));
         }
         
         /// <summary>
@@ -445,7 +493,7 @@ namespace CYFramework.Core.Audio
         /// </summary>
         public void PreloadSFX(string name)
         {
-            LoadClip(name);
+            LoadClip(BuildAudioPath(name, _sfxPath));
         }
         
         /// <summary>
@@ -464,11 +512,12 @@ namespace CYFramework.Core.Audio
             
             foreach (var name in names)
             {
-                _resourceLoader?.LoadAsync<AudioClip>($"{_audioPath}{name}", clip =>
+                var path = BuildAudioPath(name, _audioPath);
+                _resourceLoader?.LoadAsync<AudioClip>(path, clip =>
                 {
                     if (clip != null)
                     {
-                        _clipCache[name] = clip;
+                        _clipCache[path] = clip;
                     }
                     
                     loaded++;
@@ -487,22 +536,43 @@ namespace CYFramework.Core.Audio
         /// <summary>
         /// 加载音频 Clip
         /// </summary>
-        private AudioClip LoadClip(string name)
+        private AudioClip LoadClip(string path)
         {
-            if (_clipCache.TryGetValue(name, out var cached))
+            if (string.IsNullOrEmpty(path)) return null;
+
+            if (_clipCache.TryGetValue(path, out var cached))
             {
                 return cached;
             }
             
             // 通过 ResourceLoader 统一加载
-            var clip = _resourceLoader?.Load<AudioClip>($"{_audioPath}{name}");
+            var clip = _resourceLoader?.Load<AudioClip>(path);
             
             if (clip != null)
             {
-                _clipCache[name] = clip;
+                _clipCache[path] = clip;
             }
             
             return clip;
+        }
+
+        private static string BuildAudioPath(string nameOrPath, string prefix)
+        {
+            if (string.IsNullOrEmpty(nameOrPath)) return null;
+
+            // 允许传入完整路径（例如 "Audio/BGM/MainTheme"）
+            if (nameOrPath.IndexOf('/') >= 0 || nameOrPath.IndexOf('\\') >= 0)
+            {
+                return nameOrPath;
+            }
+
+            return prefix + nameOrPath;
+        }
+
+        private static string EnsureEndsWithSlash(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            return path.EndsWith("/") ? path : path + "/";
         }
         
         /// <summary>
@@ -538,4 +608,3 @@ namespace CYFramework.Core.Audio
         #endregion
     }
 }
-

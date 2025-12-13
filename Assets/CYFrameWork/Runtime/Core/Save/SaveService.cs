@@ -96,7 +96,7 @@ namespace CYFramework.Core.Save
     /// <summary>
     /// 存档服务
     /// </summary>
-    public class SaveService : IInitializable, IDisposableEx
+    public class SaveService : IInitializable, IUpdateable, IDisposableEx
     {
         private SaveConfig _config;
         private IFileSystem _fileSystem;
@@ -110,11 +110,31 @@ namespace CYFramework.Core.Save
         
         // 当前存档版本
         private int _currentVersion = 1;
+
+        // 默认存档键（来自 SaveServiceConfig.SaveFileName）
+        private string _defaultSaveKey = "save.dat";
+
+        // 最大存档槽位数量（来自 SaveServiceConfig.MaxSaveSlots）
+        private int _maxSaveSlots = 3;
+
+        // 自动存档间隔（秒，来自 SaveServiceConfig.AutoSaveInterval；0 表示禁用）
+        private float _autoSaveInterval;
+        private float _autoSaveTimer;
+
+        // Storage 模式是否有待落盘的数据（避免每次 SetString 都立刻 Save）
+        private bool _storageDirty;
         
         // 缓存的存档数据
         private readonly Dictionary<string, object> _cache = new();
+
+        // 脏标记集合：
+        // SaveDataBase 是引用类型，框架无法自动感知字段变更；业务在修改后应显式调用 MarkDirty(key)。
+        // 说明：使用 Dictionary<string, byte> 作为“集合”，在一些旧环境/IL2CPP 下更稳，并且便于调试。
+        private readonly Dictionary<string, byte> _dirtyKeys = new(32);
+        private readonly List<string> _dirtyKeyBuffer = new(32);
         
         public int InitOrder => 20;
+        public int UpdateOrder => 20;
         public int DisposeOrder => 20;
         
         public SaveService(SaveConfig config = null)
@@ -135,7 +155,9 @@ namespace CYFramework.Core.Save
                 {
                     _config.EnableEncryption = externalConfig.EnableEncryption;
                     _config.EncryptionKey = externalConfig.EncryptionKey;
-                    _config.MaxBackupCount = externalConfig.MaxSaveSlots;
+                    _defaultSaveKey = string.IsNullOrEmpty(externalConfig.SaveFileName) ? _defaultSaveKey : externalConfig.SaveFileName;
+                    _maxSaveSlots = Mathf.Max(1, externalConfig.MaxSaveSlots);
+                    _autoSaveInterval = Mathf.Max(0f, externalConfig.AutoSaveInterval);
                     _currentVersion = externalConfig.SaveVersion;
                     CYLog.Debug("[SaveService] 使用 CYConfigurator 配置");
                 }
@@ -161,18 +183,43 @@ namespace CYFramework.Core.Save
             CYLog.Debug($"[SaveService] 初始化完成 ({(_useStorageMode ? "Storage" : "File")} 模式)");
             #endif
         }
+
+        public void OnUpdate(float deltaTime)
+        {
+            // 自动存档：仅在有脏数据时触发，避免无意义写入。
+            // 注意：这里使用 unscaled 时间，避免 TimeScale=0 时累积为 0 导致永不触发。
+            if (_autoSaveInterval <= 0f) return;
+            if (_dirtyKeys.Count <= 0) return;
+
+            _autoSaveTimer += Time.unscaledDeltaTime;
+            if (_autoSaveTimer < _autoSaveInterval) return;
+
+            _autoSaveTimer = 0f;
+            SaveAllDirty();
+        }
         
         public void Dispose()
         {
             // 保存所有缓存的存档
-            SaveAll();
+            SaveAllDirty();
             _cache.Clear();
+            _dirtyKeys.Clear();
             CYLog.Debug("[SaveService] 已销毁");
         }
         
         #endregion
         
         #region 公开 API
+
+        /// <summary>
+        /// 默认存档 Key（来自 <see cref="SaveServiceConfig.SaveFileName"/>）。
+        /// </summary>
+        public string DefaultSaveKey => _defaultSaveKey;
+
+        /// <summary>
+        /// 最大存档槽位数（来自 <see cref="SaveServiceConfig.MaxSaveSlots"/>）。
+        /// </summary>
+        public int MaxSaveSlots => _maxSaveSlots;
         
         /// <summary>
         /// 注册版本迁移器
@@ -196,6 +243,13 @@ namespace CYFramework.Core.Save
         /// </summary>
         public bool Save<T>(string key, T data) where T : SaveDataBase
         {
+            key = NormalizeKey(key);
+            if (data == null)
+            {
+                CYLog.Warning("[SaveService] Save 失败：data 为空");
+                return false;
+            }
+
             try
             {
                 // 设置元数据
@@ -220,6 +274,8 @@ namespace CYFramework.Core.Save
                 {
                     // 微信/WebGL: 使用 Storage API
                     _storage?.SetString(GetStorageKey(key), finalData);
+                    _storageDirty = true;
+                    FlushStorageIfNeeded();
                 }
                 else
                 {
@@ -236,6 +292,7 @@ namespace CYFramework.Core.Save
                 
                 // 更新缓存
                 _cache[key] = data;
+                _dirtyKeys.Remove(key);
                 
                 CYLog.Debug($"[SaveService] 保存成功: {key}");
                 return true;
@@ -252,6 +309,8 @@ namespace CYFramework.Core.Save
         /// </summary>
         public T Load<T>(string key) where T : SaveDataBase, new()
         {
+            key = NormalizeKey(key);
+
             // 检查缓存
             if (_cache.TryGetValue(key, out var cached))
             {
@@ -321,6 +380,7 @@ namespace CYFramework.Core.Save
                 
                 // 更新缓存
                 _cache[key] = data;
+                _dirtyKeys.Remove(key);
                 
                 CYLog.Debug($"[SaveService] 加载成功: {key}");
                 return data;
@@ -340,12 +400,15 @@ namespace CYFramework.Core.Save
         /// </summary>
         public void Delete(string key)
         {
+            key = NormalizeKey(key);
+
             try
             {
                 if (_useStorageMode)
                 {
                     _storage?.DeleteKey(GetStorageKey(key));
-                    _storage?.Save();
+                    _storageDirty = true;
+                    FlushStorageIfNeeded();
                 }
                 else
                 {
@@ -354,6 +417,7 @@ namespace CYFramework.Core.Save
                 }
 
                 _cache.Remove(key);
+                _dirtyKeys.Remove(key);
                 
                 CYLog.Debug($"[SaveService] 删除成功: {key}");
             }
@@ -368,6 +432,7 @@ namespace CYFramework.Core.Save
         /// </summary>
         public bool Exists(string key)
         {
+            key = NormalizeKey(key);
             if (_cache.ContainsKey(key)) return true;
             
             if (_useStorageMode)
@@ -382,24 +447,307 @@ namespace CYFramework.Core.Save
         }
         
         /// <summary>
-        /// 保存所有缓存的存档
+        /// 保存默认存档（使用 <see cref="DefaultSaveKey"/>）。
+        /// </summary>
+        public bool Save<T>(T data) where T : SaveDataBase
+        {
+            return Save(_defaultSaveKey, data);
+        }
+
+        /// <summary>
+        /// 加载默认存档（使用 <see cref="DefaultSaveKey"/>）。
+        /// </summary>
+        public T Load<T>() where T : SaveDataBase, new()
+        {
+            return Load<T>(_defaultSaveKey);
+        }
+
+        /// <summary>
+        /// 删除默认存档（使用 <see cref="DefaultSaveKey"/>）。
+        /// </summary>
+        public void Delete()
+        {
+            Delete(_defaultSaveKey);
+        }
+
+        /// <summary>
+        /// 默认存档是否存在（使用 <see cref="DefaultSaveKey"/>）。
+        /// </summary>
+        public bool Exists()
+        {
+            return Exists(_defaultSaveKey);
+        }
+
+        /// <summary>
+        /// 保存指定槽位（0~MaxSaveSlots-1）。
+        /// </summary>
+        public bool SaveSlot<T>(int slotIndex, T data) where T : SaveDataBase
+        {
+            if (!IsValidSlotIndex(slotIndex))
+            {
+                CYLog.Warning($"[SaveService] SaveSlot 失败：slotIndex 超界: {slotIndex}");
+                return false;
+            }
+
+            return Save(BuildSlotKey(slotIndex), data);
+        }
+
+        /// <summary>
+        /// 加载指定槽位（0~MaxSaveSlots-1）。
+        /// </summary>
+        public T LoadSlot<T>(int slotIndex) where T : SaveDataBase, new()
+        {
+            if (!IsValidSlotIndex(slotIndex))
+            {
+                CYLog.Warning($"[SaveService] LoadSlot 失败：slotIndex 超界: {slotIndex}");
+                return new T();
+            }
+
+            return Load<T>(BuildSlotKey(slotIndex));
+        }
+
+        /// <summary>
+        /// 指定槽位是否存在（0~MaxSaveSlots-1）。
+        /// </summary>
+        public bool ExistsSlot(int slotIndex)
+        {
+            if (!IsValidSlotIndex(slotIndex))
+            {
+                return false;
+            }
+
+            return Exists(BuildSlotKey(slotIndex));
+        }
+
+        /// <summary>
+        /// 删除指定槽位（0~MaxSaveSlots-1）。
+        /// </summary>
+        public void DeleteSlot(int slotIndex)
+        {
+            if (!IsValidSlotIndex(slotIndex))
+            {
+                CYLog.Warning($"[SaveService] DeleteSlot 失败：slotIndex 超界: {slotIndex}");
+                return;
+            }
+
+            Delete(BuildSlotKey(slotIndex));
+        }
+        
+        /// <summary>
+        /// 保存所有缓存的存档（不要求先 MarkDirty）。
         /// </summary>
         public void SaveAll()
         {
-            // 简化实现：实际需要追踪脏数据
-            CYLog.Debug("[SaveService] SaveAll 完成");
+            if (_cache.Count <= 0) return;
+
+            _dirtyKeyBuffer.Clear();
+            foreach (var kv in _cache)
+            {
+                _dirtyKeyBuffer.Add(kv.Key);
+            }
+
+            for (int i = 0; i < _dirtyKeyBuffer.Count; i++)
+            {
+                var key = _dirtyKeyBuffer[i];
+                if (_cache.TryGetValue(key, out var cached) && cached is SaveDataBase saveData)
+                {
+                    Save(key, saveData);
+                }
+            }
+
+            _dirtyKeyBuffer.Clear();
+        }
+
+        /// <summary>
+        /// 尝试加载存档：只有当存档真实存在时才返回 true；不存在则返回 false（不会创建新对象）。
+        /// </summary>
+        public bool TryLoad<T>(string key, out T data) where T : SaveDataBase, new()
+        {
+            if (!Exists(key))
+            {
+                data = null;
+                return false;
+            }
+
+            data = Load<T>(key);
+            return data != null;
+        }
+
+        /// <summary>
+        /// 加载或创建：存档存在就加载，否则创建并缓存，但不会自动保存（是否保存由业务决定）。
+        /// </summary>
+        /// <remarks>
+        /// 高频用法：进入游戏时拿到一份可用数据对象；数据修改后调用 MarkDirty，再在合适时机 SaveAllDirty。
+        /// </remarks>
+        public T LoadOrCreate<T>(string key) where T : SaveDataBase, new()
+        {
+            key = NormalizeKey(key);
+            if (Exists(key))
+            {
+                return Load<T>(key);
+            }
+
+            var created = new T();
+            _cache[key] = created;
+            _dirtyKeys[key] = 1;
+            return created;
+        }
+
+        /// <summary>
+        /// 标记某个存档为脏：业务层修改数据后应调用，框架才能在 SaveAllDirty 时正确保存。
+        /// </summary>
+        public void MarkDirty(string key)
+        {
+            key = NormalizeKey(key);
+            _dirtyKeys[key] = 1;
+        }
+
+        /// <summary>
+        /// 保存某个已缓存且被标记为脏的数据；成功后会清除脏标记。
+        /// </summary>
+        public bool SaveDirty(string key)
+        {
+            key = NormalizeKey(key);
+            if (!_dirtyKeys.ContainsKey(key)) return false;
+            if (!_cache.TryGetValue(key, out var cached)) return false;
+
+            if (cached is SaveDataBase saveData)
+            {
+                // Save<T> 的数据类型约束更强，这里用基类调用即可覆盖 99% 用法。
+                var ok = Save(key, saveData);
+                if (ok) _dirtyKeys.Remove(key);
+                return ok;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 保存所有脏数据（只保存被 MarkDirty 的键）。
+        /// </summary>
+        /// <remarks>
+        /// - 内部使用复用缓冲列表，避免遍历过程中修改集合导致异常。
+        /// - 推荐在流程切换、退出、应用切后台等低频时机调用；不要在 Update 高频调用。
+        /// </remarks>
+        public void SaveAllDirty()
+        {
+            if (_dirtyKeys.Count <= 0) return;
+
+            _dirtyKeyBuffer.Clear();
+            foreach (var kv in _dirtyKeys)
+            {
+                _dirtyKeyBuffer.Add(kv.Key);
+            }
+
+            for (int i = 0; i < _dirtyKeyBuffer.Count; i++)
+            {
+                SaveDirty(_dirtyKeyBuffer[i]);
+            }
+
+            _dirtyKeyBuffer.Clear();
+            FlushStorageIfNeeded();
+        }
+
+        /// <summary>
+        /// 清理某个键的缓存（不会删除磁盘/Storage 的存档）。
+        /// </summary>
+        public void ClearCache(string key)
+        {
+            key = NormalizeKey(key);
+            _cache.Remove(key);
+            _dirtyKeys.Remove(key);
+        }
+
+        /// <summary>
+        /// 清理全部缓存（不会删除磁盘/Storage 的存档）。
+        /// </summary>
+        public void ClearAllCache()
+        {
+            _cache.Clear();
+            _dirtyKeys.Clear();
+            _dirtyKeyBuffer.Clear();
         }
         
         #endregion
         
         #region 私有方法
+
+        /// <summary>
+        /// 规范化 Key：为空则使用默认 Key。
+        /// </summary>
+        private string NormalizeKey(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return _defaultSaveKey;
+            }
+
+            return key.Trim();
+        }
+
+        /// <summary>
+        /// slotIndex 是否有效（0~MaxSaveSlots-1）。
+        /// </summary>
+        private bool IsValidSlotIndex(int slotIndex)
+        {
+            return slotIndex >= 0 && slotIndex < _maxSaveSlots;
+        }
+
+        /// <summary>
+        /// 构建槽位 Key：默认规则为 “{DefaultSaveKeyWithoutExt}_slot{index}{ext}”。
+        /// </summary>
+        private string BuildSlotKey(int slotIndex)
+        {
+            // DefaultSaveKey 允许包含目录与扩展名
+            var baseKey = NormalizeKey(null);
+            var extension = Path.GetExtension(baseKey);
+            var nameNoExt = Path.GetFileNameWithoutExtension(baseKey);
+            var dir = Path.GetDirectoryName(baseKey);
+
+            var fileName = $"{nameNoExt}_slot{slotIndex}{extension}";
+            if (string.IsNullOrEmpty(dir))
+            {
+                return fileName;
+            }
+
+            // 统一分隔符，避免 Storage key/路径不一致
+            dir = dir.Replace('\\', '/');
+            return $"{dir}/{fileName}";
+        }
+
+        /// <summary>
+        /// Storage 模式落盘（WebGL/微信）。
+        /// </summary>
+        private void FlushStorageIfNeeded()
+        {
+            if (!_useStorageMode) return;
+            if (!_storageDirty) return;
+
+            _storageDirty = false;
+            _storage?.Save();
+        }
         
         /// <summary>
         /// 获取存档路径（文件系统模式）
         /// </summary>
         private string GetSavePath(string key)
         {
-            return $"Saves/{key}.sav";
+            key = NormalizeKey(key);
+
+            // 允许传入带扩展名的文件名（例如 "save.dat"），此时不强制追加 .sav
+            var fileName = key;
+            if (Path.IsPathRooted(fileName))
+            {
+                return fileName;
+            }
+
+            fileName = fileName.TrimStart('/', '\\');
+            if (string.IsNullOrEmpty(Path.GetExtension(fileName)))
+            {
+                fileName += ".sav";
+            }
+
+            return $"Saves/{fileName}";
         }
         
         /// <summary>
@@ -407,6 +755,7 @@ namespace CYFramework.Core.Save
         /// </summary>
         private string GetStorageKey(string key)
         {
+            key = NormalizeKey(key);
             return $"CYF_Save_{key}";
         }
         

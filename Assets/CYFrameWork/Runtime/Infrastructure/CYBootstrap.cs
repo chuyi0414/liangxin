@@ -59,6 +59,18 @@ namespace CYFramework.Infrastructure
         // 暂停状态
         private float _pauseTimestamp;
         private bool _isPaused;
+
+#if UNITY_EDITOR && !(CY_WECHAT || UNITY_WEBGL)
+        private class EditorVibrationAdapter : IVibrationAdapter
+        {
+            public PlatformType Platform => PlatformType.PC;
+            public bool IsSupported => false;
+            public void Initialize() { }
+            public void VibrateShort() { CYLog.Debug("[EditorVibrationAdapter] VibrateShort"); }
+            public void VibrateLong() { CYLog.Debug("[EditorVibrationAdapter] VibrateLong"); }
+            public void Vibrate(int milliseconds) { CYLog.Debug($"[EditorVibrationAdapter] Vibrate: {milliseconds}ms"); }
+        }
+#endif
         
         #region Unity 生命周期
         
@@ -170,8 +182,12 @@ namespace CYFramework.Infrastructure
             var maxPauseTolerance = bootstrapConfig?.MaxPauseTolerance ?? _maxPauseTolerance;
             _maxPauseTolerance = maxPauseTolerance;
             
-            // 1. 初始化日志系统
+            // 1. 初始化日志系统（应用 LogServiceConfig 的所有开关）
             CYLog.Initialize(logLevel);
+            if (logConfig != null)
+            {
+                CYLog.ApplyConfig(logConfig);
+            }
             CYLog.Info("=== CYFramework 2.2 启动 ===");
             CYLog.Info($"平台: {Application.platform}");
             CYLog.Info($"逻辑帧率: {fixedTickRate}Hz");
@@ -187,12 +203,14 @@ namespace CYFramework.Infrastructure
             // 3. 注册核心服务
             RegisterCoreServices();
             
+            // 监听服务动态变动（必须在 InitializeAll 之前）
+            ServiceLocator.OnServiceRegistered += RegisterLifecycle;
+            ServiceLocator.OnServiceUnregistered += UnregisterLifecycle;
+            
             // 4. 初始化所有服务（包括流程自动注册）
             ServiceLocator.InitializeAll();
             
-            // 5. 收集生命周期接口
-            CollectLifecycleInterfaces();
-            
+            // 5. 收集生命周期接口 (已通过事件自动收集)
             // 6. 注册全局异常处理
             RegisterExceptionHandler();
             
@@ -272,28 +290,16 @@ namespace CYFramework.Infrastructure
             // VibrationAdapter - 震动适配器
 #if CY_WECHAT || UNITY_WEBGL
             ServiceLocator.Register<IVibrationAdapter, WeChatVibrationAdapter>();
-#elif !UNITY_EDITOR || UNITY_ANDROID || UNITY_IOS
+#elif UNITY_EDITOR
+            ServiceLocator.Register<IVibrationAdapter, EditorVibrationAdapter>();
+#elif UNITY_ANDROID || UNITY_IOS
             ServiceLocator.Register<IVibrationAdapter, UnityVibrationAdapter>();
 #endif
             
             CYLog.Debug("[CYBootstrap] 核心服务注册完成");
         }
         
-        /// <summary>
-        /// 收集生命周期接口
-        /// 自动遍历所有已注册服务，注册实现了生命周期接口的服务
-        /// </summary>
-        private void CollectLifecycleInterfaces()
-        {
-            // 从 ServiceLocator 获取所有已实例化的服务并注册生命周期
-            var allServices = ServiceLocator.GetAllInstances();
-            foreach (var service in allServices)
-            {
-                RegisterLifecycle(service);
-            }
-            
-            CYLog.Debug($"[CYBootstrap] 生命周期注册完成: Tickable={_tickables.Count}, Updateable={_updateables.Count}, LateUpdateable={_lateUpdateables.Count}, Pausable={_pausables.Count}");
-        }
+
         
         /// <summary>
         /// 注册全局异常处理
@@ -322,6 +328,9 @@ namespace CYFramework.Infrastructure
 #endif
             
             ServiceLocator.DisposeAll();
+            
+            ServiceLocator.OnServiceRegistered -= RegisterLifecycle;
+            ServiceLocator.OnServiceUnregistered -= UnregisterLifecycle;
             
             _tickables.Clear();
             _updateables.Clear();

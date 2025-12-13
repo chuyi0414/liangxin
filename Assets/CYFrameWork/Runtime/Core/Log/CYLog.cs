@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using UnityEngine;
 
@@ -52,6 +53,10 @@ namespace CYFramework.Infrastructure
     {
         // 当前日志级别
         private static LogLevel _minLevel = LogLevel.Debug;
+
+        // 输出格式开关（由配置驱动）
+        internal static bool ShowTimestamp = true;
+        internal static bool ShowStackTrace = false;
         
         // 输出器列表
         private static readonly List<ILogOutput> _outputs = new();
@@ -85,6 +90,43 @@ namespace CYFramework.Infrastructure
             
             _initialized = true;
             Info("[CYLog] 日志系统初始化完成");
+        }
+
+        /// <summary>
+        /// 应用日志配置（推荐由 CYBootstrap 在启动时调用）。
+        /// </summary>
+        /// <remarks>
+        /// - Initialize 之后可重复调用，用于运行时切换开关。
+        /// - WebGL/微信不建议写文件；即使启用也会自动降级并打印警告。
+        /// </remarks>
+        public static void ApplyConfig(CYFramework.Core.Config.LogServiceConfig config)
+        {
+            if (config == null) return;
+
+            SetMinLevel(config.Level);
+            ShowTimestamp = config.ShowTimestamp;
+            ShowStackTrace = config.ShowStackTrace;
+
+#if UNITY_WEBGL || CY_WECHAT
+            if (config.WriteToFile)
+            {
+                Warning("[CYLog] WebGL/微信平台不支持稳定的文件写入，已忽略 WriteToFile 配置");
+            }
+#else
+            // 移除旧的文件输出器（避免重复添加）
+            for (int i = _outputs.Count - 1; i >= 0; i--)
+            {
+                if (_outputs[i] is FileLogOutput)
+                {
+                    _outputs.RemoveAt(i);
+                }
+            }
+
+            if (config.WriteToFile)
+            {
+                AddOutput(new FileLogOutput(config.LogFilePath, config.MaxLogFileSizeMB));
+            }
+#endif
         }
         
         /// <summary>
@@ -262,9 +304,14 @@ namespace CYFramework.Infrastructure
         public static string Format(in LogEntry entry)
         {
             _sb.Clear();
+            if (ShowTimestamp)
+            {
+                _sb.Append('[');
+                _sb.Append(entry.Timestamp.ToString("HH:mm:ss.fff"));
+                _sb.Append("]");
+            }
+
             _sb.Append('[');
-            _sb.Append(entry.Timestamp.ToString("HH:mm:ss.fff"));
-            _sb.Append("][");
             _sb.Append(entry.Level.ToString().ToUpper());
             _sb.Append("][");
             _sb.Append(entry.Tag);
@@ -300,7 +347,7 @@ namespace CYFramework.Infrastructure
                     
                 case LogLevel.Error:
                 case LogLevel.Fatal:
-                    if (!string.IsNullOrEmpty(entry.StackTrace))
+                    if (CYLog.ShowStackTrace && !string.IsNullOrEmpty(entry.StackTrace))
                     {
                         UnityEngine.Debug.LogError($"{formatted}\n{entry.StackTrace}");
                     }
@@ -309,6 +356,59 @@ namespace CYFramework.Infrastructure
                         UnityEngine.Debug.LogError(formatted);
                     }
                     break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 文件日志输出器（写入 persistentDataPath）。
+    /// </summary>
+    /// <remarks>
+    /// - 超过最大文件大小后会删除旧文件重新写入（简单策略，避免复杂轮转）。
+    /// - 日志本身不应在 Update 高频路径大量输出，否则会造成明显 IO 压力。
+    /// </remarks>
+    public sealed class FileLogOutput : ILogOutput
+    {
+        private readonly string _relativePath;
+        private readonly long _maxBytes;
+
+        public FileLogOutput(string relativePath, int maxSizeMB)
+        {
+            _relativePath = string.IsNullOrEmpty(relativePath) ? "Logs/game.log" : relativePath;
+            _maxBytes = Math.Max(1, maxSizeMB) * 1024L * 1024L;
+        }
+
+        public void Write(in LogEntry entry)
+        {
+            try
+            {
+                var fullPath = Path.Combine(Application.persistentDataPath, _relativePath);
+                var dir = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                if (File.Exists(fullPath))
+                {
+                    var info = new FileInfo(fullPath);
+                    if (info.Length >= _maxBytes)
+                    {
+                        File.Delete(fullPath);
+                    }
+                }
+
+                var line = CYLog.Format(entry);
+                if (CYLog.ShowStackTrace && !string.IsNullOrEmpty(entry.StackTrace))
+                {
+                    line = $"{line}\n{entry.StackTrace}";
+                }
+
+                File.AppendAllText(fullPath, line + "\n", Encoding.UTF8);
+            }
+            catch
+            {
+                // 避免日志系统自身引发异常导致连锁崩溃
             }
         }
     }

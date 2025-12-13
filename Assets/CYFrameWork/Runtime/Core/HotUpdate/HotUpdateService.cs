@@ -79,6 +79,11 @@ namespace CYFramework.Core.HotUpdate
         /// 最大并发下载数
         /// </summary>
         public int MaxConcurrentDownloads = 3;
+
+        /// <summary>
+        /// 单个文件下载失败最大重试次数（不含首次请求）。
+        /// </summary>
+        public int MaxDownloadRetry = 0;
         
         /// <summary>
         /// 是否启用增量更新
@@ -120,6 +125,11 @@ namespace CYFramework.Core.HotUpdate
     /// <summary>
     /// 热更新服务
     /// 文档：微信分包 + Native Addressables
+    /// <para>
+    /// 警告：HotUpdateService 的 Storage 模式仅适用于 &lt;2MB 的配置/脚本补丁。
+    /// 对于大资源，请使用微信分包或 Addressables 远程加载。
+    /// 避免在 WebGL/微信端使用 Convert.ToBase64String 存大文件，会导致内存膨胀 (~33%) 且分配在大堆 (LOH) 上引发 OOM。
+    /// </para>
     /// </summary>
     public class HotUpdateService : IHotUpdateService, IInitializable, IDisposableEx
     {
@@ -169,6 +179,7 @@ namespace CYFramework.Core.HotUpdate
                     _config.VersionUrl = externalConfig.CdnBaseUrl + externalConfig.VersionFileName;
                     _config.DownloadTimeout = (int)externalConfig.DownloadTimeout;
                     _config.MaxConcurrentDownloads = externalConfig.MaxConcurrentDownloads;
+                    _config.MaxDownloadRetry = Mathf.Max(0, externalConfig.MaxDownloadRetry);
                     _config.EnableIncrementalUpdate = externalConfig.EnableIncrementalUpdate;
                     CYLog.Debug("[HotUpdateService] 使用 CYConfigurator 配置");
                 }
@@ -257,27 +268,13 @@ namespace CYFramework.Core.HotUpdate
                 
                 // 按优先级排序
                 _pendingDownloads.Sort((a, b) => b.priority.CompareTo(a.priority));
-                
-                foreach (var bundle in _pendingDownloads)
+
+                // 并发下载（WebGL/微信依旧是单线程 async 交错执行，不依赖多线程）
+                bool allSuccess = await DownloadAllConcurrent(_pendingDownloads, onProgress);
+                if (!allSuccess)
                 {
-                    _progress.CurrentFile = bundle.name;
-                    NotifyProgress();
-                    onProgress?.Invoke(_progress);
-                    
-                    bool success = await DownloadBundle(bundle);
-                    
-                    if (!success)
-                    {
-                        SetState(UpdateState.Failed);
-                        OnError?.Invoke($"下载失败: {bundle.name}");
-                        return false;
-                    }
-                    
-                    _progress.DownloadedBytes += bundle.size;
-                    _progress.DownloadedCount++;
-                    _progress.Progress = (float)_progress.DownloadedBytes / _progress.TotalBytes;
-                    NotifyProgress();
-                    onProgress?.Invoke(_progress);
+                    SetState(UpdateState.Failed);
+                    return false;
                 }
                 
                 SetState(UpdateState.Completed);
@@ -450,70 +447,178 @@ namespace CYFramework.Core.HotUpdate
         {
             string url = _config.CdnBaseUrl + bundle.name;
             CYLog.Debug($"[HotUpdateService] 下载: {url}");
-            
-            try
+
+            var maxRetry = _config != null ? Mathf.Max(0, _config.MaxDownloadRetry) : 0;
+            var totalAttempts = 1 + maxRetry;
+
+            for (int attempt = 0; attempt < totalAttempts; attempt++)
             {
-                // 使用 UnityWebRequest 下载
-                using var request = UnityEngine.Networking.UnityWebRequest.Get(url);
-                request.timeout = _config.DownloadTimeout;
-                
-                var operation = request.SendWebRequest();
-                while (!operation.isDone)
+                try
                 {
+                    // 使用 UnityWebRequest 下载
+                    using var request = UnityEngine.Networking.UnityWebRequest.Get(url);
+                    request.timeout = _config.DownloadTimeout;
+
+                    var operation = request.SendWebRequest();
+                    while (!operation.isDone)
+                    {
+                        await Task.Yield();
+                    }
+
+                    if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+                    {
+                        CYLog.Warning($"[HotUpdateService] 下载失败: {bundle.name}, attempt={attempt + 1}/{totalAttempts}, error={request.error}");
+                        if (attempt >= totalAttempts - 1) return false;
+                        await Task.Yield();
+                        continue;
+                    }
+
+                    byte[] data = request.downloadHandler.data;
+
+#if CY_WECHAT || UNITY_WEBGL
+                    // WebGL/微信平台：使用 Storage 存储
+                    if (ServiceLocator.TryGet<IStorageAdapter>(out var storage))
+                    {
+                        // 将二进制数据转为 Base64 存储
+                        string dataKey = $"CYF_Bundle_{bundle.name}";
+                        string hashKey = $"CYF_Bundle_{bundle.name}_hash";
+
+                        storage.SetString(dataKey, Convert.ToBase64String(data));
+                        storage.SetString(hashKey, bundle.hash);
+                        storage.Save();
+
+                        CYLog.Debug($"[HotUpdateService] 下载完成 (Storage): {bundle.name}");
+                        return true;
+                    }
+                    else
+                    {
+                        CYLog.Error("[HotUpdateService] IStorageAdapter 未注册");
+                        return false;
+                    }
+#else
+                    // Native 平台：使用文件系统
+                    string localDir = System.IO.Path.Combine(Application.persistentDataPath, "Bundles");
+                    string localPath = System.IO.Path.Combine(localDir, bundle.name);
+                    string hashPath = localPath + ".hash";
+
+                    if (!System.IO.Directory.Exists(localDir))
+                    {
+                        System.IO.Directory.CreateDirectory(localDir);
+                    }
+
+                    await System.IO.File.WriteAllBytesAsync(localPath, data);
+                    await System.IO.File.WriteAllTextAsync(hashPath, bundle.hash);
+
+                    CYLog.Debug($"[HotUpdateService] 下载完成: {bundle.name}");
+                    return true;
+#endif
+                }
+                catch (Exception ex)
+                {
+                    CYLog.Warning($"[HotUpdateService] 下载异常: {bundle.name}, attempt={attempt + 1}/{totalAttempts}, ex={ex.Message}");
+                    if (attempt >= totalAttempts - 1) return false;
                     await Task.Yield();
                 }
-                
-                if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
-                {
-                    CYLog.Error($"[HotUpdateService] 下载失败: {request.error}");
-                    return false;
-                }
-                
-                byte[] data = request.downloadHandler.data;
-                
-#if CY_WECHAT || UNITY_WEBGL
-                // WebGL/微信平台：使用 Storage 存储
-                if (ServiceLocator.TryGet<IStorageAdapter>(out var storage))
-                {
-                    // 将二进制数据转为 Base64 存储
-                    string dataKey = $"CYF_Bundle_{bundle.name}";
-                    string hashKey = $"CYF_Bundle_{bundle.name}_hash";
-                    
-                    storage.SetString(dataKey, Convert.ToBase64String(data));
-                    storage.SetString(hashKey, bundle.hash);
-                    storage.Save();
-                    
-                    CYLog.Debug($"[HotUpdateService] 下载完成 (Storage): {bundle.name}");
-                    return true;
-                }
-                else
-                {
-                    CYLog.Error("[HotUpdateService] IStorageAdapter 未注册");
-                    return false;
-                }
-#else
-                // Native 平台：使用文件系统
-                string localDir = System.IO.Path.Combine(Application.persistentDataPath, "Bundles");
-                string localPath = System.IO.Path.Combine(localDir, bundle.name);
-                string hashPath = localPath + ".hash";
-                
-                if (!System.IO.Directory.Exists(localDir))
-                {
-                    System.IO.Directory.CreateDirectory(localDir);
-                }
-                
-                await System.IO.File.WriteAllBytesAsync(localPath, data);
-                await System.IO.File.WriteAllTextAsync(hashPath, bundle.hash);
-                
-                CYLog.Debug($"[HotUpdateService] 下载完成: {bundle.name}");
-                return true;
-#endif
             }
-            catch (Exception ex)
+
+            return false;
+        }
+
+        /// <summary>
+        /// 并发下载入口：受 <see cref="HotUpdateConfig.MaxConcurrentDownloads"/> 控制。
+        /// </summary>
+        private async Task<bool> DownloadAllConcurrent(List<AssetBundle> bundles, Action<UpdateProgress> onProgress)
+        {
+            if (bundles == null || bundles.Count <= 0) return true;
+
+            int maxConcurrent = _config != null ? Mathf.Max(1, _config.MaxConcurrentDownloads) : 1;
+            if (maxConcurrent <= 1)
             {
-                CYLog.Error($"[HotUpdateService] 下载异常: {ex.Message}");
-                return false;
+                // 退化为串行逻辑（保持行为稳定）
+                for (int i = 0; i < bundles.Count; i++)
+                {
+                    var bundle = bundles[i];
+                    _progress.CurrentFile = bundle.name;
+                    NotifyProgress();
+                    onProgress?.Invoke(_progress);
+
+                    bool success = await DownloadBundle(bundle);
+                    if (!success)
+                    {
+                        OnError?.Invoke($"下载失败: {bundle.name}");
+                        return false;
+                    }
+
+                    _progress.DownloadedBytes += bundle.size;
+                    _progress.DownloadedCount++;
+                    _progress.Progress = _progress.TotalBytes > 0 ? (float)_progress.DownloadedBytes / _progress.TotalBytes : 1f;
+                    NotifyProgress();
+                    onProgress?.Invoke(_progress);
+                }
+
+                return true;
             }
+
+            // 并发窗口：用 index 作为工作队列指针（不使用 LINQ，减少分配）
+            int nextIndex = 0;
+            int total = bundles.Count;
+
+            // 共享进度：并发情况下 CurrentFile 只展示“最近完成的文件”
+            _progress.CurrentFile = "";
+            NotifyProgress();
+            onProgress?.Invoke(_progress);
+
+            var tasks = new List<Task<(bool ok, AssetBundle bundle)>>(maxConcurrent);
+
+            Task<(bool ok, AssetBundle bundle)> StartOne()
+            {
+                if (nextIndex >= total) return null;
+                var bundle = bundles[nextIndex++];
+                return DownloadOne(bundle);
+            }
+
+            async Task<(bool ok, AssetBundle bundle)> DownloadOne(AssetBundle bundle)
+            {
+                // 单个任务开始前更新 CurrentFile（多任务会覆盖，但不影响统计）
+                _progress.CurrentFile = bundle.name;
+                NotifyProgress();
+                onProgress?.Invoke(_progress);
+
+                bool ok = await DownloadBundle(bundle);
+                return (ok, bundle);
+            }
+
+            // 预热启动
+            for (int i = 0; i < maxConcurrent; i++)
+            {
+                var t = StartOne();
+                if (t != null) tasks.Add(t);
+            }
+
+            while (tasks.Count > 0)
+            {
+                var finished = await Task.WhenAny(tasks);
+                tasks.Remove(finished);
+
+                var result = await finished;
+                if (!result.ok)
+                {
+                    OnError?.Invoke($"下载失败: {result.bundle.name}");
+                    return false;
+                }
+
+                _progress.CurrentFile = result.bundle.name;
+                _progress.DownloadedBytes += result.bundle.size;
+                _progress.DownloadedCount++;
+                _progress.Progress = _progress.TotalBytes > 0 ? (float)_progress.DownloadedBytes / _progress.TotalBytes : 1f;
+                NotifyProgress();
+                onProgress?.Invoke(_progress);
+
+                var next = StartOne();
+                if (next != null) tasks.Add(next);
+            }
+
+            return true;
         }
         
         /// <summary>

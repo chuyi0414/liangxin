@@ -112,6 +112,54 @@ namespace CYFramework.Core.Procedure
         private readonly Dictionary<string, Type> _procedureNames = new Dictionary<string, Type>();
         private ProcedureBase _currentProcedure;
         private object _pendingUserData;
+
+        private bool TryRegisterFromRegistry()
+        {
+            var registry = Resources.Load<ProcedureRegistryAsset>("CYFramework/ProcedureRegistry");
+            if (registry == null || registry.Procedures == null || registry.Procedures.Count == 0)
+            {
+                return false;
+            }
+
+            var entries = registry.Procedures.OrderBy(e => e.Order).ToList();
+            int registered = 0;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var entry = entries[i];
+                if (string.IsNullOrEmpty(entry.TypeName))
+                {
+                    continue;
+                }
+
+                var type = Type.GetType(entry.TypeName);
+                if (type == null)
+                {
+                    CYLog.Warning($"[ProcedureManager] 注册表类型不存在: {entry.TypeName}");
+                    continue;
+                }
+
+                if (!typeof(ProcedureBase).IsAssignableFrom(type) || type.IsAbstract)
+                {
+                    CYLog.Warning($"[ProcedureManager] 注册表类型不是有效流程: {type.FullName}");
+                    continue;
+                }
+
+                var procedure = (ProcedureBase)Activator.CreateInstance(type);
+                procedure.SetOwner(this);
+                _procedures[type] = procedure;
+
+                var name = string.IsNullOrEmpty(entry.Name) ? type.Name.Replace("Procedure", "") : entry.Name;
+                _procedureNames[name] = type;
+                registered++;
+            }
+
+            if (registered > 0)
+            {
+                CYLog.Debug($"[ProcedureManager] 从流程注册表加载完成: {registered} 个");
+                return true;
+            }
+            return false;
+        }
         
         // 配置
         private string _entryProcedure = "";
@@ -128,6 +176,71 @@ namespace CYFramework.Core.Procedure
         public ProcedureBase CurrentProcedure => _currentProcedure;
         public string CurrentProcedureName => _currentProcedure?.GetType().Name;
         public bool IsRunning => _currentProcedure != null;
+
+        /// <summary>
+        /// 是否处于指定流程（按类型）
+        /// </summary>
+        /// <typeparam name="T">流程类型</typeparam>
+        /// <returns>是否当前正是该流程</returns>
+        public bool IsCurrent<T>() where T : ProcedureBase
+        {
+            return _currentProcedure != null && _currentProcedure.GetType() == typeof(T);
+        }
+
+        /// <summary>
+        /// 是否处于指定流程（按名称，名称来自 Start/Change 的 name）
+        /// </summary>
+        public bool IsCurrent(string procedureName)
+        {
+            if (string.IsNullOrEmpty(procedureName) || _currentProcedure == null)
+            {
+                return false;
+            }
+
+            if (_procedureNames.TryGetValue(procedureName, out var type))
+            {
+                return _currentProcedure.GetType() == type;
+            }
+
+            // 兼容直接用类名判断
+            return string.Equals(_currentProcedure.GetType().Name, procedureName, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 尝试按名称切换流程（不存在则返回 false）
+        /// </summary>
+        public bool TryChange(string procedureName, object userData = null)
+        {
+            if (string.IsNullOrEmpty(procedureName))
+            {
+                return false;
+            }
+
+            if (!_procedureNames.TryGetValue(procedureName, out var type))
+            {
+                return false;
+            }
+
+            Change(procedureName, userData);
+            return true;
+        }
+
+        /// <summary>
+        /// 如果当前不是指定流程才切换（避免重复触发 OnLeave/OnEnter）
+        /// </summary>
+        /// <typeparam name="T">目标流程类型</typeparam>
+        /// <param name="userData">用户数据</param>
+        /// <returns>是否发生了切换</returns>
+        public bool ChangeIfNot<T>(object userData = null) where T : ProcedureBase
+        {
+            if (IsCurrent<T>())
+            {
+                return false;
+            }
+
+            ChangeProcedure<T>(userData);
+            return true;
+        }
         
         public void Initialize()
         {
@@ -147,9 +260,16 @@ namespace CYFramework.Core.Procedure
             // 自动注册流程
             // ❗ WebGL/微信平台不支持 AppDomain，默认禁用自动扫描
             // 若需要在这些平台使用，请通过 AddProcedure<T>() 显式注册
+            // 📌 说明：平台限制原因（见文档 6.1），WebGL/微信不支持 AppDomain.GetAssemblies。
+            // 推荐做法：
+            // 1) 运行期显式 AddProcedure<T>()；
+            // 2) 或者在 Editor 生成流程注册表，运行期读取，避免反射扫描卡顿/GC。
             if (_autoRegister)
             {
-                AutoRegisterAll();
+                if (!TryRegisterFromRegistry())
+                {
+                    AutoRegisterAll();
+                }
             }
             
             CYLog.Debug("[ProcedureManager] 初始化完成");
@@ -191,7 +311,7 @@ namespace CYFramework.Core.Procedure
         /// 推荐做法：
         /// 1) 显式注册: AddProcedure&lt;MyProcedure&gt;()
         /// 2) 传入指定程序集: AutoRegisterAll(typeof(MyProcedure).Assembly)
-        /// 3) Editor 生成注册表（未实现）
+        /// 3) Editor 生成注册表（已实现：使用菜单 CYFramework/Generate Procedure Registry）
         /// </summary>
         /// <param name="assembly">指定的程序集，不传则扫描所有程序集（仅 Native 端支持）</param>
         public void AutoRegisterAll(Assembly assembly = null)
@@ -200,7 +320,7 @@ namespace CYFramework.Core.Procedure
             // WebGL/微信平台不支持 AppDomain，必须传入指定程序集
             if (assembly == null)
             {
-                CYLog.Warning("[ProcedureManager] WebGL/微信平台不支持自动扫描程序集，请使用 AddProcedure<T>() 显式注册或传入指定 Assembly");
+                CYLog.Warning("[ProcedureManager] WebGL/微信平台不支持自动扫描程序集，请使用流程注册表（ProcedureRegistryAsset）或 AddProcedure<T>() 显式注册或传入指定 Assembly");
                 return;
             }
 #endif
@@ -239,8 +359,9 @@ namespace CYFramework.Core.Procedure
         }
         
         /// <summary>
-        /// 启动流程管理器
+        /// 启动流程管理器并进入指定流程
         /// </summary>
+        /// <typeparam name="T">初始流程类型</typeparam>
         public void Start<T>() where T : ProcedureBase
         {
             if (_procedures.TryGetValue(typeof(T), out var procedure))
@@ -266,6 +387,8 @@ namespace CYFramework.Core.Procedure
         /// <summary>
         /// 切换流程（带参数）
         /// </summary>
+        /// <typeparam name="T">目标流程类型</typeparam>
+        /// <param name="userData">传递给目标流程的数据（目标流程需实现 ProcedureBase&lt;TData&gt; 接收）</param>
         public void ChangeProcedure<T>(object userData) where T : ProcedureBase
         {
             ChangeProcedureInternal(typeof(T), userData);

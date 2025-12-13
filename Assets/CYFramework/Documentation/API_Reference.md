@@ -1,4 +1,4 @@
-﻿# CYFramework 2.3 API 参考文档
+﻿# CYFramework 2.2 API 参考文档
 
 > 本文档包含框架所有公开 API 的完整说明。
 
@@ -29,36 +29,35 @@
 |------|------|------|
 | `Subscribe<T>(handler, owner)` | 处理器, 拥有者 | 订阅事件 |
 | `Unsubscribe<T>(handler)` | 处理器 | 取消订阅 |
-| `Fire<T>(T evt)` | 事件数据 | 发布事件 |
-| `Fire<T>(ref T evt)` | 事件数据 | 发布事件（零 GC） |
+| `Post<T>(ref T evt)` | 事件数据 | 发布事件（零 GC） |
 | `UnsubscribeAll(owner)` | 拥有者 | 取消所有订阅 |
 | `SubscribeAll(target)` | 目标对象 | 自动订阅 [OnEvent] 标记的方法 |
 
-#### CY.Log（日志系统）
+#### CY 日志快捷方法
 | 方法 | 参数 | 说明 |
 |------|------|------|
-| `Info(string msg)` | 消息 | 信息日志 |
-| `Warning(string msg)` | 消息 | 警告日志 |
-| `Error(string msg)` | 消息 | 错误日志 |
-| `Info(string tag, string msg)` | 标签, 消息 | 带标签的信息 |
+| `Log(string msg)` | 消息 | Debug 日志 |
+| `LogInfo(string msg)` | 消息 | Info 日志 |
+| `LogWarning(string msg)` | 消息 | Warning 日志 |
+| `LogError(string msg)` | 消息 | Error 日志 |
 
 #### CY.Timer（计时器系统）
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `Delay(seconds, onComplete, useUnscaledTime)` | 秒数, 回调, 是否不受时间缩放 | `Timer` | 延迟执行 |
 | `Loop(interval, onTick, useUnscaledTime)` | 间隔, 回调, 是否不受时间缩放 | `Timer` | 循环执行 |
-| `NextFrame(onComplete)` | 回调 | `Timer` | 下一帧执行 |
+| `NextFrame(onComplete)` | 回调 | `void` | 下一帧执行 |
 | `CancelAll()` | 无 | `void` | 取消所有计时器 |
 
 #### CY.Procedure（流程系统）
 | 方法 | 参数 | 说明 |
 |------|------|------|
-| `Add<T>(name)` | 名称(可选) | 注册流程 |
+| `AddProcedure<T>(name)` | 名称(可选) | 注册流程 |
 | `AutoRegisterAll(assembly)` | 程序集(可选) | 自动注册 [AutoRegisterProcedure] 标记的流程 |
 | `Start<T>()` | 无 | 启动流程系统 |
 | `Start(name)` | 流程名称 | 按名称启动 |
-| `Change<T>()` | 无 | 切换流程 |
-| `Change<T>(userData)` | 用户数据 | 切换流程（带参数） |
+| `ChangeProcedure<T>()` | 无 | 切换流程 |
+| `ChangeProcedure<T>(userData)` | 用户数据 | 切换流程（带参数） |
 | `Change(name, userData)` | 流程名称, 用户数据 | 按名称切换流程 |
 | `Current` | - | 获取当前流程 |
 | `CurrentName` | - | 获取当前流程名称 |
@@ -66,23 +65,23 @@
 #### CY.Entity（实体系统）
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `Register(type, prefab, preload)` | 类型名, 预制体, 预加载数 | `void` | 注册实体类型 |
-| `Show<T>(type, userData)` | 类型名, 用户数据 | `T` | 显示实体 |
-| `Show(type, userData)` | 类型名, 用户数据 | `IEntity` | 显示实体 |
-| `Hide(entityId)` | 实体 ID | `void` | 隐藏实体 |
-| `Hide(entity)` | 实体对象 | `void` | 隐藏实体 |
-| `HideAll(type)` | 类型名 | `void` | 隐藏指定类型所有实体 |
-| `HideAll()` | 无 | `void` | 隐藏所有实体 |
-| `Get<T>(entityId)` | 实体 ID | `T` | 获取实体 |
-| `Count(type)` | 类型名 | `int` | 获取实体数量 |
+| `RegisterEntity(type, prefab, preload, parent)` | 类型名, 预制体, 预加载数, 父节点 | `void` | 注册实体类型 |
+| `ShowEntity<T>(type, userData)` | 类型名, 用户数据 | `T` | 显示实体 |
+| `ShowEntity(type, userData)` | 类型名, 用户数据 | `IEntity` | 显示实体 |
+| `HideEntity(entityId)` | 实体 ID | `void` | 隐藏实体 |
+| `HideEntity(entity)` | 实体对象 | `void` | 隐藏实体 |
+| `HideAllEntities(type)` | 类型名 | `void` | 隐藏指定类型所有实体 |
+| `HideAllEntities()` | 无 | `void` | 隐藏所有实体 |
+| `GetEntity<T>(entityId)` | 实体 ID | `T` | 获取实体 |
+| `GetEntityCount(type)` | 类型名 | `int` | 获取实体数量 |
 
 #### CY.Data（数据表系统）
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `Create<T>(name)` | 表名 | `DataTable<T>` | 创建数据表 |
-| `GetTable<T>(name)` | 表名 | `DataTable<T>` | 获取数据表 |
-| `LoadCsv<T>(csvText, name)` | CSV 文本, 表名 | `DataTable<T>` | 从 CSV 加载 |
-| `GetRow<T>(id, tableName)` | 行 ID, 表名 | `T` | 获取数据行 |
+| `CreateDataTable<T>(name)` | 表名(可选) | `DataTable<T>` | 创建数据表 |
+| `GetDataTable<T>(name)` | 表名(可选) | `DataTable<T>` | 获取数据表 |
+| `LoadFromCsv<T>(csvText, name, separator)` | CSV 文本, 表名(可选), 分隔符 | `DataTable<T>` | 从 CSV 加载 |
+| `UnloadDataTable(name)` | 表名 | `void` | 卸载数据表 |
 
 #### CY 服务定位器快捷方法
 | 方法 | 说明 |
@@ -102,7 +101,8 @@
 // ========== 事件 ==========
 // 手动订阅
 CY.Event.Subscribe<GameStartEvent>(OnStart, this);
-CY.Event.Fire(new GameStartEvent { StageId = 1 });
+var startEvt = new GameStartEvent { StageId = 1 };
+CY.Event.Post(ref startEvt);
 
 // 自动订阅（推荐）- 在类中使用 [OnEvent] 标记方法
 [OnEvent]
@@ -110,7 +110,7 @@ private void OnStart(ref GameStartEvent evt) { }
 
 // ========== 流程 ==========
 // 手动注册
-CY.Procedure.Add<MenuProcedure>("Menu");
+CY.Procedure.AddProcedure<MenuProcedure>("Menu");
 CY.Procedure.Start("Menu");
 CY.Procedure.Change("Battle");
 
@@ -119,17 +119,17 @@ CY.Procedure.Change("Battle");
 public class MenuProcedure : ProcedureBase { }
 
 // ========== 计时器 ==========
-CY.Timer.Delay(2f, () => CY.Log.Info("延迟 2 秒"));
-CY.Timer.Loop(1f, () => CY.Log.Info("每秒执行"));
+CY.Timer.Delay(2f, () => CY.LogInfo("延迟 2 秒"));
+CY.Timer.Loop(1f, () => CY.LogInfo("每秒执行"));
 
 // ========== 实体 ==========
-CY.Entity.Register("Enemy", enemyPrefab, 10);
-var enemy = CY.Entity.Show<EnemyEntity>("Enemy");
-CY.Entity.Hide(enemy);
+CY.Entity.RegisterEntity("Enemy", enemyPrefab, 10);
+var enemy = CY.Entity.ShowEntity<EnemyEntity>("Enemy");
+CY.Entity.HideEntity(enemy);
 
 // ========== 数据表 ==========
-CY.Data.LoadCsv<MonsterRow>(csvText);
-var monster = CY.Data.GetRow<MonsterRow>(1001);
+CY.Data.LoadFromCsv<MonsterRow>(csvText);
+var monster = CY.Data.GetDataTable<MonsterRow>().GetRow(1001);
 ```
 
 ---
@@ -438,7 +438,7 @@ public class MenuProcedure : ProcedureBase
 |------|------|--------|------|
 | `Delay(seconds, onComplete, useUnscaledTime)` | 秒数, 回调, 是否不受缩放 | `Timer` | 延迟执行 |
 | `Loop(interval, onTick, useUnscaledTime)` | 间隔, 回调, 是否不受缩放 | `Timer` | 循环执行 |
-| `NextFrame(onComplete)` | 回调 | `Timer` | 下一帧执行 |
+| `NextFrame(onComplete)` | 回调 | `void` | 下一帧执行 |
 | `Cancel(Timer)` | 计时器 | `void` | 取消计时器 |
 | `CancelAll()` | 无 | `void` | 取消所有 |
 
@@ -492,14 +492,9 @@ CY.Timer.Delay(5f, OnTimeout, useUnscaledTime: true);
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `CreatePool<T>(Func<T> factory, int prewarm, int max)` | 工厂, 预热数, 最大数 | `void` | 创建数据池 |
-| `CreateGameObjectPool(string key, GameObject prefab, int prewarm)` | 键名, 预制体, 预热数 | `void` | 创建 GameObject 池 |
-| `Spawn<T>()` | 无 | `T` | 从数据池获取 |
-| `SpawnGameObject(string key, Vector3 pos, Quaternion rot)` | 键名, 位置, 旋转 | `GameObject` | 从 GO 池获取 |
-| `Despawn<T>(T obj)` | 对象 | `void` | 归还数据池 |
-| `DespawnGameObject(string key, GameObject go)` | 键名, 对象 | `void` | 归还 GO 池 |
-| `Clear<T>()` | 无 | `void` | 清空指定数据池 |
-| `ClearAll()` | 无 | `void` | 清空所有池 |
+| `GetOrCreatePool<T>(Func<T> factory, PoolConfig config = null)` | 工厂, 配置 | `ObjectPool<T>` | 获取/创建数据对象池 |
+| `GetOrCreatePool(key, prefab, PoolConfig config = null)` | 键名, 预制体, 配置 | `GameObjectPool` | 获取/创建 GameObject 池 |
+| `ShrinkAll()` | 无 | `void` | 收缩所有池（响应低内存） |
 
 **IPoolable 接口**:
 ```csharp
@@ -595,8 +590,8 @@ public class EnemyEntity : EntityBase
 }
 
 // 使用
-CY.Entity.Register("Enemy", enemyPrefab, 20);
-var enemy = CY.Entity.Show<EnemyEntity>("Enemy", new EnemyData { MaxHp = 100 });
+CY.Entity.RegisterEntity("Enemy", enemyPrefab, 20);
+var enemy = CY.Entity.ShowEntity<EnemyEntity>("Enemy", new EnemyData { MaxHp = 100 });
 ```
 
 ---
@@ -661,14 +656,14 @@ public class MonsterRow : IDataRow
 
 // 加载 CSV（格式: Id,Name,Hp,Speed,Damage）
 string csv = Resources.Load<TextAsset>("Config/Monster").text;
-CY.Data.LoadCsv<MonsterRow>(csv);
+CY.Data.LoadFromCsv<MonsterRow>(csv);
 
 // 获取数据
-var monster = CY.Data.GetRow<MonsterRow>(1001);
+var monster = CY.Data.GetDataTable<MonsterRow>().GetRow(1001);
 Debug.Log($"{monster.Name}: HP={monster.Hp}");
 
 // 条件查询
-var table = CY.Data.GetTable<MonsterRow>();
+var table = CY.Data.GetDataTable<MonsterRow>();
 var bosses = table.GetRows(m => m.Hp > 1000);
 ```
 
@@ -691,13 +686,21 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 
 **命名空间**: `CYFramework.Core.Resource`
 
+> 注意：当前默认实现为 `Resources` + 缓存（`ResourceLoader`），Addressables/AssetBundle 属于扩展点（代码中有预留/待实现项）。
+
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `Load<T>(string path)` | 资源路径 | `T` | 同步加载 |
-| `LoadAsync<T>(string path, Action<float> onProgress = null)` | 路径, 进度回调 | `Task<T>` | 异步加载 |
-| `LoadSceneAsync(string name, LoadSceneMode mode, Action<float> onProgress = null)` | 场景名, 模式, 进度 | `Task` | 加载场景 |
-| `Release(string path)` | 资源路径 | `void` | 释放资源 |
-| `UnloadUnusedAssets()` | 无 | `void` | 卸载未使用资源 |
+| `LoadAsync<T>(string path, Action<T> callback)` | 路径, 回调 | `void` | 异步加载（回调） |
+| `LoadAsync<T>(string path)` | 路径 | `Task<T>` | 异步加载（Task） |
+| `Unload(string path)` | 路径 | `void` | 卸载指定资源（仅对缓存条目生效） |
+| `UnloadUnused()` | 无 | `void` | 卸载未使用资源（包装 `Resources.UnloadUnusedAssets`） |
+| `LoadScene(string sceneName, LoadSceneMode mode, Action onComplete)` | 场景名, 模式, 回调 | `void` | 加载场景（同步触发回调） |
+| `LoadSceneAsync(string sceneName, LoadSceneMode mode)` | 场景名, 模式 | `AsyncOperation` | 异步加载场景 |
+| `Instantiate(string path, Transform parent = null)` | 路径, 父节点 | `GameObject` | 加载并实例化 |
+| `InstantiateAsync(string path, Action<GameObject> callback, Transform parent = null)` | 路径, 回调, 父节点 | `void` | 异步加载并实例化 |
+| `Preload<T>(string path)` | 路径 | `void` | 预加载（仅缓存） |
+| `PreloadAsync(string[] paths, Action onComplete, Action<float> onProgress)` | 路径数组, 完成回调, 进度回调 | `void` | 批量预加载 |
 
 ---
 
@@ -708,25 +711,22 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 #### HTTP 方法
 | 方法 | 参数 | 返回值 |
 |------|------|--------|
-| `GetAsync<T>(string url, Dictionary<string,string> headers = null)` | URL, 请求头 | `Task<T>` |
-| `PostAsync<T>(string url, object body, Dictionary<string,string> headers = null)` | URL, 请求体, 请求头 | `Task<T>` |
-| `PutAsync<T>(string url, object body, Dictionary<string,string> headers = null)` | URL, 请求体, 请求头 | `Task<T>` |
-| `DeleteAsync<T>(string url, Dictionary<string,string> headers = null)` | URL, 请求头 | `Task<T>` |
+| `Get(string url)` | URL | `Task<HttpResponse>` |
+| `Post(string url, string body, string contentType = "application/json")` | URL, Body, ContentType | `Task<HttpResponse>` |
 
 #### WebSocket 方法
 | 方法 | 参数 | 返回值 |
 |------|------|--------|
 | `ConnectWebSocket(string url)` | WebSocket URL | `Task` |
-| `DisconnectWebSocket()` | 无 | `void` |
-| `SendWebSocketMessage(string message)` | 消息内容 | `void` |
+| `SendWebSocket(string message)` | 消息内容 | `void` |
+| `CloseWebSocket()` | 无 | `void` |
 
 #### 事件
 | 事件 | 参数 | 说明 |
 |------|------|------|
-| `OnWebSocketMessage` | `string message` | 收到消息 |
-| `OnWebSocketConnected` | 无 | 连接成功 |
-| `OnWebSocketDisconnected` | 无 | 断开连接 |
-| `OnNetworkStatusChanged` | `NetworkStatus status` | 网络状态变化 |
+| `OnStateChanged` | `NetworkState state` | 连接状态变化 |
+| `OnMessage` | `string message` | 收到文本消息 |
+| `OnBinaryMessage` | `byte[] data` | 收到二进制消息 |
 
 ---
 
@@ -736,14 +736,13 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `Save<T>(string key, T data)` | 键名, 数据 | `void` | 同步保存 |
-| `SaveAsync<T>(string key, T data)` | 键名, 数据 | `Task` | 异步保存 |
-| `Load<T>(string key, T defaultValue = default)` | 键名, 默认值 | `T` | 同步加载 |
-| `LoadAsync<T>(string key)` | 键名 | `Task<T>` | 异步加载 |
+| `Save<T>(string key, T data)` | 键名, 数据 | `bool` | 保存（`T : SaveDataBase`） |
+| `Load<T>(string key)` | 键名 | `T` | 加载（不存在返回 `new T()`，`T : SaveDataBase, new()`） |
 | `Exists(string key)` | 键名 | `bool` | 检查是否存在 |
 | `Delete(string key)` | 键名 | `void` | 删除存档 |
-| `DeleteAll()` | 无 | `void` | 删除所有存档 |
-| `RegisterMigration<T>(int from, int to, Func<T,T> migrator)` | 版本范围, 迁移函数 | `void` | 注册版本迁移 |
+| `SaveAll()` | 无 | `void` | 保存所有缓存（当前为简化实现） |
+| `RegisterMigration(IMigration migration)` | 迁移器 | `void` | 注册版本迁移器链 |
+| `SetCurrentVersion(int version)` | 版本号 | `void` | 设置当前存档版本 |
 
 ---
 
@@ -1001,10 +1000,12 @@ public struct RenderSnapshot
 | 宏 | 说明 |
 |----|------|
 | `CY_WECHAT` | 微信小游戏平台 |
+| `UNITY_WEBGL` | Unity WebGL 平台（Unity 内置宏） |
 | `CY_PC` | PC 平台 |
 | `CY_MOBILE` | 移动端 |
-| `CY_SINGLE_THREAD` | 单线程模式 |
 | `ENABLE_DOTS` | 启用 Hybrid DOTS |
+
+> 提示：WebGL/微信均为单线程运行环境，框架应以平台宏（`CY_WECHAT` / `UNITY_WEBGL`）做能力分支；`CY_SINGLE_THREAD` 不是框架内置宏，如需可在项目侧自定义。
 
 ### 5.2 平台接口
 
@@ -1057,4 +1058,3 @@ console.RegisterCommand("god", "无敌模式", args => {
 | DrawCall | < 100 | < 300 | < 1000 |
 | 内存 | < 200MB | < 400MB | < 800MB |
 | 每帧 GC | 0 | 0 | < 1KB |
-

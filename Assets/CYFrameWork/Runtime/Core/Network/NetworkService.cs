@@ -38,6 +38,11 @@ namespace CYFramework.Core.Network
         /// HTTP 超时时间（秒）
         /// </summary>
         public int HttpTimeout = 10;
+
+        /// <summary>
+        /// HTTP 最大重试次数（不含首次请求）。
+        /// </summary>
+        public int HttpMaxRetry = 0;
         
         /// <summary>
         /// WebSocket 重连最大次数
@@ -91,6 +96,9 @@ namespace CYFramework.Core.Network
     /// </summary>
     public class NetworkService : IInitializable, ITickable, IDisposableEx
     {
+        // WebSocket 断线期间最大缓存条数，避免无限堆积导致内存不可控。
+        private const int MaxPendingWsMessages = 64;
+
         private NetworkConfig _config;
         private INetworkAdapter _adapter;
         
@@ -112,6 +120,10 @@ namespace CYFramework.Core.Network
         
         // 请求队列（断线重发）
         private readonly Queue<(string url, string body, Action<HttpResponse> callback)> _pendingRequests = new();
+
+        // WebSocket 待发送消息队列：断线/重连期间缓存，连接成功后自动冲刷。
+        // 注意：仅适用于“允许丢失时序”的消息；强一致消息应在业务层自行做 ack/重发机制。
+        private readonly Queue<string> _pendingWsMessages = new();
         
         // 事件
         public event Action<NetworkState> OnStateChanged;
@@ -142,9 +154,15 @@ namespace CYFramework.Core.Network
                 if (externalConfig != null)
                 {
                     _config.HttpTimeout = (int)externalConfig.HttpTimeout;
+                    _config.HttpMaxRetry = Mathf.Max(0, externalConfig.HttpMaxRetry);
                     _config.HeartbeatInterval = externalConfig.HeartbeatInterval;
                     _config.MaxReconnectAttempts = externalConfig.MaxReconnectAttempts;
                     _config.ReconnectBaseInterval = externalConfig.ReconnectInterval;
+                    // HeartbeatTimeout（秒）换算为 HeartbeatTimeoutCount：至少为 1
+                    // 例如 interval=30s, timeout=10s -> ceil(10/30)=1（下一次心跳未回包即判定超时）
+                    // interval=5s, timeout=10s -> ceil(10/5)=2（连续 2 次心跳未回包判定超时）
+                    var timeoutCount = Mathf.CeilToInt(externalConfig.HeartbeatTimeout / Mathf.Max(0.001f, externalConfig.HeartbeatInterval));
+                    _config.HeartbeatTimeoutCount = Mathf.Max(1, timeoutCount);
                     _config.CircuitBreakerThreshold = externalConfig.CircuitBreakerThreshold;
                     _config.CircuitBreakerRecoveryTime = externalConfig.CircuitBreakerResetTime;
                     CYLog.Debug("[NetworkService] 使用 CYConfigurator 配置");
@@ -174,6 +192,10 @@ namespace CYFramework.Core.Network
         
         public void Dispose()
         {
+            OnStateChanged = null;
+            OnMessage = null;
+            OnBinaryMessage = null;
+            
             CloseWebSocket();
             _pendingRequests.Clear();
             CYLog.Debug("[NetworkService] 已销毁");
@@ -194,37 +216,53 @@ namespace CYFramework.Core.Network
                 return new HttpResponse { IsSuccess = false, Error = "Circuit breaker is open" };
             }
             
-            try
+            var maxRetry = _config != null ? Mathf.Max(0, _config.HttpMaxRetry) : 0;
+            var totalAttempts = 1 + maxRetry;
+
+            for (int attempt = 0; attempt < totalAttempts; attempt++)
             {
-                string data;
-                
-                // 优先使用平台适配器（确保微信/WebGL 路径一致）
-                if (_adapter != null)
+                try
                 {
-                    data = await _adapter.HttpGet(url, _config.HttpTimeout);
+                    string data;
+
+                    // 优先使用平台适配器（确保微信/WebGL 路径一致）
+                    if (_adapter != null)
+                    {
+                        data = await _adapter.HttpGet(url, _config.HttpTimeout);
+                    }
+                    else
+                    {
+                        // Fallback: 直接使用 UnityWebRequest
+                        data = await HttpGetFallback(url);
+                    }
+
+                    var response = new HttpResponse
+                    {
+                        StatusCode = 200,
+                        IsSuccess = true,
+                        Data = data,
+                        Error = null
+                    };
+
+                    HandleRequestResult(true);
+                    return response;
                 }
-                else
+                catch (Exception ex)
                 {
-                    // Fallback: 直接使用 UnityWebRequest
-                    data = await HttpGetFallback(url);
+                    HandleRequestResult(false);
+
+                    // 达到最大重试次数，返回失败
+                    if (attempt >= totalAttempts - 1)
+                    {
+                        return new HttpResponse { IsSuccess = false, Error = ex.Message };
+                    }
+
+                    // 低频路径：简单退避一帧，避免立刻重试造成尖峰
+                    await Task.Yield();
                 }
-                
-                var response = new HttpResponse
-                {
-                    StatusCode = 200,
-                    IsSuccess = true,
-                    Data = data,
-                    Error = null
-                };
-                
-                HandleRequestResult(true);
-                return response;
             }
-            catch (Exception ex)
-            {
-                HandleRequestResult(false);
-                return new HttpResponse { IsSuccess = false, Error = ex.Message };
-            }
+
+            return new HttpResponse { IsSuccess = false, Error = "Unknown network error" };
         }
         
         /// <summary>
@@ -238,36 +276,110 @@ namespace CYFramework.Core.Network
                 return new HttpResponse { IsSuccess = false, Error = "Circuit breaker is open" };
             }
             
+            var maxRetry = _config != null ? Mathf.Max(0, _config.HttpMaxRetry) : 0;
+            var totalAttempts = 1 + maxRetry;
+
+            for (int attempt = 0; attempt < totalAttempts; attempt++)
+            {
+                try
+                {
+                    string data;
+
+                    // 优先使用平台适配器（确保微信/WebGL 路径一致）
+                    if (_adapter != null)
+                    {
+                        data = await _adapter.HttpPost(url, body, contentType, _config.HttpTimeout);
+                    }
+                    else
+                    {
+                        // Fallback: 直接使用 UnityWebRequest
+                        data = await HttpPostFallback(url, body, contentType);
+                    }
+
+                    var response = new HttpResponse
+                    {
+                        StatusCode = 200,
+                        IsSuccess = true,
+                        Data = data,
+                        Error = null
+                    };
+
+                    HandleRequestResult(true);
+                    return response;
+                }
+                catch (Exception ex)
+                {
+                    HandleRequestResult(false);
+
+                    if (attempt >= totalAttempts - 1)
+                    {
+                        return new HttpResponse { IsSuccess = false, Error = ex.Message };
+                    }
+
+                    await Task.Yield();
+                }
+            }
+
+            return new HttpResponse { IsSuccess = false, Error = "Unknown network error" };
+        }
+
+        /// <summary>
+        /// HTTP GET 并解析 JSON（使用 Unity JsonUtility）。
+        /// </summary>
+        /// <remarks>
+        /// - JsonUtility 更适合“配置/协议数据结构固定”的场景；复杂 JSON 建议业务层用更强的 JSON 库自行处理。
+        /// - 返回 null 表示请求失败或解析失败（错误信息会写入 response.Error 或日志）。
+        /// </remarks>
+        public async Task<T> GetJson<T>(string url) where T : class
+        {
+            var response = await Get(url);
+            if (!response.IsSuccess || string.IsNullOrEmpty(response.Data))
+            {
+                return null;
+            }
+
             try
             {
-                string data;
-                
-                // 优先使用平台适配器（确保微信/WebGL 路径一致）
-                if (_adapter != null)
-                {
-                    data = await _adapter.HttpPost(url, body, contentType, _config.HttpTimeout);
-                }
-                else
-                {
-                    // Fallback: 直接使用 UnityWebRequest
-                    data = await HttpPostFallback(url, body, contentType);
-                }
-                
-                var response = new HttpResponse
-                {
-                    StatusCode = 200,
-                    IsSuccess = true,
-                    Data = data,
-                    Error = null
-                };
-                
-                HandleRequestResult(true);
-                return response;
+                return JsonUtility.FromJson<T>(response.Data);
             }
             catch (Exception ex)
             {
-                HandleRequestResult(false);
-                return new HttpResponse { IsSuccess = false, Error = ex.Message };
+                CYLog.Error($"[NetworkService] JSON 解析失败: {url}", ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// HTTP POST（JSON）并解析 JSON（使用 Unity JsonUtility）。
+        /// </summary>
+        public async Task<TResponse> PostJson<TBody, TResponse>(string url, TBody body)
+            where TResponse : class
+        {
+            string json;
+            try
+            {
+                json = JsonUtility.ToJson(body);
+            }
+            catch (Exception ex)
+            {
+                CYLog.Error("[NetworkService] JSON 序列化失败", ex);
+                return null;
+            }
+
+            var response = await Post(url, json, "application/json");
+            if (!response.IsSuccess || string.IsNullOrEmpty(response.Data))
+            {
+                return null;
+            }
+
+            try
+            {
+                return JsonUtility.FromJson<TResponse>(response.Data);
+            }
+            catch (Exception ex)
+            {
+                CYLog.Error($"[NetworkService] JSON 解析失败: {url}", ex);
+                return null;
             }
         }
         
@@ -381,6 +493,9 @@ namespace CYFramework.Core.Network
             _missedHeartbeats = 0;
             OnStateChanged?.Invoke(_wsState);
             CYLog.Info("[NetworkService] WebSocket 连接成功");
+
+            // 连接成功后冲刷断线期间缓存的消息
+            FlushPendingWsMessages();
         }
         
         private void OnWebSocketMessage(string message)
@@ -435,12 +550,46 @@ namespace CYFramework.Core.Network
         /// <summary>
         /// 关闭 WebSocket
         /// </summary>
+        /// <summary>
+        /// 尝试发送 WebSocket 消息：未连接则返回 false（不会自动缓存）。
+        /// </summary>
+        public bool TrySendWebSocket(string message)
+        {
+            if (_wsState != NetworkState.Connected || _webSocket == null) return false;
+            _webSocket.Send(message);
+            return true;
+        }
+
+        /// <summary>
+        /// 发送 WebSocket 消息：若未连接则进入缓存队列，待连接成功后自动发送。
+        /// </summary>
+        public void SendWebSocketOrQueue(string message)
+        {
+            if (!TrySendWebSocket(message))
+            {
+                EnqueuePendingWsMessage(message);
+            }
+        }
+
         public void CloseWebSocket()
+        {
+            CloseWebSocket(clearPendingMessages: true);
+        }
+
+        /// <summary>
+        /// 关闭 WebSocket（可选是否清空待发送消息队列）。
+        /// </summary>
+        public void CloseWebSocket(bool clearPendingMessages)
         {
             _webSocket?.Close();
             _webSocket = null;
             _wsState = NetworkState.Disconnected;
             OnStateChanged?.Invoke(_wsState);
+
+            if (clearPendingMessages)
+            {
+                _pendingWsMessages.Clear();
+            }
         }
         
         #endregion
@@ -450,6 +599,29 @@ namespace CYFramework.Core.Network
         /// <summary>
         /// 处理请求结果（熔断器逻辑）
         /// </summary>
+        private void EnqueuePendingWsMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+
+            // 为了避免断线期间无限堆积，超过上限则丢弃最早的一条
+            if (_pendingWsMessages.Count >= MaxPendingWsMessages)
+            {
+                _pendingWsMessages.Dequeue();
+            }
+
+            _pendingWsMessages.Enqueue(message);
+        }
+
+        private void FlushPendingWsMessages()
+        {
+            if (_wsState != NetworkState.Connected || _webSocket == null) return;
+
+            while (_pendingWsMessages.Count > 0)
+            {
+                _webSocket.Send(_pendingWsMessages.Dequeue());
+            }
+        }
+
         private void HandleRequestResult(bool success)
         {
             if (success)

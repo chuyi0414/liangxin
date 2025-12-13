@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
+using CYFramework.Core.Config;
 using CYFramework.Infrastructure;
 using UnityEngine;
 
@@ -53,6 +54,9 @@ namespace CYFramework.Debug
         [SerializeField] private KeyCode _toggleKey = KeyCode.BackQuote; // ~ 键
         [SerializeField] private int _maxLogLines = 100;
         [SerializeField] private int _maxHistorySize = 50;
+
+        // 配置开关（来自 CYFrameworkConfig.Debug）
+        private bool _enableGMCommands = true;
         
         // 是否显示
         private bool _isVisible;
@@ -91,9 +95,30 @@ namespace CYFramework.Debug
             gameObject.SetActive(false);
             return;
 #endif
+
+            // 从 CYConfigurator 读取 Debug 配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var config = configurator.GetConfig<DebugToolsConfig>();
+                if (config != null)
+                {
+                    if (!config.EnableConsole)
+                    {
+                        gameObject.SetActive(false);
+                        return;
+                    }
+
+                    _toggleKey = config.ConsoleToggleKey;
+                    _enableGMCommands = config.EnableGMCommands;
+                }
+            }
             
             // 注册内置命令
-            RegisterBuiltinCommands();
+            if (_enableGMCommands)
+            {
+                RegisterBuiltinCommands();
+            }
             
             // 监听 Unity 日志
             Application.logMessageReceived += OnLogReceived;

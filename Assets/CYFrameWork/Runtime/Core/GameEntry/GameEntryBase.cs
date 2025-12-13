@@ -54,7 +54,10 @@ namespace CYFramework.Core
                 return;
             }
             _instance = this;
-            DontDestroyOnLoad(gameObject);
+            if (transform.parent == null)
+            {
+                DontDestroyOnLoad(gameObject);
+            }
         }
         
         protected virtual void Start()

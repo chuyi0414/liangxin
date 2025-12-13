@@ -72,7 +72,7 @@ OnDestroy   → 调用所有 IDisposableEx.Dispose()
 配置选项：
 | 属性 | 默认值 | 说明 |
 |------|--------|------|
-| `AutoRegisterProcedures` | `false` | 自动扫描 [AutoRegisterProcedure] 标记的流程 |
+| `AutoRegisterProcedures` | `false` | 自动注册 [AutoRegisterProcedure] 标记的流程（运行时优先从流程注册表加载） |
 | `AutoSubscribeEvents` | `true` | 自动扫描 [OnEvent] 标记的方法 |
 
 ```csharp
@@ -90,7 +90,7 @@ public class LiangXinGame : GameEntryBase
     // 2. 注册流程（AutoRegisterProcedures=false 时需要实现）
     protected override void RegisterProcedures()
     {
-        CY.Procedure.Add<MenuProcedure>("Menu");
+        CY.Procedure.AddProcedure<MenuProcedure>("Menu");
     }
     
     // 3. 启动
@@ -107,6 +107,14 @@ public class LiangXinGame : GameEntryBase
     protected override void OnGameShutdown() { }
 }
 ```
+
+当你新增/修改流程后，推荐在 Unity 菜单执行：
+
+`CYFramework/Generate Procedure Registry`
+
+该操作会生成：`Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`。
+运行时 `ProcedureManager` 会优先从 `Resources/CYFramework/ProcedureRegistry` 加载注册表完成注册，避免启动时扫描程序集。
+在 `WebGL/微信` 平台（不支持无参自动扫程序集）也可以正常工作。
 
 ### 流程生命周期（ProcedureBase）
 
@@ -186,13 +194,13 @@ public class EnemyEntity : EntityBase
 ### 使用流程
 
 ```
-CY.Entity.Register("Enemy", prefab)  →  预创建对象池
+CY.Entity.RegisterEntity("Enemy", prefab)  →  预创建对象池
             ↓
-CY.Entity.Show("Enemy", data)  →  OnEntityInit → OnEntityShow
+CY.Entity.ShowEntity("Enemy", data)  →  OnEntityInit → OnEntityShow
             ↓
         [每帧自动]  →  OnEntityUpdate
             ↓
-CY.Entity.Hide(entity)  →  OnEntityHide → OnEntityRecycle
+CY.Entity.HideEntity(entity)  →  OnEntityHide → OnEntityRecycle
             ↓
         [回到对象池等待复用]
 ```

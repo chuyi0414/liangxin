@@ -79,6 +79,16 @@ namespace CYFramework.Core.UI
         /// 默认淡入淡出时间
         /// </summary>
         public float DefaultFadeDuration = 0.2f;
+
+        /// <summary>
+        /// Toast 默认显示时长（秒）
+        /// </summary>
+        public float ToastDuration = 2f;
+
+        /// <summary>
+        /// Toast 同时显示的最大数量
+        /// </summary>
+        public int MaxToastCount = 3;
     }
     
     /// <summary>
@@ -115,9 +125,16 @@ namespace CYFramework.Core.UI
         
         // 缓存的面板（对象池）
         private readonly Dictionary<Type, Queue<UIPanel>> _panelPool = new();
-        
+
+        // 回收前的兄弟顺序缓存，保证从对象池取回后恢复原层级顺序
+        private readonly Dictionary<UIPanel, int> _panelSiblingIndex = new();
+
         // 预加载的预制体
         private readonly Dictionary<string, GameObject> _prefabCache = new();
+
+        // UI 对象池根节点（统一存放回收的 UI 面板）
+        private Transform _uiPoolRoot;
+        private bool _poolRootCreatedByManager;   // 仅在运行时创建时标记，便于退出时销毁
         
         // 资源加载器
         private IResourceLoader _resourceLoader;
@@ -152,12 +169,23 @@ namespace CYFramework.Core.UI
                     _config.EnablePool = externalConfig.EnablePanelPool;
                     _config.PoolCapacity = externalConfig.PanelPoolCapacity;
                     _config.DefaultFadeDuration = externalConfig.DefaultAnimDuration;
+                    _config.ToastDuration = externalConfig.ToastDuration;
+                    _config.MaxToastCount = externalConfig.MaxToastCount;
                     CYLog.Debug("[UIManager] 使用 CYConfigurator 配置");
+                    CYLog.Info($"[UIManager] DefaultAnimDuration={_config.DefaultFadeDuration}, EnableAnimationDefault={_config.DefaultFadeDuration > 0f}");
                 }
             }
             
             // 创建 UI 根节点
             CreateUIRoot();
+            // 创建/获取 UI 对象池根节点，确保关闭入池时移到 [ObjectPools]/UI 下便于区分隐藏与回收
+            _uiPoolRoot = GetOrCreateUIPoolRoot();
+
+            // 将 Toast 配置下发到 UIToast 组件（若存在）
+            if (Components.UIToast.Instance != null)
+            {
+                Components.UIToast.Instance.ApplyConfig(_config.MaxToastCount, _config.ToastDuration);
+            }
             
             // 创建配置中的自定义层级
             if (configurator != null)
@@ -224,10 +252,18 @@ namespace CYFramework.Core.UI
             // 清理缓存
             _prefabCache.Clear();
             _panelPool.Clear();
-            
+
             if (_uiRoot != null)
             {
                 UnityEngine.Object.Destroy(_uiRoot.gameObject);
+            }
+
+            // 若对象池根节点由 UIManager 运行时创建，为避免退出场景残留，将其销毁
+            if (_poolRootCreatedByManager && _uiPoolRoot != null)
+            {
+                UnityEngine.Object.Destroy(_uiPoolRoot.gameObject);
+                _uiPoolRoot = null;
+                _poolRootCreatedByManager = false;
             }
             
             CYLog.Info("[UIManager] 已销毁");
@@ -236,6 +272,15 @@ namespace CYFramework.Core.UI
         #endregion
         
         #region 公共 API
+
+        /// <summary>
+        /// 默认面板动画时长（秒）。
+        /// </summary>
+        /// <remarks>
+        /// - 来自 <see cref="UIManagerConfig.DefaultAnimDuration"/>。
+        /// - 该值会被 <see cref="UIPanel"/> 的默认打开/关闭动画使用（面板可自行重写动画逻辑）。
+        /// </remarks>
+        public float DefaultAnimDuration => _config != null ? _config.DefaultFadeDuration : 0.2f;
         
         /// <summary>
         /// 打开面板
@@ -268,6 +313,7 @@ namespace CYFramework.Core.UI
             if (_layerContainers.TryGetValue(layer, out var container))
             {
                 panel.transform.SetParent(container, false);
+                RestoreSiblingIndex(panel);
             }
             
             // 暂停当前栈顶面板
@@ -298,6 +344,96 @@ namespace CYFramework.Core.UI
             
             return panel;
         }
+
+        /// <summary>
+        /// 打开面板并强制指定 UILayer（覆盖面板自身的 <see cref="UIPanel.Layer"/>）。
+        /// </summary>
+        /// <remarks>
+        /// - 用于“同一个面板根据业务场景放到不同层”的需求，例如把某个面板临时抬到 System 层。
+        /// - siblingIndex 仅在同一层容器内部生效：值越大越靠上（越后渲染）。
+        /// - 不建议在 Update 高频调用；打开/关闭属于低频行为。
+        /// </remarks>
+        /// <typeparam name="T">面板类型</typeparam>
+        /// <param name="layer">目标 UILayer</param>
+        /// <param name="data">传递给面板的数据</param>
+        /// <param name="siblingIndex">同层内的顺序；小于 0 则保持/恢复面板的历史顺序</param>
+        public T OpenOnLayer<T>(UILayer layer, object data = null, int siblingIndex = -1) where T : UIPanel
+        {
+            var panel = Open<T>(data);
+            if (panel == null) return null;
+
+            if (_layerContainers.TryGetValue(layer, out var container))
+            {
+                panel.transform.SetParent(container, false);
+
+                if (siblingIndex >= 0)
+                {
+                    // 防御：避免越界异常
+                    var childCount = container.childCount;
+                    panel.transform.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, Math.Max(0, childCount - 1)));
+                }
+                else
+                {
+                    RestoreSiblingIndex(panel);
+                }
+            }
+            else
+            {
+                CYLog.Warning($"[UIManager] 未找到 UILayer 容器: {layer}");
+            }
+
+            return panel;
+        }
+
+        /// <summary>
+        /// 打开面板并放入自定义层（独立 Canvas.sortingOrder 控制）。
+        /// </summary>
+        /// <remarks>
+        /// - 自定义层的本质是：UIRoot/Canvas 下新建一个子 Canvas，并通过 sortingOrder 控制大层级。
+        /// - siblingIndex 仅影响该自定义层容器内部顺序。
+        /// </remarks>
+        /// <typeparam name="T">面板类型</typeparam>
+        /// <param name="layerName">自定义层名</param>
+        /// <param name="sortOrder">Canvas.sortingOrder（仅在层不存在时创建会使用该值；已存在则不会强制改）</param>
+        /// <param name="data">传递给面板的数据</param>
+        /// <param name="siblingIndex">同层内的顺序；小于 0 则保持/恢复面板的历史顺序</param>
+        public T OpenOnCustomLayer<T>(string layerName, int sortOrder, object data = null, int siblingIndex = -1)
+            where T : UIPanel
+        {
+            if (string.IsNullOrEmpty(layerName))
+            {
+                CYLog.Warning("[UIManager] OpenOnCustomLayer 失败：layerName 为空");
+                return null;
+            }
+
+            var panel = Open<T>(data);
+            if (panel == null) return null;
+
+            // 确保自定义层存在
+            Transform container;
+            if (_customLayers.TryGetValue(layerName, out var existing))
+            {
+                container = existing;
+            }
+            else
+            {
+                container = CreateLayer(layerName, sortOrder);
+            }
+
+            panel.transform.SetParent(container, false);
+
+            if (siblingIndex >= 0)
+            {
+                var childCount = container.childCount;
+                panel.transform.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, Math.Max(0, childCount - 1)));
+            }
+            else
+            {
+                RestoreSiblingIndex(panel);
+            }
+
+            return panel;
+        }
         
         /// <summary>
         /// 打开面板（强类型数据，避免装箱）
@@ -324,6 +460,7 @@ namespace CYFramework.Core.UI
         /// <summary>
         /// 关闭面板（按类型）
         /// </summary>
+        /// <param name="panelType">面板类型</param>
         public void Close(Type panelType)
         {
             if (!_openedPanels.TryGetValue(panelType, out var panel))
@@ -337,6 +474,7 @@ namespace CYFramework.Core.UI
         /// <summary>
         /// 关闭面板实例
         /// </summary>
+        /// <param name="panel">面板实例</param>
         public void Close(UIPanel panel)
         {
             if (panel == null) return;
@@ -652,11 +790,13 @@ namespace CYFramework.Core.UI
 
         /// <summary>
         /// 异步打开面板（回调版）
-        /// 说明：
-        /// 1) 若已打开：会先 Refresh，然后立刻回调
-        /// 2) 若资源已缓存/或池中有实例：会同步 Open，然后立刻回调
-        /// 3) 否则：先异步加载预制体，再 Open，最后回调
+        /// <para>1. 若已打开：会先 Refresh，然后立刻回调</para>
+        /// <para>2. 若资源已缓存/或池中有实例：会同步 Open，然后立刻回调</para>
+        /// <para>3. 否则：先异步加载预制体，再 Open，最后回调</para>
         /// </summary>
+        /// <typeparam name="T">面板类型</typeparam>
+        /// <param name="onOpened">打开完成后的回调（参数为面板实例，失败为 null）</param>
+        /// <param name="data">传递给面板的数据</param>
         public void OpenAsync<T>(Action<T> onOpened, object data = null) where T : UIPanel
         {
             var panelType = typeof(T);
@@ -719,12 +859,12 @@ namespace CYFramework.Core.UI
         /// <summary>
         /// 显示 Toast 提示
         /// </summary>
-        public void ShowToast(string message, float duration = 2f)
+        public void ShowToast(string message, float duration = 0f)
         {
             // 使用 UIToast 组件
             if (Components.UIToast.Instance != null)
             {
-                Components.UIToast.Show(message, duration);
+                Components.UIToast.Show(message, duration > 0f ? duration : _config.ToastDuration);
             }
             else
             {
@@ -902,6 +1042,48 @@ namespace CYFramework.Core.UI
         #endregion
         
         #region 私有方法
+
+        /// <summary>
+        /// 获取或创建 UI 对象池根节点，将回收的面板统一挂在 [ObjectPools]/UI 下，避免与正常隐藏的面板混淆
+        /// </summary>
+        /// <summary>
+        /// 获取或创建 UI 对象池根节点，将回收的面板统一挂在 [UIPools] 下
+        /// </summary>
+        private Transform GetOrCreateUIPoolRoot()
+        {
+            if (_uiPoolRoot != null)
+            {
+                return _uiPoolRoot;
+            }
+
+            // 创建独立的 UI 回收池根节点，不再依赖通用的 [ObjectPools]
+            var poolGo = new GameObject("[UIPools]");
+            UnityEngine.Object.DontDestroyOnLoad(poolGo);
+            poolGo.SetActive(false);
+            
+            _uiPoolRoot = poolGo.transform;
+            // 标记为由 Manager 创建，用于 Dispose 时清理
+            _poolRootCreatedByManager = true; 
+            
+            return _uiPoolRoot;
+        }
+
+        /// <summary>
+        /// 从缓存恢复面板的兄弟顺序，确保复用后层级不乱序
+        /// </summary>
+        private void RestoreSiblingIndex(UIPanel panel)
+        {
+            if (panel == null)
+            {
+                return;
+            }
+
+            if (_panelSiblingIndex.TryGetValue(panel, out var index))
+            {
+                panel.transform.SetSiblingIndex(index);
+                _panelSiblingIndex.Remove(panel);
+            }
+        }
         
         /// <summary>
         /// 创建或获取 UI 根节点
@@ -913,7 +1095,12 @@ namespace CYFramework.Core.UI
             if (existingRoot != null)
             {
                 _uiRoot = existingRoot.transform;
-                UnityEngine.Object.DontDestroyOnLoad(existingRoot);
+
+                // DontDestroyOnLoad 只能作用于根节点（root GameObject）。
+                // 如果 UIRoot 不是根节点（例如作为某个场景物体的子物体），直接调用会报 Unity 警告且不会生效。
+                // 这里统一对其根节点执行，确保跨场景常驻。
+                var rootObject = existingRoot.transform.root != null ? existingRoot.transform.root.gameObject : existingRoot;
+                UnityEngine.Object.DontDestroyOnLoad(rootObject);
                 
                 // 查找已存在的组件
                 _uiCamera = existingRoot.GetComponentInChildren<Camera>();
@@ -1060,6 +1247,12 @@ namespace CYFramework.Core.UI
                 RemoveFromStack(panel);
             }
             
+            // 记录关闭前的兄弟顺序，复用时可恢复到原层级位置
+            if (_config.EnablePool && panel.IsPoolable)
+            {
+                _panelSiblingIndex[panel] = panel.transform.GetSiblingIndex();
+            }
+            
             // 调用关闭回调
             panel.InternalClose(isShutdown, null);
             
@@ -1070,6 +1263,9 @@ namespace CYFramework.Core.UI
             if (_config.EnablePool && panel.IsPoolable)
             {
                 panel.InternalRecycle();
+                // 回收到 UI 池根节点，层级上与“隐藏”区分，便于调试
+                var poolParent = _uiPoolRoot != null ? _uiPoolRoot : GetOrCreateUIPoolRoot();
+                panel.transform.SetParent(poolParent, false);
                 panel.gameObject.SetActive(false);
                 
                 if (!_panelPool.TryGetValue(panelType, out var pool))
@@ -1084,11 +1280,13 @@ namespace CYFramework.Core.UI
                 }
                 else
                 {
+                    _panelSiblingIndex.Remove(panel);
                     UnityEngine.Object.Destroy(panel.gameObject);
                 }
             }
             else
             {
+                _panelSiblingIndex.Remove(panel);
                 UnityEngine.Object.Destroy(panel.gameObject);
             }
             
@@ -1188,4 +1386,3 @@ namespace CYFramework.Core.UI
         #endregion
     }
 }
-

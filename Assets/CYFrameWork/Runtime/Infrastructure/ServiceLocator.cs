@@ -20,11 +20,6 @@ namespace CYFramework.Infrastructure
         public Func<object> Factory;
         public object Instance;
         public bool IsLazy;
-        
-        // ❗ 注意：Dependencies 字段当前未被使用
-        // 拓扑排序依赖 InitOrder 字段，此字段为预留功能
-        // 若需启用依赖声明，可通过 [DependsOn] Attribute 填充
-        public string[] Dependencies;
     }
     
     /// <summary>
@@ -48,11 +43,25 @@ namespace CYFramework.Infrastructure
         // 循环依赖检测栈
         private static readonly HashSet<Type> _resolvingStack = new();
         
+        /// <summary>
+        /// 服务注册事件
+        /// </summary>
+        public static event Action<object> OnServiceRegistered;
+        
+        /// <summary>
+        /// 服务注销事件
+        /// </summary>
+        public static event Action<object> OnServiceUnregistered;
+        
         #region 注册 API
+
         
         /// <summary>
         /// 注册服务（单例）
         /// </summary>
+        /// <typeparam name="TService">服务接口类型</typeparam>
+        /// <typeparam name="TImplementation">服务实现类型</typeparam>
+        /// <param name="scope">生命周期作用域（默认 Singleton）</param>
         public static void Register<TService, TImplementation>(ServiceScope scope = ServiceScope.Singleton)
             where TImplementation : TService, new()
         {
@@ -62,6 +71,9 @@ namespace CYFramework.Infrastructure
         /// <summary>
         /// 注册服务（带工厂）
         /// </summary>
+        /// <typeparam name="TService">服务接口类型</typeparam>
+        /// <param name="factory">创建实例的工厂方法</param>
+        /// <param name="scope">生命周期作用域</param>
         public static void Register<TService>(Func<TService> factory, ServiceScope scope = ServiceScope.Singleton)
         {
             var serviceType = typeof(TService);
@@ -93,6 +105,8 @@ namespace CYFramework.Infrastructure
         /// <summary>
         /// 注册已存在的实例
         /// </summary>
+        /// <typeparam name="TService">服务接口类型</typeparam>
+        /// <param name="instance">服务实例</param>
         public static void RegisterInstance<TService>(TService instance)
         {
             var serviceType = typeof(TService);
@@ -106,6 +120,8 @@ namespace CYFramework.Infrastructure
                 Instance = instance,
                 IsLazy = false
             };
+            
+            OnServiceRegistered?.Invoke(instance);
         }
         
         /// <summary>
@@ -139,6 +155,28 @@ namespace CYFramework.Infrastructure
             _initOrder = null;
         }
         
+        /// <summary>
+        /// 注销服务
+        /// </summary>
+        public static void Unregister<TService>()
+        {
+            var type = typeof(TService);
+            if (_registrations.TryGetValue(type, out var reg))
+            {
+                if (reg.Instance != null)
+                {
+                    OnServiceUnregistered?.Invoke(reg.Instance);
+                }
+                
+                _registrations.Remove(type);
+                if (_scopedServices.Contains(type))
+                {
+                    _scopedServices.Remove(type);
+                }
+                CYLog.Debug($"[ServiceLocator] 服务已注销: {type.Name}");
+            }
+        }
+        
         #endregion
         
         #region 解析 API
@@ -146,6 +184,9 @@ namespace CYFramework.Infrastructure
         /// <summary>
         /// 获取服务
         /// </summary>
+        /// <typeparam name="T">服务类型</typeparam>
+        /// <returns>服务实例</returns>
+        /// <exception cref="InvalidOperationException">如果服务未注册</exception>
         public static T Get<T>()
         {
             return (T)Get(typeof(T));
@@ -154,6 +195,9 @@ namespace CYFramework.Infrastructure
         /// <summary>
         /// 尝试获取服务
         /// </summary>
+        /// <typeparam name="T">服务类型</typeparam>
+        /// <param name="service">输出服务实例</param>
+        /// <returns>是否获取成功</returns>
         public static bool TryGet<T>(out T service)
         {
             if (_registrations.TryGetValue(typeof(T), out var reg))
@@ -363,6 +407,8 @@ namespace CYFramework.Infrastructure
                         {
                             InitializeInstanceIfNeeded(registration.Instance);
                         }
+                        // 触发注册事件（主要用于生命周期关联）
+                        OnServiceRegistered?.Invoke(registration.Instance);
                     }
                     finally
                     {
@@ -380,6 +426,9 @@ namespace CYFramework.Infrastructure
                         {
                             InitializeInstanceIfNeeded(instance);
                         }
+                        // Transient 通常不参与全局生命周期管理（Update等），因为它可能大量创建
+                        // 但为了统一性，我们还是触发事件，由接收方决定是否处理
+                        OnServiceRegistered?.Invoke(instance);
                         return instance;
                     }
                     finally
@@ -431,56 +480,17 @@ namespace CYFramework.Infrastructure
         }
         
         /// <summary>
-        /// 构建初始化顺序（拓扑排序）
-        /// ❗ 当前实现说明：
-        /// - 实际初始化顺序主要依赖 IInitializable.InitOrder
-        /// - Dependencies 字段目前未被填充，拓扑排序逻辑为预留功能
-        /// - 若需启用显式依赖声明，可扩展 Register API 或添加 [DependsOn] Attribute
+        /// 构建初始化顺序
+        /// 说明：
+        /// - 初始化顺序主要依赖 IInitializable.InitOrder
+        /// - 若需要显式依赖声明，可在未来扩展 Attribute 方案
         /// </summary>
         private static void BuildInitOrder()
         {
             if (_initOrder != null) return;
-            
-            _initOrder = new List<Type>();
-            var visited = new HashSet<Type>();
-            var visiting = new HashSet<Type>();
-            
-            foreach (var type in _registrations.Keys)
-            {
-                TopologicalSort(type, visited, visiting);
-            }
-        }
-        
-        /// <summary>
-        /// 拓扑排序
-        /// </summary>
-        private static void TopologicalSort(Type type, HashSet<Type> visited, HashSet<Type> visiting)
-        {
-            if (visited.Contains(type)) return;
-            
-            if (visiting.Contains(type))
-            {
-                throw new InvalidOperationException($"[ServiceLocator] 检测到循环依赖: {type.Name}");
-            }
-            
-            visiting.Add(type);
-            
-            // 获取依赖（通过构造函数参数推断）
-            if (_registrations.TryGetValue(type, out var reg) && reg.Dependencies != null)
-            {
-                foreach (var depName in reg.Dependencies)
-                {
-                    var depType = Type.GetType(depName);
-                    if (depType != null && _registrations.ContainsKey(depType))
-                    {
-                        TopologicalSort(depType, visited, visiting);
-                    }
-                }
-            }
-            
-            visiting.Remove(type);
-            visited.Add(type);
-            _initOrder.Add(type);
+
+            // 目前不做依赖拓扑排序，直接按注册集合生成列表
+            _initOrder = new List<Type>(_registrations.Keys);
         }
         
         #endregion

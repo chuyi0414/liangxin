@@ -107,7 +107,7 @@ namespace CYFramework.Platform.WeChat
             // Editor 模式：使用 UnityWebRequest 模拟
             using var request = method == "GET" 
                 ? UnityEngine.Networking.UnityWebRequest.Get(url)
-                : UnityEngine.Networking.UnityWebRequest.Post(url, body);
+                : BuildJsonPost(url, body, contentType);
             
             request.timeout = timeout;
             var operation = request.SendWebRequest();
@@ -125,6 +125,18 @@ namespace CYFramework.Platform.WeChat
             return request.downloadHandler.text;
 #endif
         }
+
+#if !UNITY_WEBGL || UNITY_EDITOR
+        private static UnityEngine.Networking.UnityWebRequest BuildJsonPost(string url, string body, string contentType)
+        {
+            var request = new UnityEngine.Networking.UnityWebRequest(url, "POST");
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(body ?? "");
+            request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", string.IsNullOrEmpty(contentType) ? "application/json" : contentType);
+            return request;
+        }
+#endif
         
         /// <summary>
         /// 更新网络类型
@@ -215,8 +227,19 @@ namespace CYFramework.Platform.WeChat
         
         public void Send(byte[] data)
         {
-            // 微信 WebSocket 发送二进制需要特殊处理
-            CYLog.Warning("[WeChatWebSocket] 微信端二进制发送需要特殊处理");
+            // 微信 WebSocket 发送二进制需要特殊处理：这里使用 base64 发送，JS 侧需解码
+            if (_state != WebSocketState.Open)
+            {
+                CYLog.Warning("[WeChatWebSocket] 连接未打开");
+                return;
+            }
+            
+#if UNITY_WEBGL && !UNITY_EDITOR
+            string base64 = Convert.ToBase64String(data);
+            WX_SendSocketMessage(base64);
+#else
+            CYLog.Debug($"[WeChatWebSocket] 发送二进制(base64): {Convert.ToBase64String(data)}");
+#endif
         }
         
         public void Close()

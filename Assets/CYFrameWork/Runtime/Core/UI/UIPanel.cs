@@ -344,8 +344,17 @@ namespace CYFramework.Core.UI
         protected virtual void PlayOpenAnimation()
         {
             // 默认：缩放弹出
+            // 注意：动画时长来自 UIManagerConfig.DefaultAnimDuration（通过 UIManager.DefaultAnimDuration 暴露）。
+            // 当配置为 0 时，表示不播放动画（直接显示最终状态），避免仍然产生一帧插值导致“看起来还有动画”。
+            float duration = Manager != null ? Manager.DefaultAnimDuration : 0.15f;
+            if (duration <= 0f)
+            {
+                transform.localScale = Vector3.one;
+                return;
+            }
+
             transform.localScale = Vector3.one * 0.8f;
-            StartCoroutine(ScaleAnimation(Vector3.one, 0.15f));
+            StartCoroutine(ScaleAnimation(Vector3.one, duration));
         }
         
         /// <summary>
@@ -354,7 +363,16 @@ namespace CYFramework.Core.UI
         protected virtual void PlayCloseAnimation(Action onComplete)
         {
             // 默认：缩放收缩
-            StartCoroutine(ScaleAnimation(Vector3.one * 0.8f, 0.1f, onComplete));
+            // 当配置为 0 时，直接回调完成（用于“立即关闭”需求，例如切场景/战斗 HUD 高频切换）。
+            float duration = Manager != null ? Manager.DefaultAnimDuration : 0.1f;
+            if (duration <= 0f)
+            {
+                transform.localScale = Vector3.one;
+                onComplete?.Invoke();
+                return;
+            }
+
+            StartCoroutine(ScaleAnimation(Vector3.one * 0.8f, duration, onComplete));
         }
         
         /// <summary>
@@ -362,6 +380,14 @@ namespace CYFramework.Core.UI
         /// </summary>
         private System.Collections.IEnumerator ScaleAnimation(Vector3 targetScale, float duration, Action onComplete = null)
         {
+            // 保护：避免 duration=0 导致除零，并确保“无动画”时不产生一帧延迟。
+            if (duration <= 0f)
+            {
+                transform.localScale = targetScale;
+                onComplete?.Invoke();
+                yield break;
+            }
+
             Vector3 startScale = transform.localScale;
             float elapsed = 0f;
             
@@ -382,4 +408,3 @@ namespace CYFramework.Core.UI
         #endregion
     }
 }
-

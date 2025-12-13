@@ -38,6 +38,8 @@ namespace CYFramework.Core.UI.MVVM
         
         // 属性值缓存
         private readonly Dictionary<string, object> _propertyValues = new();
+        // ⚠️ 性能提示：字典存储 value 为 object，值类型会装箱。
+        // 不适合高频刷新场景（如每帧血条），更适合低频 UI 交互/配置数据。
         
         // 是否已销毁
         private bool _disposed;

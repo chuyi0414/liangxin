@@ -6,6 +6,7 @@
 
 using System.Collections.Generic;
 using System.Text;
+using CYFramework.Core.Config;
 using CYFramework.Core.Network;
 using CYFramework.Core.Pool;
 using CYFramework.Infrastructure;
@@ -24,6 +25,11 @@ namespace CYFramework.Debug
         [SerializeField] private bool _showOnStart = true;
         [SerializeField] private KeyCode _toggleKey = KeyCode.F1;
         [SerializeField] private int _targetFPS = 60;
+
+        // 配置开关（来自 CYFrameworkConfig.Debug）
+        private bool _showFPS = true;
+        private bool _showMemory = true;
+        private bool _enableProfiler = true;
         
         // 是否显示
         private bool _isVisible;
@@ -66,6 +72,25 @@ namespace CYFramework.Debug
             gameObject.SetActive(false);
             return;
 #endif
+
+            // 从 CYConfigurator 读取 Debug 配置
+            var configurator = CYConfigurator.Instance;
+            if (configurator != null)
+            {
+                var config = configurator.GetConfig<DebugToolsConfig>();
+                if (config != null)
+                {
+                    _showFPS = config.ShowFPS;
+                    _showMemory = config.ShowMemory;
+                    _enableProfiler = _showFPS || _showMemory; // 至少显示一项才有意义
+                }
+            }
+
+            if (!_enableProfiler)
+            {
+                gameObject.SetActive(false);
+                return;
+            }
             
             _isVisible = _showOnStart;
         }
@@ -122,10 +147,16 @@ namespace CYFramework.Debug
             GUILayout.Space(5);
             
             // FPS
-            DrawFPSSection();
+            if (_showFPS)
+            {
+                DrawFPSSection();
+            }
             
             // 内存
-            DrawMemorySection();
+            if (_showMemory)
+            {
+                DrawMemorySection();
+            }
             
             // 渲染
             DrawRenderingSection();
@@ -139,7 +170,10 @@ namespace CYFramework.Debug
             GUILayout.EndArea();
             
             // 绘制 FPS 曲线
-            DrawFPSGraph(new Rect(panelRect.x, panelRect.yMax + 5, panelWidth, 50));
+            if (_showFPS)
+            {
+                DrawFPSGraph(new Rect(panelRect.x, panelRect.yMax + 5, panelWidth, 50));
+            }
         }
         
         #region 更新数据

@@ -1,10 +1,10 @@
-﻿# CYFramework 2.3
+﻿# CYFramework 2.2
 
 **工业级 Unity 游戏框架** - 一套"可落地"的多平台底座
 
 ## 特性
 
-- ✅ **零 GC** - 事件系统、对象池全程无装箱
+- ✅ **高频零 GC** - 结构体事件 `Post(ref evt)` 零装箱；对象池减少频繁 Instantiate/Destroy（延迟事件派发会产生装箱，建议低频使用）
 - ✅ **多平台** - PC / Android / iOS / 微信小游戏 / WebGL
 - ✅ **混合架构** - OOP 写逻辑，DOTS 做计算（PC 端可选）
 - ✅ **平台适配** - 自动处理微信/WebGL 的 API 限制
@@ -40,7 +40,7 @@ public class MyGame : GameEntryBase
         CY.Procedure.Start("Menu");  // 按名称启动
     }
     
-    // [OnEvent] 自动订阅事件，无需手动 Subscribe
+    // [OnEvent] 自动订阅事件：由 GameEntryBase 在生命周期中调用 EventBus.SubscribeAll/UnsubscribeAll
     [OnEvent]
     private void OnGameOver(ref GameOverEvent evt)
     {
@@ -54,6 +54,10 @@ public class MenuProcedure : ProcedureBase { }
 
 [AutoRegisterProcedure("Battle", order: 1)]
 public class BattleProcedure : ProcedureBase { }
+
+// 当你新增/修改流程后：在 Unity 菜单执行
+// CYFramework/Generate Procedure Registry
+// 生成 Resources/CYFramework/ProcedureRegistry.asset，运行时优先从注册表加载流程（WebGL/微信无需扫程序集）
 ```
 
 ### 3. 使用 CY 统一入口
@@ -158,7 +162,7 @@ CY.Quest.AcceptQuest(1001);
 
 | 平台 | 宏定义 |
 |------|--------|
-| 微信小游戏 | `CY_WECHAT;CY_SINGLE_THREAD` |
+| 微信小游戏 | `CY_WECHAT` |
 | PC 旗舰版 | `CY_PC;ENABLE_DOTS` |
 | 移动端 | `CY_MOBILE` |
 
@@ -225,4 +229,3 @@ MIT License
 
 **版本**: 2.3 Unified Entry  
 **Unity 版本**: 2021.3 LTS 及以上
-
