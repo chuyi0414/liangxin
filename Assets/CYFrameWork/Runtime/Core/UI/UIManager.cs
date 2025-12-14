@@ -1260,7 +1260,8 @@ namespace CYFramework.Core.UI
             _openedPanels.Remove(panelType);
             
             // 对象池回收或销毁
-            if (_config.EnablePool && panel.IsPoolable)
+            // 如果是系统关闭 (isShutdown)，则直接销毁，不再进池，避免在退出时产生多余的挂载操作
+            if (!isShutdown && _config.EnablePool && panel.IsPoolable)
             {
                 panel.InternalRecycle();
                 // 回收到 UI 池根节点，层级上与“隐藏”区分，便于调试

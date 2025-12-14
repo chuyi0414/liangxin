@@ -15,12 +15,17 @@ public class BattleProcedure : ProcedureBase
     protected override void OnEnter(ProcedureBase previousProcedure)
     {
         // 1. 创建玩家（老板）
-        CY.Player.Spawn();
+        CY.Unit.SpawnPlayer();
         
-        // 2. 打开战斗UI
+        // 2. 也是最重要的：重置并启动波次逻辑
+        // 注意：WaveManager 是常驻服务，每次进战斗流程都需要重置状态
+        CY.Wave.Initialize(); 
+        CY.Wave.StartBattle(); // 显式开始战斗
+        
+        // 3. 打开战斗UI
         CY.UI.Open<BattleUI>();
         
-        CY.Log("[BattleProcedure] 战斗开始！");
+        CY.Log("[BattleProcedure] 进入战斗流程成功");
     }
 
     /// <summary>
@@ -37,7 +42,7 @@ public class BattleProcedure : ProcedureBase
     protected override void OnLeave(ProcedureBase nextProcedure)
     {
         // 销毁玩家
-        CY.Player.Despawn();
+        CY.Unit.DespawnPlayer();
         
         CY.UI.Close<BattleUI>();
         

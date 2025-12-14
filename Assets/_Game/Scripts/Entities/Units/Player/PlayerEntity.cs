@@ -37,6 +37,22 @@ public class PlayerEntity : EntityBase
         // 重置状态
         _inputDir = Vector2.zero;
         if (_rb != null) _rb.velocity = Vector2.zero;
+        
+        // 注册到 UnitManager
+        if (CY.Unit != null)
+        {
+            CY.Unit.RegisterUnit(this);
+        }
+    }
+    
+    protected override void OnEntityHide()
+    {
+        base.OnEntityHide();
+        // 从 UnitManager 注销
+        if (CY.Unit != null)
+        {
+            CY.Unit.UnregisterUnit(this);
+        }
     }
 
     protected override void OnEntityUpdate(float deltaTime)

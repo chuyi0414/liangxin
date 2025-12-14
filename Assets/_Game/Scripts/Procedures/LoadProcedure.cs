@@ -26,33 +26,68 @@ public class LoadProcedure : ProcedureBase
     /// <summary>
     /// 加载所有配置数据表
     /// </summary>
+    /// </summary>
     private void LoadDataTables()
     {
         // 加载员工表
-        var employeeCsv = CY.Resource.Load<TextAsset>("DataTables/Employees");
-        if (employeeCsv != null)
+        if (!CY.Data.HasDataTable("Employees"))
         {
-            CY.Data.LoadFromCsv<EmployeeRow>(employeeCsv.text, "Employees");
-            CY.Log("[LoadProcedure] 员工表加载完成，总数: " + CY.Data.GetDataTable<EmployeeRow>("Employees").Count);
-        }
-        else
-        {
-            CY.LogWarning("[LoadProcedure] 未找到员工数据表：Resources/DataTables/Employees.csv");
+            var employeeCsv = CY.Resource.Load<TextAsset>("DataTables/Units/Employees");
+            if (employeeCsv != null)
+            {
+                CY.Data.LoadFromCsv<EmployeeRow>(employeeCsv.text, "Employees");
+                CY.Log("[LoadProcedure] 员工表加载完成，总数: " + CY.Data.GetDataTable<EmployeeRow>("Employees").Count);
+            }
+            else
+            {
+                CY.LogWarning("[LoadProcedure] 未找到员工数据表：Resources/DataTables/Units/Employees.csv");
+            }
         }
         
         // 加载玩家表
-        var playerCsv = CY.Resource.Load<TextAsset>("DataTables/Player");
-        if (playerCsv != null)
+        if (!CY.Data.HasDataTable("Player"))
         {
-            CY.Data.LoadFromCsv<PlayerRow>(playerCsv.text, "Player");
-            CY.Log("[LoadProcedure] 玩家表加载完成，总数: " + CY.Data.GetDataTable<PlayerRow>("Player").Count);
-        }
-        else
-        {
-            CY.LogWarning("[LoadProcedure] 未找到玩家数据表：Resources/DataTables/Player.csv");
+            var playerCsv = CY.Resource.Load<TextAsset>("DataTables/Units/Player");
+            if (playerCsv != null)
+            {
+                CY.Data.LoadFromCsv<PlayerRow>(playerCsv.text, "Player");
+                CY.Log("[LoadProcedure] 玩家表加载完成，总数: " + CY.Data.GetDataTable<PlayerRow>("Player").Count);
+            }
+            else
+            {
+                CY.LogWarning("[LoadProcedure] 未找到玩家数据表：Resources/DataTables/Units/Player.csv");
+            }
         }
         
-        // TODO: 加载其他数据表（敌人表、波次表、神器表等）
+        // 加载敌人表
+        if (!CY.Data.HasDataTable("Enemy"))
+        {
+            var enemyCsv = CY.Resource.Load<TextAsset>("DataTables/Units/EnemyTable");
+            if (enemyCsv != null)
+            {
+                CY.Data.LoadFromCsv<EnemyRow>(enemyCsv.text, "Enemy");
+                CY.Log("[LoadProcedure] 敌人表加载完成，总数: " + CY.Data.GetDataTable<EnemyRow>("Enemy").Count);
+            }
+            else
+            {
+                CY.LogWarning("[LoadProcedure] 未找到敌人数据表：Resources/DataTables/Units/EnemyTable.csv");
+            }
+        }
+        
+        // 加载波次模板表
+        if (!CY.Data.HasDataTable("WaveTemplate"))
+        {
+            var waveTemplateCsv = CY.Resource.Load<TextAsset>("DataTables/Battle/WaveTemplateTable");
+            if (waveTemplateCsv != null)
+            {
+                CY.Data.LoadFromCsv<WaveTemplateRow>(waveTemplateCsv.text, "WaveTemplate");
+                CY.Log("[LoadProcedure] 波次模板表加载完成，总数: " + CY.Data.GetDataTable<WaveTemplateRow>("WaveTemplate").Count);
+            }
+            else
+            {
+                CY.LogWarning("[LoadProcedure] 未找到波次模板表：Resources/DataTables/Battle/WaveTemplateTable.csv");
+            }
+        }
     }
 
     /// <summary>

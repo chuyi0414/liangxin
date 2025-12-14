@@ -34,6 +34,12 @@ public class PlayerRow : IDataRow
     public string PrefabPath { get; private set; }
     public string PortraitPath { get; private set; }
 
+    // ═══════════ 辅助属性 ═══════════
+    /// <summary>
+    /// 获取实体生成的唯一 Key (Player_ + Code)
+    /// </summary>
+    public string EntityKey => $"Player_{Code}";
+
     /// <summary>
     /// 解析 CSV 行
     /// </summary>

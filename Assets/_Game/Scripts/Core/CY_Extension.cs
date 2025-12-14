@@ -8,7 +8,13 @@ namespace CYFramework
     /// </summary>
     public static partial class CY
     {
-        /// <summary>玩家（老板）管理器</summary>
-        public static PlayerManager Player => ServiceLocator.Get<PlayerManager>();
+        /// <summary>单位管理器（原 Recruitment/Player）</summary>
+        public static UnitManager Unit => ServiceLocator.Get<UnitManager>();
+        
+        /// <summary>波数管理器</summary>
+        public static WaveManager Wave => ServiceLocator.Get<WaveManager>();
+        
+        /// <summary>部门（经济）管理器</summary>
+        public static DepartmentManager Department => ServiceLocator.Get<DepartmentManager>();
     }
 }

@@ -39,6 +39,12 @@ public class EmployeeRow : IDataRow
     public string PrefabPath { get; private set; }     // 员工预制体路径
     public string PortraitPath { get; private set; }   // 员工头像路径
 
+    // ═══════════ 辅助属性 ═══════════
+    /// <summary>
+    /// 获取实体生成的唯一 Key (Employee_ + Code)
+    /// </summary>
+    public string EntityKey => $"Employee_{Code}";
+
     /// <summary>
     /// 解析 CSV 行
     /// </summary>
