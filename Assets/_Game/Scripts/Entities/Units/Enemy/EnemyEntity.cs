@@ -18,6 +18,7 @@ public class EnemyEntity : EntityBase
 
     // 运行时属性
     public EnemyRow Data { get; private set; }
+    public Collider2D Collider { get; private set; }
     protected float _currentHp;
     protected Transform _target; // 当前攻击目标 (通常是玩家或核心)
     protected Collider2D _targetCollider; // 目标碰撞体缓存
@@ -27,11 +28,17 @@ public class EnemyEntity : EntityBase
     protected bool _isDead;
     protected bool _isMoving;
 
+    public bool IsDead => _isDead;
+
     /// <summary>
     /// 初始化 (当实体从池中取出或创建时调用)
     /// </summary>
     protected override void OnEntityInit(object userData)
     {
+        base.OnEntityInit(userData);
+        // 缓存碰撞体
+        Collider = GetComponent<Collider2D>();
+
         // 兜底：非 EntityManager 创建时补齐 EntityType
         if (string.IsNullOrEmpty(EntityType))
         {
@@ -84,8 +91,10 @@ public class EnemyEntity : EntityBase
         }
     }
 
-    protected override void OnEntityHide()
+    protected override void OnEntityRecycle()
     {
+        base.OnEntityRecycle();
+        
         if (CY.Unit != null)
         {
             CY.Unit.UnregisterEnemy(this);
@@ -94,8 +103,6 @@ public class EnemyEntity : EntityBase
         // 清理引用，防止内存泄漏
         _target = null;
         _targetCollider = null;
-        
-        base.OnEntityHide();
     }
 
     /// <summary>
@@ -275,7 +282,20 @@ public class EnemyEntity : EntityBase
             // 排除自己 (虽然 Friendly 列表里一般不会有 Enemy，但以防万一)
             if (unit == this) continue;
 
-            float sqrDist = (unit.transform.position - myPos).sqrMagnitude;
+            // 优化：使用 ClosestPoint 计算距离，确保大体型单位边缘进入警戒范围也能被发现
+            float sqrDist;
+            var unitCollider = unit.GetComponent<Collider2D>(); // 建议缓存，这里为了演示逻辑严谨性直接获取
+            
+            if (unitCollider != null)
+            {
+                Vector3 closest = unitCollider.ClosestPoint(myPos);
+                sqrDist = (closest - myPos).sqrMagnitude;
+            }
+            else
+            {
+                sqrDist = (unit.transform.position - myPos).sqrMagnitude;
+            }
+
             if (sqrDist <= sqrAlertRange)
             {
                 if (sqrDist < minDist)
@@ -472,7 +492,7 @@ public class EnemyEntity : EntityBase
         // 延迟回收 (等待动画播完)
         CY.Timer.Delay(1.0f, () => 
         {
-            CY.Entity.HideEntity(this);
+            CY.Entity.RecycleEntity(this);
         });
     }
 
@@ -485,4 +505,19 @@ public class EnemyEntity : EntityBase
     }
 
 
+#if UNITY_EDITOR
+    protected virtual void OnDrawGizmos()
+    {
+        if (Data != null)
+        {
+            // 怪物用红色警示
+            Gizmos.color = new Color(1, 0, 0, 0.4f);
+            Gizmos.DrawWireSphere(transform.position, Data.Range);
+
+            // 警戒范围 (Alert Range) 也可以顺手画一下，虚线或者黄色
+            Gizmos.color = new Color(1, 1, 0, 0.2f);
+            Gizmos.DrawWireSphere(transform.position, 5.0f); // ALERT_RANGE 常量值
+        }
+    }
+#endif
 }

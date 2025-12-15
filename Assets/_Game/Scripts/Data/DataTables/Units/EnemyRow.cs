@@ -16,6 +16,7 @@ public class EnemyRow : IDataRow
     public float Attack { get; private set; }          // 攻击力
     public float MoveSpeed { get; private set; }       // 移动速度
     public float Range { get; private set; }           // 攻击范围
+    public string ProjectilePath { get; private set; } // 投射物路径
     public float AttackInterval { get; private set; }  // 攻击间隔
     public int[] SkillIds { get; private set; }        // 技能ID列表 (如 "101|102")
     
@@ -66,6 +67,7 @@ public class EnemyRow : IDataRow
         Attack = float.Parse(values[i++]);
         MoveSpeed = float.Parse(values[i++]);
         Range = float.Parse(values[i++]);
+        ProjectilePath = values[i++];
         AttackInterval = float.Parse(values[i++]);
         
         string skillStr = values[i++];

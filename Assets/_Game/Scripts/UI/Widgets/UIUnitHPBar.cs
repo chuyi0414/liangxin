@@ -66,13 +66,6 @@ public class UIUnitHPBar : MonoBehaviour
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, screenPos, uiCamera, out Vector2 localPos))
         {
             _rectTransform.anchoredPosition = localPos;
-            
-            // Debug Log
-            if (Time.time - _lastLogTime > 1.0f)
-            {
-                _lastLogTime = Time.time;
-                CY.Log($"[HPBar] ID:{_ownerUnitID} W:{worldPos} S:{screenPos} UI:{localPos} Cam:{mainCamera.name}");
-            }
         }
     }
 

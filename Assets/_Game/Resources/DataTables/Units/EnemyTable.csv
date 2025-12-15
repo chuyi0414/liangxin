@@ -1,19 +1,19 @@
-Id,Name,Description,Hp,Attack,MoveSpeed,Range,AttackInterval,SkillIds,DropGold,DropExp,Cost,MinWave,Weight,AllowElite,PrefabPath
+Id,Name,Description,Hp,Attack,MoveSpeed,Range,ProjectilePath,AttackInterval,SkillIds,DropGold,DropExp,Cost,MinWave,Weight,AllowElite,PrefabPath
 # ─── Tier I: 职场异化系 (底层受害者) ───
-101,卷王尸骸,只会无脑冲锋，互相挤压，讽刺无意义的内部竞争。,30,5,2.0,0.5,1.5,0,5,10,10,1,100,FALSE,Prefabs/Units/Enemies/E01_InvolutionZombie
-102,回声傀儡,没有攻击性，会模仿精英怪动作，缺乏独立思考。,40,0,1.5,5.0,2.0,0,8,12,15,3,80,FALSE,Prefabs/Units/Enemies/E02_EchoPuppet
-103,喷键暴徒,远程喷子，攻速快但极脆，近身即死。,20,12,1.2,6.0,0.8,0,10,15,20,5,60,TRUE,Prefabs/Units/Enemies/E03_KeyboardWarrior
-108,过劳狂尸,双眼通红，移速极快，透支健康的疯狗。,60,15,4.0,1.0,0.5,0,15,25,30,8,50,TRUE,Prefabs/Units/Enemies/E08_OverworkZombie
+101,卷王尸骸,只会无脑冲锋，互相挤压，讽刺无意义的内部竞争。,30,5,2.0,0.5,,1.5,0,5,10,10,1,100,FALSE,Prefabs/Units/Enemies/E01_InvolutionZombie
+102,回声傀儡,没有攻击性，会模仿精英怪动作，缺乏独立思考。,40,0,1.5,5.0,,2.0,0,8,12,15,3,80,FALSE,Prefabs/Units/Enemies/E02_EchoPuppet
+103,喷键暴徒,远程喷子，攻速快但极脆，近身即死。,20,12,1.2,6.0,Prefabs/Entities/Projectiles/EnemyBullet_Keyboard,0.8,0,10,15,20,5,60,TRUE,Prefabs/Units/Enemies/E03_KeyboardWarrior
+108,过劳狂尸,双眼通红，移速极快，透支健康的疯狗。,60,15,4.0,1.0,,0.5,0,15,25,30,8,50,TRUE,Prefabs/Units/Enemies/E08_OverworkZombie
 
 # ─── Tier II: 中层管理系 (控制与打压) ───
-201,幻饼术士,远程发射PPT光波，命中降低攻速。,120,10,1.5,7.0,3.0,2001,40,60,60,10,40,TRUE,Prefabs/Units/Enemies/E21_PieMage
-203,弹反力士,推卸责任的好手，受到伤害会反弹给友军。,200,8,1.0,1.5,2.0,2003,50,80,80,12,30,TRUE,Prefabs/Units/Enemies/E23_ReflectTank
-206,绝命剪刀手,手持大剪刀，对员工有即死判定，冷酷执行者。,150,50,3.0,1.2,1.5,2006,60,100,100,15,20,TRUE,Prefabs/Units/Enemies/E26_ScissorHand
+201,幻饼术士,远程发射PPT光波，命中降低攻速。,120,10,1.5,7.0,Prefabs/Entities/Projectiles/EnemyBullet_Pie,3.0,2001,40,60,60,10,40,TRUE,Prefabs/Units/Enemies/E21_PieMage
+203,弹反力士,推卸责任的好手，受到伤害会反弹给友军。,200,8,1.0,1.5,,2.0,2003,50,80,80,12,30,TRUE,Prefabs/Units/Enemies/E23_ReflectTank
+206,绝命剪刀手,手持大剪刀，对员工有即死判定，冷酷执行者。,150,50,3.0,1.2,,1.5,2006,60,100,100,15,20,TRUE,Prefabs/Units/Enemies/E26_ScissorHand
 
 # ─── Tier VII: 官僚与形式主义系 ───
-701,表单狂魔,扔出表格，被击中者原地罚站3秒（填表）。,300,5,1.0,5.0,5.0,7001,80,150,150,20,15,FALSE,Prefabs/Units/Enemies/E92_FormManiac
-707,夺命打卡钟,强制吸引周围员工过去打卡，形式大于内容。,500,0,0.5,8.0,10.0,7007,100,200,200,25,10,TRUE,Prefabs/Units/Enemies/E97_ClockInKiller
+701,表单狂魔,扔出表格，被击中者原地罚站3秒（填表）。,300,5,1.0,5.0,,5.0,7001,80,150,150,20,15,FALSE,Prefabs/Units/Enemies/E92_FormManiac
+707,夺命打卡钟,强制吸引周围员工过去打卡，形式大于内容。,500,0,0.5,8.0,,10.0,7007,100,200,200,25,10,TRUE,Prefabs/Units/Enemies/E97_ClockInKiller
 
 # ─── Tier IX: 终极资本具象 (BOSS) ───
-901,无尽欲念魔神,伪造商店吞噬资金，制造虚假需求。,5000,50,1.5,10.0,4.0,9001|9002,1000,5000,2000,30,0,FALSE,Prefabs/Units/Enemies/E122_DesireDemon
-905,异化之镜·影魔,镜子里的黑化玩家，屠龙少年终成恶龙。,8000,100,2.5,5.0,1.0,9005,2000,10000,5000,50,0,FALSE,Prefabs/Units/Enemies/E125_ShadowSelf
+901,无尽欲念魔神,伪造商店吞噬资金，制造虚假需求。,5000,50,1.5,10.0,,4.0,9001|9002,1000,5000,2000,30,0,FALSE,Prefabs/Units/Enemies/E122_DesireDemon
+905,异化之镜·影魔,镜子里的黑化玩家，屠龙少年终成恶龙。,8000,100,2.5,5.0,,1.0,9005,2000,10000,5000,50,0,FALSE,Prefabs/Units/Enemies/E125_ShadowSelf

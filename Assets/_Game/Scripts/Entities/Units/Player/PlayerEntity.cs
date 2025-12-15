@@ -9,6 +9,7 @@ public class PlayerEntity : EntityBase
 {
     public PlayerRow Data { get; private set; }
     public Collider2D Collider { get; private set; }
+    public float CurrentHp { get; private set; }
 
     [Header("Movement")]
     private Rigidbody2D _rb;
@@ -38,6 +39,7 @@ public class PlayerEntity : EntityBase
         if (userData is PlayerRow data)
         {
             Data = data;
+            CurrentHp = Data.Hp;
             
             // 准备投射物池 (如果是远程 AttackType == 1)
             if (Data.AttackType == 1 && !string.IsNullOrEmpty(Data.ProjectilePath))
@@ -111,6 +113,31 @@ public class PlayerEntity : EntityBase
             }
         }
     }
+    
+    public void TakeDamage(float damage)
+    {
+        if (CurrentHp <= 0) return;
+        
+        CurrentHp -= damage;
+        
+        // 扣除良心值/Update UI...
+        // 可以在这里广播事件，或者直接通知 UI
+        
+        if (CurrentHp <= 0)
+        {
+            CurrentHp = 0;
+            Die();
+        }
+    }
+
+    private void Die()
+    {
+        CY.Log("老板倒下了！良心破产！");
+        // CY.Game.GameOver(); // 假设有
+        // 暂时只是回收或隐藏
+        // CY.Entity.RecycleEntity(this); // 如果是 SpawnEntity 出来的
+        // 但 Player 可能是场景常驻，或者需要特殊处理
+    }
 
     private EnemyEntity FindNearestEnemy()
     {
@@ -118,16 +145,52 @@ public class PlayerEntity : EntityBase
         
         EnemyEntity nearest = null;
         float minDistSq = Data.Range * Data.Range;
+        Vector3 myPos = transform.position;
         
         // 遍历所有活跃敌人
         foreach (var entity in CY.Unit.ActiveEnemies)
         {
-            // 简单的距离判定 (注意：EnemyEntity 需要公开 IsDead 属性，或者判断 HP)
-            // 这里假设 TakeDamage 内部会处理死亡，外部只要它还在列表里且活着就行
             if (entity is EnemyEntity enemy)
             {
-                 // 稍微扩大一点判定，或者严格按照 Range
-                 float distSq = (entity.transform.position - transform.position).sqrMagnitude;
+                 if (enemy == null || enemy.IsDead) continue;
+
+                 // 核心优化：不再计算中心点距离，而是计算"我到敌人碰撞体表面最近点"的距离
+                 // 这样大体型的怪物只要有一部分身体进入射程，就会被判定为"在射程内"
+                 float distSq;
+                 var enemyCollider = enemy.Collider; 
+                 
+                 if (enemyCollider != null)
+                 {
+                     Vector3 closestPoint = enemyCollider.ClosestPoint(myPos);
+                     distSq = (closestPoint - myPos).sqrMagnitude;
+                     
+                     // 视线阻挡检测 (Raycast)
+                     // 如果距离合适，再额外发射一条射线，看看中间有没有类似 Wall / BaseCamp 的障碍物
+                     if (distSq <= minDistSq)
+                     {
+                         Vector3 direction = (closestPoint - myPos).normalized;
+                         float distance = Mathf.Sqrt(distSq);
+                         // LayerMask 需要根据项目设置调整，这里假设 Default 层包含墙壁和大本营
+                         // 必须这就是所谓的 "RaycastHit2D hit = Physics2D.Raycast(..., distance, layerMask)"
+                         // 注意：要小心不要射到自己或者敌人自己，所以要适当调整起始点或过滤
+                         
+                         // 简单起见，检测 Default 层 (通常这个层放墙壁、建筑) 和 BaseCamp 层
+                         int layerMask = LayerMask.GetMask("Default", "Obstacle", "BaseCamp"); 
+                         RaycastHit2D hit = Physics2D.Raycast(myPos, direction, distance, layerMask);
+                         
+                         // 如果射到了东西，且这个东西不是敌人本身(理论上Default层不含敌人)，则说明被挡住了
+                         if (hit.collider != null && hit.collider.gameObject != enemy.gameObject)
+                         {
+                             continue; // 被挡住了，跳过
+                         }
+                     }
+                 }
+                 else
+                 {
+                     // 兜底：没有碰撞体就算中心点
+                     distSq = (entity.transform.position - myPos).sqrMagnitude;
+                 }
+
                  if (distSq <= minDistSq)
                  {
                      minDistSq = distSq;
@@ -140,6 +203,8 @@ public class PlayerEntity : EntityBase
 
     private void Attack(EnemyEntity target)
     {
+        if (target == null || target.IsDead) return;
+
         // 播放动画 (如果有)
         // var anim = GetComponentInChildren<Animator>();
         // if (anim) anim.SetTrigger("Attack"); 
@@ -155,9 +220,9 @@ public class PlayerEntity : EntityBase
                  // 注入池引用，方便回收
                  projectile.SetPool(_projectilePool);
                  
-                 // 初始化
+                 // 初始化 (目标 Tag: Enemy)
                  Vector3 direction = (target.transform.position - transform.position).normalized;
-                 projectile.Init(direction, Data.Attack, 10f); 
+                 projectile.Init(direction, Data.Attack, 10f, "Enemy"); 
              }
              return;
         }
@@ -177,4 +242,15 @@ public class PlayerEntity : EntityBase
             _rb.velocity = _inputDir * Data.MoveSpeed;
         }
     }
+#if UNITY_EDITOR
+    private void OnDrawGizmos()
+    {
+        if (Data != null)
+        {
+            // 绿色线框表示攻击范围
+            Gizmos.color = new Color(0, 1, 0, 0.4f);
+            Gizmos.DrawWireSphere(transform.position, Data.Range);
+        }
+    }
+#endif
 }
