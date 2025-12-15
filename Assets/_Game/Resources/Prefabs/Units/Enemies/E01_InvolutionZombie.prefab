@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 2291713759671036191}
   - component: {fileID: 5429872745601181852}
   - component: {fileID: 7106924307715588177}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: E01_InvolutionZombie
   m_TagString: Untagged
   m_Icon: {fileID: 0}

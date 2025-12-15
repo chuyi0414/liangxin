@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 7827575711668124746}
   - component: {fileID: 5950332882217309285}
   - component: {fileID: 4079446089417303066}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: E97_ClockInKiller
   m_TagString: Untagged
   m_Icon: {fileID: 0}

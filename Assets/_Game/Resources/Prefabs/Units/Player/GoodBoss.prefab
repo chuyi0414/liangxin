@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 6167813424033966802}
   - component: {fileID: 198250040960933318}
   - component: {fileID: -158612582473105686}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: GoodBoss
   m_TagString: Untagged
   m_Icon: {fileID: 0}

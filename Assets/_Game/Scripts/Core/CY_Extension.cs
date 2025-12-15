@@ -1,4 +1,5 @@
 using CYFramework.Infrastructure;
+using CYFramework.Core.Pool;
 using UnityEngine;
 
 namespace CYFramework
@@ -16,5 +17,8 @@ namespace CYFramework
         
         /// <summary>部门（经济）管理器</summary>
         public static DepartmentManager Department => ServiceLocator.Get<DepartmentManager>();
+        
+        /// <summary>相机管理器</summary>
+        public static CameraManager CameraManager => ServiceLocator.Get<CameraManager>();
     }
 }

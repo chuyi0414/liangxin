@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 3305683995096428767}
   - component: {fileID: 2101210027005330711}
   - component: {fileID: -2121287807689669894}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: E125_ShadowSelf
   m_TagString: Untagged
   m_Icon: {fileID: 0}

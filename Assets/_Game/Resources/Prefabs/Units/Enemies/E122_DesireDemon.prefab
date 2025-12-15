@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 2297166334566160436}
   - component: {fileID: 5209195714445968274}
   - component: {fileID: -8214274333444343479}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: E122_DesireDemon
   m_TagString: Untagged
   m_Icon: {fileID: 0}

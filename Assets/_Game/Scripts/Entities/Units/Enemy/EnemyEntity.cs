@@ -2,6 +2,7 @@ using CYFramework.Core.Entity;
 using UnityEngine;
 using CYFramework;
 
+
 /// <summary>
 /// 敌方单位实体基类
 /// 支持直接作为普通怪物使用，也可被继承实现特殊逻辑 (如远程怪、自爆怪)
@@ -19,6 +20,7 @@ public class EnemyEntity : EntityBase
     public EnemyRow Data { get; private set; }
     protected float _currentHp;
     protected Transform _target; // 当前攻击目标 (通常是玩家或核心)
+    protected Collider2D _targetCollider; // 目标碰撞体缓存
     protected float _attackTimer;
 
     // 状态
@@ -41,6 +43,11 @@ public class EnemyEntity : EntityBase
     {
         base.OnEntityShow(userData);
 
+        if (CY.Unit != null)
+        {
+            CY.Unit.RegisterEnemy(this);
+        }
+
         if (userData is EnemyRow data)
         {
             Data = data;
@@ -59,11 +66,36 @@ public class EnemyEntity : EntityBase
             
             FindTarget();
             OnBorn(); // 子类钩子
+
+            // 发送初始 HP 事件，让血条Manager能立即生成血条
+            UnitHPChangedEvent evt = new UnitHPChangedEvent {
+                UnitID = Id,
+                CurrentHP = _currentHp,
+                MaxHP = Data.Hp,
+                Damage = 0,
+                WorldPosition = transform.position,
+                IsDead = false
+            };
+            CY.Event.Post(ref evt);
         }
         else
         {
             CY.LogError($"[{GetType().Name}] userData 必须是 EnemyRow 类型");
         }
+    }
+
+    protected override void OnEntityHide()
+    {
+        if (CY.Unit != null)
+        {
+            CY.Unit.UnregisterEnemy(this);
+        }
+        
+        // 清理引用，防止内存泄漏
+        _target = null;
+        _targetCollider = null;
+        
+        base.OnEntityHide();
     }
 
     /// <summary>
@@ -75,12 +107,17 @@ public class EnemyEntity : EntityBase
         if (CY.Unit != null && CY.Unit.BaseCampPoint != null)
         {
             _target = CY.Unit.BaseCampPoint;
+            _targetCollider = null; // 重置缓存
         }
         else
         {
             // 兜底
             var baseObj = GameObject.Find("BaseCamp");
-            if (baseObj) _target = baseObj.transform;
+            if (baseObj) 
+            {
+                _target = baseObj.transform;
+                _targetCollider = null; // 重置缓存
+            }
         }
     }
     
@@ -112,7 +149,54 @@ public class EnemyEntity : EntityBase
         // 3. 执行行为
         CustomUpdate(deltaTime); 
 
-        float distance = Vector3.Distance(transform.position, _target.position);
+        // 优化距离判定：对所有目标（大本营、员工、老板）都计算“边缘距离”
+        // 这样可以避免怪物和目标完全重叠，防止遮挡视觉
+        float distance;
+
+        // 尝试获取目标的碰撞体 (带缓存)
+        if (_targetCollider == null && _target != null)
+        {
+            // 优化：优先尝试从已知组件获取缓存的 Collider，避免 GetComponent
+            // 这里假设 EmployeeEntity 和 PlayerEntity 都公开了 Collider 属性
+            var player = _target.GetComponent<PlayerEntity>();
+            if (player != null)
+            {
+                _targetCollider = player.Collider;
+            }
+            else
+            {
+                var employee = _target.GetComponent<EmployeeEntity>();
+                if (employee != null)
+                {
+                    _targetCollider = employee.Collider;
+                }
+                else
+                {
+                    // 优化：如果是大本营，直接从 UnitManager 获取缓存
+                    if (CY.Unit != null && _target == CY.Unit.BaseCampPoint)
+                    {
+                        _targetCollider = CY.Unit.BaseCampCollider;
+                    }
+                    else
+                    {
+                        // 真的没办法了才用 GetComponent (例如攻击可破坏的障碍物)
+                        _targetCollider = _target.GetComponent<Collider2D>();
+                    }
+                }
+            }
+        }
+
+        if (_targetCollider != null)
+        {
+            // 计算从怪物位置到目标碰撞体表面的最近点
+            Vector3 closestPoint = _targetCollider.ClosestPoint(transform.position);
+            distance = Vector3.Distance(transform.position, closestPoint);
+        }
+        else
+        {
+            // 兜底：如果没有碰撞体，回退到中心距离
+            distance = Vector3.Distance(transform.position, _target.position);
+        }
 
         if (distance <= Data.Range)
         {
@@ -131,15 +215,47 @@ public class EnemyEntity : EntityBase
     /// </summary>
     protected virtual void CheckForAggro()
     {
-        // 0. 优先级判断：如果当前正在攻击大本营，则无视一切干扰
-        // 大本营优先级最高，一旦粘上就不放手
-        if (_target != null && CY.Unit != null && _target == CY.Unit.BaseCampPoint)
+        // 0. 绝对优先级：大本营保护区 (Red Zone)
+        // 无论当前在打谁，只要走进了大本营的攻击范围（+缓冲），强制转火大本营
+        if (CY.Unit != null && CY.Unit.BaseCampPoint != null)
         {
-            float distToBase = Vector3.Distance(transform.position, _target.position);
-            // 稍微放宽一点判断，或者是 <= Data.Range
-            if (distToBase <= Data.Range)
+            float distToBase;
+            var baseCollider = CY.Unit.BaseCampCollider;
+            
+            if (baseCollider != null)
             {
-                return; 
+                Vector3 closest = baseCollider.ClosestPoint(transform.position);
+                distToBase = Vector3.Distance(transform.position, closest);
+            }
+            else
+            {
+                distToBase = Vector3.Distance(transform.position, CY.Unit.BaseCampPoint.position);
+            }
+            
+            // 判定：如果在大本营核心区域内
+            // 判定：使用滞后比较 (Hysteresis) 防止反复横跳
+            // 1. 进入阈值 (Enter Threshold): 只要靠近了大本营一定距离，就强制吸引
+            float enterThreshold = Data.Range + 2.0f; 
+            // 2. 退出阈值 (Exit Threshold): 一旦锁定了大本营，除非被拉得特别远，否则绝不转火
+            float exitThreshold = Data.Range + 5.0f;
+
+            if (_target == CY.Unit.BaseCampPoint)
+            {
+                // 情况A: 当前已经是大本营 -> 保持粘性（宽容度极高）
+                if (distToBase <= exitThreshold)
+                {
+                    return; // 保持锁定，不检测其他单位
+                }
+            }
+            else
+            {
+                // 情况B: 当前不是大本营 -> 检查是否在大本营引力范围内
+                if (distToBase <= enterThreshold)
+                {
+                    _target = CY.Unit.BaseCampPoint;
+                    _targetCollider = baseCollider;
+                    return; // 切换并锁定
+                }
             }
         }
 
@@ -174,6 +290,7 @@ public class EnemyEntity : EntityBase
         if (bestUnit != null)
         {
             _target = bestUnit.transform;
+            _targetCollider = null; // 切换目标时清空缓存
         }
         else
         {
@@ -202,14 +319,43 @@ public class EnemyEntity : EntityBase
         if (_rb == null) return;
         
         _isMoving = true;
-        Vector3 direction = (_target.position - transform.position).normalized;
+        
+        // 计算移动目标点：如果是带碰撞体的目标，移动向“最近表面点”而不是“中心点”
+        Vector3 myPos = transform.position;
+        Vector3 targetPos = _target.position;
+
+        // 尝试使用缓存的碰撞体
+        if (_targetCollider == null && _target != null)
+        {
+             // 再次尝试获取（以防万一 UpdateMovement 在 OnUpdate 之前执行了某些路径）
+             // 复用之前的获取逻辑，或者直接依赖 OnUpdate 的结果。
+             // 为安全起见，这里做一个轻量级再次检查
+            var player = _target.GetComponent<PlayerEntity>();
+            if (player != null) _targetCollider = player.Collider;
+            else {
+                var emp = _target.GetComponent<EmployeeEntity>();
+                if (emp != null) _targetCollider = emp.Collider;
+                else _targetCollider = _target.GetComponent<Collider2D>();
+            }
+        }
+
+        if (_targetCollider != null)
+        {
+            targetPos = _targetCollider.ClosestPoint(myPos);
+        }
+
+        float distToTarget = Vector3.Distance(myPos, targetPos);
+        
+        // 防挤压缓冲区：如果已经非常接近目标点（边缘），直接停止
+        if (distToTarget < 0.1f) 
+        {
+            _rb.velocity = Vector2.zero;
+            return; 
+        }
+
+        Vector3 direction = (targetPos - myPos).normalized;
         Vector2 velocity = direction * Data.MoveSpeed;
         
-        // Debug Log: 频率较高，确认问题后请删除
-        if (Time.frameCount % 60 == 0) // 每约1秒打印一次，防止刷屏
-        {
-            CY.Log($"[EnemyDebug] {_target.name} | Dir:{direction} | Speed:{Data.MoveSpeed} | Vel:{velocity}");
-        }
 
         _rb.velocity = velocity;
         
@@ -278,6 +424,17 @@ public class EnemyEntity : EntityBase
         _currentHp -= damage;
         OnTakeDamage(damage); // 子类钩子
 
+        // 发送血量变化事件 (UI 用)
+        UnitHPChangedEvent evt = new UnitHPChangedEvent {
+            UnitID = Id,
+            CurrentHP = _currentHp,
+            MaxHP = Data.Hp,
+            Damage = (int)damage,
+            WorldPosition = transform.position,
+            IsDead = _currentHp <= 0
+        };
+        CY.Event.Post(ref evt);
+
         // 受击反馈 (通用变红)
         if (_renderer)
         {
@@ -298,6 +455,10 @@ public class EnemyEntity : EntityBase
     protected virtual void Die()
     {
         _isDead = true;
+        // 发送死亡事件 (UI 回收)
+        UnitDeadEvent evt = new UnitDeadEvent { UnitID = Id };
+        CY.Event.Post(ref evt);
+
         StopMove();
         if (_rb) _rb.simulated = false; // 禁用物理以免挡路
         
@@ -323,10 +484,5 @@ public class EnemyEntity : EntityBase
         // TODO: 生成实际的掉落物实体
     }
 
-    protected override void OnEntityHide()
-    {
-        // 清理引用，防止内存泄漏
-        _target = null;
-        StopMove();
-    }
+
 }

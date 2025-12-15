@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 7916835516403320394}
   - component: {fileID: 3704361466824985781}
   - component: {fileID: -189507552848828851}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: E03_KeyboardWarrior
   m_TagString: Untagged
   m_Icon: {fileID: 0}

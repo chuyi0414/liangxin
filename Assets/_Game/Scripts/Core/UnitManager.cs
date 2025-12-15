@@ -20,6 +20,7 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     /// 大本营位置
     /// </summary>
     public Transform BaseCampPoint => _baseCamp != null ? _baseCamp.transform : null;
+    public Collider2D BaseCampCollider { get; private set; }
 
     /// <summary>
     /// 当前操控的老板(玩家)实体
@@ -31,8 +32,64 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     /// 用于敌人 AI 索敌
     /// </summary>
     public List<EntityBase> ActiveFriendlyUnits { get; private set; } = new List<EntityBase>();
-
     private List<int> _deployedUnitIds = new List<int>(); // 旧的 ID 列表，暂时保留用于逻辑兼容
+
+    /// <summary>
+    /// 所有活跃的敌方单位
+    /// </summary>
+    public List<EntityBase> ActiveEnemies { get; private set; } = new List<EntityBase>();
+
+    public void RegisterFriendly(EntityBase unit)
+    {
+        if (!ActiveFriendlyUnits.Contains(unit))
+        {
+            ActiveFriendlyUnits.Add(unit);
+            if (unit is PlayerEntity player) CurrentPlayer = player;
+        }
+    }
+
+    public void UnregisterFriendly(EntityBase unit)
+    {
+        if (ActiveFriendlyUnits.Contains(unit))
+        {
+            ActiveFriendlyUnits.Remove(unit);
+            if (unit == CurrentPlayer) CurrentPlayer = null;
+        }
+    }
+
+    public void RegisterEnemy(EntityBase unit)
+    {
+        if (!ActiveEnemies.Contains(unit))
+        {
+            ActiveEnemies.Add(unit);
+        }
+    }
+
+    public void UnregisterEnemy(EntityBase unit)
+    {
+        if (ActiveEnemies.Contains(unit))
+        {
+            ActiveEnemies.Remove(unit);
+        }
+    }
+
+    /// <summary>
+    /// 根据 ID 获取单位（包括友方和敌方）
+    /// </summary>
+    public EntityBase GetUnit(int id)
+    {
+        // 优先找友方
+        foreach (var unit in ActiveFriendlyUnits)
+        {
+            if (unit.Id == id) return unit;
+        }
+        // 再找敌方
+        foreach (var unit in ActiveEnemies)
+        {
+            if (unit.Id == id) return unit;
+        }
+        return null;
+    }
 
     // ═══════════ 框架生命周期 ═══════════
     /// <summary>
@@ -49,8 +106,14 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     {
         CY.Log("[UnitManager] Initialize");
         ActiveFriendlyUnits.Clear();
+        ActiveEnemies.Clear();
         _deployedUnitIds.Clear();
         CurrentPlayer = null;
+
+        if (_baseCamp != null)
+        {
+            BaseCampCollider = _baseCamp.GetComponent<Collider2D>();
+        }
     }
 
     /// <summary>
@@ -69,6 +132,7 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     {
         CY.Log("[UnitManager] Dispose");
         ActiveFriendlyUnits.Clear();
+        ActiveEnemies.Clear();
         _deployedUnitIds.Clear();
         CurrentPlayer = null;
     }

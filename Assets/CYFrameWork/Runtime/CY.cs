@@ -35,6 +35,11 @@ namespace CYFramework
         private static DataTableManager _data;
         private static IAudioService _audio;
         private static NetworkService _network;
+        private static SaveService _save;
+        private static PoolManager _pool;
+        private static IResourceLoader _resource;
+        private static SceneLoader _scene;
+        private static FSMManager _fsm;
 
         public static EventBus Event => _event ??= ServiceLocator.Get<EventBus>();
         public static TimerManager Timer => _timer ??= GetOrCreateTimerManager();
@@ -43,12 +48,12 @@ namespace CYFramework
         public static UIManager UI => _ui ??= GetOrCreateUIManager();
         public static DataTableManager Data => _data ??= GetOrCreateDataTableManager();
         public static IAudioService Audio => _audio ??= ServiceLocator.Get<IAudioService>();
-        public static SaveService Save => ServiceLocator.Get<SaveService>();
-        public static PoolManager Pool => ServiceLocator.Get<PoolManager>();
-        public static IResourceLoader Resource => ServiceLocator.Get<IResourceLoader>();
-        public static SceneLoader Scene => ServiceLocator.Get<SceneLoader>();
+        public static SaveService Save => _save ??= ServiceLocator.Get<SaveService>();
+        public static PoolManager Pool => _pool ??= ServiceLocator.Get<PoolManager>();
+        public static IResourceLoader Resource => _resource ??= ServiceLocator.Get<IResourceLoader>();
+        public static SceneLoader Scene => _scene ??= ServiceLocator.Get<SceneLoader>();
         public static NetworkService Network => _network ??= ServiceLocator.Get<NetworkService>();
-        public static FSMManager FSM => ServiceLocator.Get<FSMManager>();
+        public static FSMManager FSM => _fsm ??= ServiceLocator.Get<FSMManager>();
         public static Core.GameEntryBase Game => Core.GameEntryBase.Instance;
 
         /// <summary>

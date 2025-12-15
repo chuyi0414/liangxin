@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 4077673534409781518}
   - component: {fileID: 4430885085199725964}
   - component: {fileID: 7040455586595778890}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: E92_FormManiac
   m_TagString: Untagged
   m_Icon: {fileID: 0}

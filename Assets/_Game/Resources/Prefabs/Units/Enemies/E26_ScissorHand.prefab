@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 5264138007705477455}
   - component: {fileID: 2705275951702543668}
   - component: {fileID: -730365829566236391}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: E26_ScissorHand
   m_TagString: Untagged
   m_Icon: {fileID: 0}

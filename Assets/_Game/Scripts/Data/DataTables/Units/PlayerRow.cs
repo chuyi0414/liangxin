@@ -18,6 +18,10 @@ public class PlayerRow : IDataRow
     public float AttackSpeed { get; private set; }     // 攻击速度
     public float Range { get; private set; }           // 攻击范围
     
+    // ═══════════ 攻击配置 ═══════════
+    public int AttackType { get; private set; }        // 0:近战, 1:远程
+    public string ProjectilePath { get; private set; } // 投射物路径
+    
     // ═══════════ 指挥系统 ═══════════
     public float CommandRange { get; private set; }    // 初始指挥范围（米）
     public float CommandRangeGrowth { get; private set; } // 每级指挥范围成长
@@ -58,6 +62,10 @@ public class PlayerRow : IDataRow
         Attack = float.Parse(values[i++]);
         AttackSpeed = float.Parse(values[i++]);
         Range = float.Parse(values[i++]);
+        
+        // 攻击配置
+        AttackType = int.Parse(values[i++]);
+        ProjectilePath = values[i++];
         
         // 指挥系统
         CommandRange = float.Parse(values[i++]);

@@ -8,6 +8,7 @@ using UnityEngine;
 public class EmployeeEntity : EntityBase
 {
     public EmployeeRow Data { get; private set; }
+    public Collider2D Collider { get; private set; }
 
     [Header("Runtime")]
     [SerializeField] private float _currentHp;
@@ -16,6 +17,7 @@ public class EmployeeEntity : EntityBase
     {
         base.OnEntityInit(userData);
         // 初始化组件引用，如 Animator, Rigidbody2D, NavMeshAgent 等
+        Collider = GetComponent<Collider2D>();
     }
 
     protected override void OnEntityShow(object userData)

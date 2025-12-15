@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 8675066475243644172}
   - component: {fileID: 4431652899681339974}
   - component: {fileID: 3833401545906461080}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: E02_EchoPuppet
   m_TagString: Untagged
   m_Icon: {fileID: 0}
