@@ -1,0 +1,11 @@
+<!--
+  CYFramework - IL2CPP/Managed Stripping 保留清单
+
+  说明：
+  - 该文件会由 Unity 菜单 `CYFramework/Generate Procedure Registry` 自动生成/更新。
+  - 主要用途：保留所有标记了 [AutoRegisterProcedure] 的流程类型，避免在 WebGL/微信/移动端裁剪后
+    运行时 `Type.GetType(AssemblyQualifiedName)` 失败，导致流程注册表无法加载。
+-->
+<linker>
+</linker>
+

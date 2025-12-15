@@ -110,6 +110,10 @@ namespace CYFramework.Infrastructure
         public static void RegisterInstance<TService>(TService instance)
         {
             var serviceType = typeof(TService);
+            if (instance == null)
+            {
+                throw new ArgumentNullException(nameof(instance), $"[ServiceLocator] RegisterInstance 失败：{serviceType.Name} instance 为空");
+            }
             
             _registrations[serviceType] = new ServiceRegistration
             {
@@ -120,7 +124,13 @@ namespace CYFramework.Infrastructure
                 Instance = instance,
                 IsLazy = false
             };
-            
+
+            // 如果框架已完成 InitializeAll，后续动态注册的实例也必须补齐 Initialize，保持行为一致。
+            if (_initialized)
+            {
+                InitializeInstanceIfNeeded(instance);
+            }
+
             OnServiceRegistered?.Invoke(instance);
         }
         
@@ -266,7 +276,7 @@ namespace CYFramework.Infrastructure
             // 构建初始化顺序
             BuildInitOrder();
             
-            // 按顺序创建实例并初始化
+            // 先创建实例，再按 InitOrder 排序初始化（当前实现不做依赖拓扑排序）
             var initializables = new List<(int order, IInitializable instance)>();
             
             foreach (var type in _initOrder)
@@ -312,8 +322,13 @@ namespace CYFramework.Infrastructure
             {
                 if (_registrations.TryGetValue(type, out var reg))
                 {
-                    DisposeInstance(reg);
-                    reg.Instance = null;
+                    if (reg.Instance != null)
+                    {
+                        // 先通知外部解绑（例如 CYBootstrap 的生命周期列表移除），再执行 Dispose。
+                        OnServiceUnregistered?.Invoke(reg.Instance);
+                        DisposeInstance(reg);
+                        reg.Instance = null;
+                    }
                 }
             }
             
@@ -426,9 +441,10 @@ namespace CYFramework.Infrastructure
                         {
                             InitializeInstanceIfNeeded(instance);
                         }
-                        // Transient 通常不参与全局生命周期管理（Update等），因为它可能大量创建
-                        // 但为了统一性，我们还是触发事件，由接收方决定是否处理
-                        OnServiceRegistered?.Invoke(instance);
+
+                        // Transient 不参与全局生命周期管理：
+                        // - 它可能被高频创建，触发 OnServiceRegistered 会导致生命周期列表无限增长（严重泄漏）。
+                        // - 如确需被框架调度，请使用 Singleton/Scoped，或由业务自行管理生命周期。
                         return instance;
                     }
                     finally

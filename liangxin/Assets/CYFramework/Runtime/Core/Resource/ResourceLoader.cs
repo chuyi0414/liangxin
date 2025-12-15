@@ -107,6 +107,10 @@ namespace CYFramework.Core.Resource
         // 当前缓存占用（估算）
         private long _cacheBytes;
 
+        // 自动卸载节流：避免在同一帧/短时间内多次调用 Resources.UnloadUnusedAssets 造成尖刺。
+        private float _lastUnloadUnusedTime = -999f;
+        private const float UnloadUnusedMinInterval = 1f;
+
         // 引用计数（可选）
         private readonly Dictionary<string, int> _refCounts = new();
         
@@ -285,12 +289,15 @@ namespace CYFramework.Core.Resource
             
             // 开始加载
             _loadingCallbacks[path] = new List<Action<Object>> { obj => callback?.Invoke(obj as T) };
-            
-            var request = Resources.LoadAsync<T>(path);
+
+            // 重要：这里统一用非泛型 Resources.LoadAsync(path)。
+            // 原因：如果首次请求用错了 T（例如先 LoadAsync<Component> 再 LoadAsync<GameObject>），
+            // 泛型版本会导致 request.asset 直接为 null，从而让后续正确类型也拿不到资源。
+            var request = Resources.LoadAsync(path);
             request.priority = _asyncLoadPriority;
             request.completed += _ =>
             {
-                var asset = request.asset as T;
+                var asset = request.asset;
                 
                 if (asset != null)
                 {
@@ -323,23 +330,23 @@ namespace CYFramework.Core.Resource
                 return cachedEntry.Asset as T;
             }
             
-            var request = Resources.LoadAsync<T>(path);
+            // 同回调版：统一走非泛型 LoadAsync，避免首次错误类型导致资源永远为 null。
+            var request = Resources.LoadAsync(path);
             request.priority = _asyncLoadPriority;
             
             while (!request.isDone)
             {
                 await Task.Yield();
             }
-            
-            var asset = request.asset as T;
-            
-            if (asset != null)
+
+            var raw = request.asset;
+            if (raw != null)
             {
-                AddToCache(path, asset);
+                AddToCache(path, raw);
                 Retain(path);
             }
-            
-            return asset;
+
+            return raw as T;
         }
         
         #endregion
@@ -367,7 +374,6 @@ namespace CYFramework.Core.Resource
             }
 
             RemoveFromCache(path, entry);
-            Resources.UnloadUnusedAssets();
             CYLog.Debug($"[ResourceLoader] 卸载: {path}");
         }
         
@@ -618,7 +624,13 @@ namespace CYFramework.Core.Resource
 
             if (evictedAny)
             {
-                Resources.UnloadUnusedAssets();
+                // 说明：淘汰仅代表“移除框架缓存引用”，真正释放内存需要 UnloadUnusedAssets。
+                // 这里做节流，避免短时间内多次触发导致帧尖刺。
+                if (Time.unscaledTime - _lastUnloadUnusedTime >= UnloadUnusedMinInterval)
+                {
+                    _lastUnloadUnusedTime = Time.unscaledTime;
+                    Resources.UnloadUnusedAssets();
+                }
             }
         }
 

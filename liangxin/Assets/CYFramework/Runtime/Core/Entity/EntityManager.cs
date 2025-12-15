@@ -217,6 +217,10 @@ namespace CYFramework.Core.Entity
 
         // HideAllEntities/HideAllEntities(string) 使用的复用缓冲，避免每次 new List 产生 GC
         private readonly List<IEntity> _hideBuffer = new(64);
+
+        // 更新遍历缓冲：避免在实体 Update/Tick 中增删实体导致 Dictionary 遍历抛异常（InvalidOperationException）。
+        // 说明：EntityManager 允许在实体逻辑内 Spawn/Recycle 其他实体，因此必须避免直接 foreach Dictionary.Values。
+        private readonly List<IEntity> _updateBuffer = new(256);
         
         private int _nextEntityId = 1;
         private Transform _entityRoot;
@@ -442,14 +446,30 @@ namespace CYFramework.Core.Entity
             _entityPools[entityType] = new Queue<IEntity>();
             
             // 预加载
-            for (int i = 0; i < preloadCount; i++)
+            // 注意：预加载本质上是“预创建并放入池”，也受池容量上限影响，避免误配置导致内存暴涨。
+            int warmupCount = preloadCount;
+            if (_maxPoolSize > 0)
+            {
+                warmupCount = Mathf.Min(preloadCount, _maxPoolSize);
+            }
+
+            for (int i = 0; i < warmupCount; i++)
             {
                 var entity = CreateEntityInstance(info);
+                if (entity == null)
+                {
+                    continue;
+                }
                 entity.OnHide();
                 _entityPools[entityType].Enqueue(entity);
             }
             
-            CYLog.Debug($"[EntityManager] 注册实体: {entityType}, 预加载: {preloadCount}");
+            if (warmupCount != preloadCount)
+            {
+                CYLog.Warning($"[EntityManager] 预加载数量被池上限截断: {entityType}, preload={preloadCount}, maxPool={_maxPoolSize}");
+            }
+
+            CYLog.Debug($"[EntityManager] 注册实体: {entityType}, 预加载: {warmupCount}");
         }
 
         /// <summary>
@@ -515,6 +535,22 @@ namespace CYFramework.Core.Entity
         public T SpawnEntity<T>(string entityType, string assetPath, EntityGroup group, object userData = null) where T : class, IEntity
         {
             return SpawnEntity<T>(entityType, assetPath, group.ToString(), userData);
+        }
+
+        /// <summary>
+        /// 显示实体（兼容旧命名）：等价于 <see cref="SpawnEntity{T}(string,object)"/>。
+        /// </summary>
+        public T ShowEntity<T>(string entityType, object userData = null) where T : class, IEntity
+        {
+            return SpawnEntity<T>(entityType, userData);
+        }
+
+        /// <summary>
+        /// 显示实体（兼容旧命名）：等价于 <see cref="SpawnEntity(string,object)"/>。
+        /// </summary>
+        public IEntity ShowEntity(string entityType, object userData = null)
+        {
+            return SpawnEntity(entityType, userData);
         }
         
         /// <summary>
@@ -600,6 +636,14 @@ namespace CYFramework.Core.Entity
         }
 
         /// <summary>
+        /// 隐藏实体（兼容旧命名）：等价于 <see cref="RecycleEntity(int)"/>。
+        /// </summary>
+        public void HideEntity(int entityId)
+        {
+            RecycleEntity(entityId);
+        }
+
+        /// <summary>
         /// 回收实体（放回对象池）
         /// </summary>
         /// <param name="entityId">实体ID</param>
@@ -624,53 +668,121 @@ namespace CYFramework.Core.Entity
         
         private void RecycleEntityInternal(IEntity entity)
         {
+            // 重要：回收时不能先调用 entity.OnRecycle()，因为 EntityBase.OnRecycle 会把 Id 重置为 0，
+            // 若先重置再从 _entities 删除，会导致实体表残留（严重内存/逻辑错误）。
+            var entityId = entity.Id;
+            var entityType = entity.EntityType;
+
             // 回收前先隐藏（如果还没隐藏）
             if (entity.IsVisible)
             {
                 entity.OnHide();
             }
-            
-            // 触发回收回调
-            entity.OnRecycle();
-            
-            _entities.Remove(entity.Id);
-            
-            if (_entityGroups.TryGetValue(entity.EntityType, out var group))
+
+            // 先从管理器数据结构移除，保证后续 Update/Tick 不会再驱动到该实体。
+            _entities.Remove(entityId);
+
+            if (!string.IsNullOrEmpty(entityType) && _entityGroups.TryGetValue(entityType, out var group))
             {
                 group.Remove(entity);
             }
+
+            // 再触发回收回调（内部可安全重置 Id/UserData 等）。
+            entity.OnRecycle();
             
             // 移入回收站节点（保持 Hierarchy 整洁）
-            if (_poolRoot != null)
+            if (_poolRoot != null && entity.GameObject != null)
             {
                 entity.GameObject.transform.SetParent(_poolRoot);
             }
 
             // 回收到池
-            if (_entityPools.TryGetValue(entity.EntityType, out var pool))
+            if (!string.IsNullOrEmpty(entityType) && _entityPools.TryGetValue(entityType, out var pool))
             {
-                pool.Enqueue(entity);
+                // 池容量控制：超出上限直接销毁，避免长时间运行池无限增长。
+                if (_maxPoolSize > 0 && pool.Count >= _maxPoolSize)
+                {
+                    if (entity.GameObject != null)
+                    {
+                        GameObject.Destroy(entity.GameObject);
+                    }
+                }
+                else
+                {
+                    pool.Enqueue(entity);
+                }
+            }
+            else
+            {
+                // 未知类型：为安全起见直接销毁，避免泄漏。
+                if (entity.GameObject != null)
+                {
+                    GameObject.Destroy(entity.GameObject);
+                }
             }
         }
         
         /// <summary>
-        /// 仅隐藏实体（即使不回收）
-        /// 保持 Entity 实例在内存中，不放回池，只是 SetActive(false)
+        /// 隐藏实体（默认回收到池，兼容旧命名）。
         /// </summary>
+        /// <remarks>
+        /// - 框架推荐“Hide = 回收进池”，保持层级整洁并避免实体表长期膨胀。
+        /// - 若你确实需要“仅隐藏不回收”，请使用 <see cref="HideEntityInstance"/>。
+        /// </remarks>
         public void HideEntity(IEntity entity)
+        {
+            if (entity == null) return;
+            RecycleEntity(entity);
+        }
+
+        /// <summary>
+        /// 仅隐藏实体（不回收）：保持 Entity 实例仍受管理器管理，但 SetActive(false) 且不再驱动 Update/Tick。
+        /// </summary>
+        public void HideEntityInstance(IEntity entity)
         {
             if (entity == null || !entity.IsVisible) return;
             entity.OnHide();
         }
 
         /// <summary>
-        /// 仅显示实体（即使不回收）
-        /// 将已隐藏的实体 SetActive(true)
+        /// 仅显示实体（不回收）：将已隐藏且仍在管理器中管理的实体 SetActive(true)。
+        /// </summary>
+        /// <remarks>
+        /// 注意：该方法只适用于“仍在 _entities 表内的隐藏实体”。如果实体已被 <see cref="RecycleEntity"/> 回收，
+        /// 它的 Id 会被重置且不会再被管理器驱动，此时请通过 <see cref="SpawnEntity"/>/<see cref="ShowEntity(string,object)"/> 重新生成。
         /// </summary>
         public void ShowEntity(IEntity entity, object userData = null)
         {
             if (entity == null || entity.IsVisible) return;
+
+            // 防御：避免对“已回收（不再受管理器管理）”的实体直接 OnShow，造成状态与管理器表不一致。
+            if (entity.Id <= 0 || !_entities.ContainsKey(entity.Id))
+            {
+                CYLog.Warning($"[EntityManager] ShowEntity 失败：实体不在管理器中（可能已回收），type={entity.EntityType}");
+                return;
+            }
             entity.OnShow(userData);
+        }
+
+        /// <summary>
+        /// 设置实体可见性（不回收）。
+        /// </summary>
+        /// <remarks>
+        /// 适用场景：你希望临时隐藏但保留实体的“管理器引用关系”（例如某些特殊逻辑需要仍能查询到该实体）。
+        /// 如果你的目标是“从场景移除并等待复用”，请使用 <see cref="HideEntity(int)"/> 或 <see cref="RecycleEntity(IEntity)"/>。
+        /// </remarks>
+        public void SetEntityVisible(IEntity entity, bool visible, object userData = null)
+        {
+            if (entity == null) return;
+
+            if (visible)
+            {
+                ShowEntity(entity, userData);
+            }
+            else
+            {
+                HideEntityInstance(entity);
+            }
         }
 
         /// <summary>
@@ -861,8 +973,17 @@ namespace CYFramework.Core.Entity
         // ITickable - 固定帧更新（物理/AI）
         public void Tick(float deltaTime)
         {
-            foreach (var entity in _entities.Values)
+            if (_entities.Count == 0) return;
+
+            _updateBuffer.Clear();
+            _updateBuffer.AddRange(_entities.Values);
+
+            for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                var entity = _updateBuffer[i];
+                if (entity == null) continue;
+                if (entity.Id <= 0) continue; // 已回收
+                if (!entity.IsVisible || entity.IsPaused) continue;
                 entity.OnFixedUpdate(deltaTime);
             }
         }
@@ -879,8 +1000,17 @@ namespace CYFramework.Core.Entity
                 }
             }
 
-            foreach (var entity in _entities.Values)
+            if (_entities.Count == 0) return;
+
+            _updateBuffer.Clear();
+            _updateBuffer.AddRange(_entities.Values);
+
+            for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                var entity = _updateBuffer[i];
+                if (entity == null) continue;
+                if (entity.Id <= 0) continue; // 已回收
+                if (!entity.IsVisible || entity.IsPaused) continue;
                 entity.OnUpdate(deltaTime);
             }
         }
@@ -893,8 +1023,17 @@ namespace CYFramework.Core.Entity
                 return;
             }
 
-            foreach (var entity in _entities.Values)
+            if (_entities.Count == 0) return;
+
+            _updateBuffer.Clear();
+            _updateBuffer.AddRange(_entities.Values);
+
+            for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                var entity = _updateBuffer[i];
+                if (entity == null) continue;
+                if (entity.Id <= 0) continue; // 已回收
+                if (!entity.IsVisible || entity.IsPaused) continue;
                 entity.OnLateUpdate(deltaTime);
             }
         }

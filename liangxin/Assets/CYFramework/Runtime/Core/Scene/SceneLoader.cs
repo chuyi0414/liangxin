@@ -130,6 +130,13 @@ namespace CYFramework.Core.Scene
         /// <summary>
         /// 取消当前加载
         /// </summary>
+        /// <remarks>
+        /// 重要：Unity 的场景异步加载 <see cref="AsyncOperation"/> 不支持真正“中断/取消下载”。
+        /// 本接口的语义是：
+        /// - 尽快取消进度/完成回调（避免业务误触发后续逻辑）
+        /// - 防止 asyncOp 因 allowSceneActivation=false 而卡在 0.9 的“半加载”状态
+        /// - Additive 模式下会在加载完成后尝试卸载该场景以回收资源
+        /// </remarks>
         public void CancelLoading()
         {
             if (_isLoading && _currentLoadCoroutine != null)
@@ -143,6 +150,7 @@ namespace CYFramework.Core.Scene
             Action onComplete, SceneLoadMode mode, Action<string> onError = null)
         {
             _isLoading = true;
+            bool canceled = false;
             
             var loadMode = mode == SceneLoadMode.Single 
                 ? LoadSceneMode.Single 
@@ -179,31 +187,58 @@ namespace CYFramework.Core.Scene
                 // 检查取消请求
                 if (_cancelRequested)
                 {
-                    _isLoading = false;
                     _cancelRequested = false;
-                    CYLog.Warning($"[SceneLoader] 加载已取消: {sceneName}");
-                    onError?.Invoke("加载已取消");
-                    yield break;
+                    canceled = true;
+                    CYLog.Warning($"[SceneLoader] 收到取消请求: {sceneName}（注意：Unity 不支持真正取消加载，框架将取消回调并尽量回收）");
                 }
-                
-                float progress = Mathf.Clamp01(asyncOp.progress / 0.9f);
-                onProgress?.Invoke(progress);
-                
-                if (asyncOp.progress >= 0.9f)
+
+                // 取消后不再回调业务进度，避免 UI/流程误触发；但必须允许激活，避免卡在 0.9。
+                if (!canceled)
+                {
+                    float progress = Mathf.Clamp01(asyncOp.progress / 0.9f);
+                    onProgress?.Invoke(progress);
+
+                    if (asyncOp.progress >= 0.9f)
+                    {
+                        asyncOp.allowSceneActivation = true;
+                    }
+                }
+                else
                 {
                     asyncOp.allowSceneActivation = true;
                 }
                 
                 yield return null;
             }
-            
+
+            // Single 模式下即使取消，场景也可能已经完成激活：这里以实际加载目标为准更新当前场景名。
             if (mode == SceneLoadMode.Single)
             {
                 _currentSceneName = sceneName;
             }
-            
+
             _isLoading = false;
             _currentLoadCoroutine = null;
+
+            if (canceled)
+            {
+                // Additive 模式下尝试卸载，尽量回收资源；Single 模式无法回滚，只能提示。
+                if (mode == SceneLoadMode.Additive)
+                {
+                    var unloadOp = SceneManager.UnloadSceneAsync(sceneName);
+                    if (unloadOp != null)
+                    {
+                        while (!unloadOp.isDone)
+                        {
+                            yield return null;
+                        }
+                    }
+                }
+
+                onError?.Invoke("加载已取消");
+                yield break;
+            }
+
             onProgress?.Invoke(1f);
             onComplete?.Invoke();
             

@@ -71,7 +71,25 @@ namespace CYFramework.Core.Timer
         internal bool Update(float deltaTime)
         {
             if (IsPaused || IsCompleted) return false;
-            
+
+            // 防御：Duration <= 0 的计时器视为“下一次更新立即完成”，避免除零与不确定行为。
+            // 常见用法：Delay(0f) / NextFrameTimer 等。
+            if (Duration <= 0f)
+            {
+                Elapsed = Duration;
+                _onUpdate?.Invoke(1f);
+                _onComplete?.Invoke();
+                
+                if (IsLoop)
+                {
+                    Elapsed = 0f;
+                    return false;
+                }
+                
+                IsCompleted = true;
+                return true;
+            }
+
             Elapsed += deltaTime;
             _onUpdate?.Invoke(Elapsed / Duration);
             
@@ -103,12 +121,17 @@ namespace CYFramework.Core.Timer
         public int UpdateOrder => -100; // 优先级高，先于其他系统更新
         
         private List<Timer> _timers;
-        private readonly List<Timer> _toRemove = new List<Timer>();
         private int _nextId = 1;
         private bool _defaultUseUnscaledTime;
         
         public void Initialize()
         {
+            // 允许被多次调用（例如：CY.Timer 在 CYBootstrap.InitializeAll 前被访问并提前创建）
+            if (_timers != null)
+            {
+                return;
+            }
+
             int initialCapacity = 32;
             
             // 从 CYConfigurator 读取配置
@@ -238,7 +261,7 @@ namespace CYFramework.Core.Timer
         /// </summary>
         public void Cancel(int timerId)
         {
-            var timer = _timers.Find(t => t.Id == timerId);
+            var timer = FindTimerById(timerId);
             timer?.Stop();
         }
 
@@ -247,7 +270,7 @@ namespace CYFramework.Core.Timer
         /// </summary>
         public bool TryCancel(int timerId)
         {
-            var timer = _timers.Find(t => t.Id == timerId);
+            var timer = FindTimerById(timerId);
             if (timer == null) return false;
             timer.Stop();
             return true;
@@ -258,7 +281,7 @@ namespace CYFramework.Core.Timer
         /// </summary>
         public Timer GetTimer(int timerId)
         {
-            return _timers.Find(t => t.Id == timerId);
+            return FindTimerById(timerId);
         }
 
         /// <summary>
@@ -266,7 +289,7 @@ namespace CYFramework.Core.Timer
         /// </summary>
         public bool HasTimer(int timerId)
         {
-            var timer = _timers.Find(t => t.Id == timerId);
+            var timer = FindTimerById(timerId);
             return timer != null && !timer.IsCompleted;
         }
         
@@ -325,23 +348,31 @@ namespace CYFramework.Core.Timer
             }
             
             // 更新计时器
-            _toRemove.Clear();
-            
-            foreach (var timer in _timers)
+            for (int i = _timers.Count - 1; i >= 0; i--)
             {
+                var timer = _timers[i];
                 float dt = timer.UseUnscaledTime ? unscaledDeltaTime : deltaTime;
                 if (timer.Update(dt))
                 {
-                    _toRemove.Add(timer);
+                    _timers.RemoveAt(i);
                 }
-            }
-            
-            foreach (var timer in _toRemove)
-            {
-                _timers.Remove(timer);
             }
         }
         
         public int ActiveCount => _timers.Count;
+
+        private Timer FindTimerById(int timerId)
+        {
+            if (timerId <= 0) return null;
+            for (int i = 0; i < _timers.Count; i++)
+            {
+                var timer = _timers[i];
+                if (timer != null && timer.Id == timerId)
+                {
+                    return timer;
+                }
+            }
+            return null;
+        }
     }
 }

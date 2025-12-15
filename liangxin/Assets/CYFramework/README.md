@@ -58,6 +58,7 @@ public class BattleProcedure : ProcedureBase { }
 // 当你新增/修改流程后：在 Unity 菜单执行
 // CYFramework/Generate Procedure Registry
 // 生成 Resources/CYFramework/ProcedureRegistry.asset，运行时优先从注册表加载流程（WebGL/微信无需扫程序集）
+// 同时生成/更新 Assets/CYFramework/link.xml（IL2CPP/Managed Stripping 裁剪保护，建议提交到版本库）
 ```
 
 ### 3. 使用 CY 统一入口

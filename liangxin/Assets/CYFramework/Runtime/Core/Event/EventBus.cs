@@ -92,6 +92,7 @@ namespace CYFramework.Core.Event
         // 延迟事件反射缓存（避免每次 GetMethod/MakeGenericMethod）
         private System.Reflection.MethodInfo _postBoxedMethod;
         private readonly Dictionary<Type, System.Reflection.MethodInfo> _postBoxedGenericCache = new();
+        private readonly object[] _postBoxedInvokeArgs = new object[1];
 
         private readonly Dictionary<Type, List<(Type eventType, System.Reflection.MethodInfo method, int priority)>> _subscribeAllCache = new();
         private System.Reflection.MethodInfo _subscribeGenericDefinition;
@@ -207,6 +208,16 @@ namespace CYFramework.Core.Event
                 if (!sub.Handler.Equals(handler))
                 {
                     continue;
+                }
+
+                // 同步清理 target -> subscriptions 映射，避免悬挂引用导致内存与逻辑噪音。
+                if (sub.Target != null && _targetSubscriptions.TryGetValue(sub.Target, out var targetList))
+                {
+                    targetList.Remove(sub);
+                    if (targetList.Count == 0)
+                    {
+                        _targetSubscriptions.Remove(sub.Target);
+                    }
                 }
 
                 if (_isDispatching)
@@ -432,7 +443,11 @@ namespace CYFramework.Core.Event
                 {
                     // 使用缓存的反射信息，避免每次 GetMethod/MakeGenericMethod
                     var genericMethod = GetOrCreatePostBoxedMethod(delayed.EventType);
-                    genericMethod.Invoke(this, new[] { delayed.EventData });
+
+                    // 避免每次 new object[1] 产生 GC（延迟事件仍然会装箱，但至少不额外分配参数数组）。
+                    _postBoxedInvokeArgs[0] = delayed.EventData;
+                    genericMethod.Invoke(this, _postBoxedInvokeArgs);
+                    _postBoxedInvokeArgs[0] = null;
                     
                     _delayedEvents.RemoveAt(i);
                 }

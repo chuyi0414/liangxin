@@ -436,7 +436,7 @@ namespace CYFramework.Core.UI
         }
         
         /// <summary>
-        /// 打开面板（强类型数据，避免装箱）
+        /// 打开面板（强类型数据语义）。
         /// </summary>
         /// <typeparam name="T">面板类型</typeparam>
         /// <typeparam name="TData">数据类型（推荐使用 struct）</typeparam>
@@ -444,7 +444,8 @@ namespace CYFramework.Core.UI
         /// <returns>面板实例，可直接操作</returns>
         public T Open<T, TData>(TData data) where T : UIPanel where TData : struct
         {
-            // TData 约束为 struct，避免装箱
+            // 说明：UIPanel 的 userData 入口是 object，本方法内部仍会发生一次装箱。
+            // 如需在高频场景完全避免装箱，请使用 Typed MVVM（TypedViewModel + ObservableProperty<T>）。
             return Open<T>(data);
         }
         

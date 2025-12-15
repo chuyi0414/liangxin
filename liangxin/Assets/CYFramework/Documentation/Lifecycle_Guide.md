@@ -113,6 +113,7 @@ public class LiangXinGame : GameEntryBase
 `CYFramework/Generate Procedure Registry`
 
 该操作会生成：`Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`。
+同时会生成/更新：`Assets/CYFramework/link.xml`（IL2CPP/Managed Stripping 裁剪保护，建议提交到版本库）。
 运行时 `ProcedureManager` 会优先从 `Resources/CYFramework/ProcedureRegistry` 加载注册表完成注册，避免启动时扫描程序集。
 在 `WebGL/微信` 平台（不支持无参自动扫程序集）也可以正常工作。
 

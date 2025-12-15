@@ -80,11 +80,54 @@ namespace CYFramework
         /// <summary>日志 - Error 级别</summary>
         public static void LogError(string message) => CYLog.Error(message);
 
+        // ==================== 存档快捷方法（与团队口径对齐） ====================
+
+        /// <summary>
+        /// 保存存档（等价于 <see cref="SaveService.Save{T}(string,T)"/>）。
+        /// </summary>
+        public static bool SaveData<T>(string key, T data) where T : SaveDataBase => Save.Save(key, data);
+
+        /// <summary>
+        /// 加载存档（等价于 <see cref="SaveService.Load{T}(string)"/>；不存在返回 new T()）。
+        /// </summary>
+        public static T LoadData<T>(string key) where T : SaveDataBase, new() => Save.Load<T>(key);
+
+        /// <summary>
+        /// 存档是否存在（等价于 <see cref="SaveService.Exists(string)"/>）。
+        /// </summary>
+        public static bool HasSave(string key) => Save.Exists(key);
+
+        /// <summary>
+        /// 删除存档（等价于 <see cref="SaveService.Delete(string)"/>）。
+        /// </summary>
+        public static void DeleteSave(string key) => Save.Delete(key);
+
+        /// <summary>
+        /// 保存默认存档（使用 <see cref="SaveService.DefaultSaveKey"/>）。
+        /// </summary>
+        public static bool SaveData<T>(T data) where T : SaveDataBase => Save.Save(data);
+
+        /// <summary>
+        /// 加载默认存档（使用 <see cref="SaveService.DefaultSaveKey"/>）。
+        /// </summary>
+        public static T LoadData<T>() where T : SaveDataBase, new() => Save.Load<T>();
+
+        /// <summary>
+        /// 默认存档是否存在（使用 <see cref="SaveService.DefaultSaveKey"/>）。
+        /// </summary>
+        public static bool HasSave() => Save.Exists();
+
+        /// <summary>
+        /// 删除默认存档（使用 <see cref="SaveService.DefaultSaveKey"/>）。
+        /// </summary>
+        public static void DeleteSave() => Save.Delete();
+
         private static TimerManager GetOrCreateTimerManager()
         {
             if (!ServiceLocator.TryGet<TimerManager>(out var manager))
             {
                 manager = new TimerManager();
+                manager.Initialize(); // 允许在未走 CYBootstrap.InitializeAll 的情况下直接使用
                 ServiceLocator.RegisterInstance(manager);
                 CYBootstrap.Instance?.RegisterLifecycle(manager);
             }
@@ -96,6 +139,7 @@ namespace CYFramework
             if (!ServiceLocator.TryGet<ProcedureManager>(out var manager))
             {
                 manager = new ProcedureManager();
+                manager.Initialize(); // 允许在未走 CYBootstrap.InitializeAll 的情况下直接使用
                 ServiceLocator.RegisterInstance(manager);
                 CYBootstrap.Instance?.RegisterLifecycle(manager);
             }

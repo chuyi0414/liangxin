@@ -763,7 +763,9 @@ public sealed class BattleProcedure : ProcedureBase
 
 `CYFramework/Generate Procedure Registry`
 
-会生成：`Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`
+会生成/更新：
+- `Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`
+- `Assets/CYFramework/link.xml`（IL2CPP/Managed Stripping 裁剪保护，建议提交到版本库）
 
 ### 8.4 启动与切换
 
@@ -2184,7 +2186,9 @@ public sealed class BattleProcedure : ProcedureBase
 }
 ```
 
-> ⚠️ 新增/修改流程后，请在 Unity 菜单执行：`CYFramework/Generate Procedure Registry`，生成 `Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`。
+> ⚠️ 新增/修改流程后，请在 Unity 菜单执行：`CYFramework/Generate Procedure Registry`，生成/更新：
+> - `Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`
+> - `Assets/CYFramework/link.xml`（IL2CPP/Managed Stripping 裁剪保护，建议提交到版本库）
 
 ### 19.6 UI 面板（UIPanel + [UIPrefab]）
 

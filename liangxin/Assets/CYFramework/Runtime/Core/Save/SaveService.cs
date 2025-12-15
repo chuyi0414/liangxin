@@ -56,8 +56,12 @@ namespace CYFramework.Core.Save
         /// <summary>
         /// 校验和（防篡改）
         /// </summary>
-        [NonSerialized]
-        public string Checksum;
+        /// <remarks>
+        /// 重要：该字段必须参与 JsonUtility 序列化，否则校验和永远无法落盘，导致加载时持续校验失败。
+        /// 同时为了避免“校验和字段自引用”导致计算不稳定，框架会在计算时将其置为固定占位值（空字符串）。
+        /// </remarks>
+        [HideInInspector]
+        public string Checksum = "";
     }
     
     /// <summary>
@@ -155,6 +159,9 @@ namespace CYFramework.Core.Save
                 {
                     _config.EnableEncryption = externalConfig.EnableEncryption;
                     _config.EncryptionKey = externalConfig.EncryptionKey;
+                    _config.EnableChecksum = externalConfig.EnableChecksum;
+                    _config.EnableBackup = externalConfig.EnableBackup;
+                    _config.MaxBackupCount = Mathf.Max(0, externalConfig.MaxBackupCount);
                     _defaultSaveKey = string.IsNullOrEmpty(externalConfig.SaveFileName) ? _defaultSaveKey : externalConfig.SaveFileName;
                     _maxSaveSlots = Mathf.Max(1, externalConfig.MaxSaveSlots);
                     _autoSaveInterval = Mathf.Max(0f, externalConfig.AutoSaveInterval);
@@ -257,12 +264,21 @@ namespace CYFramework.Core.Save
                 data.SaveTimestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 
                 // 序列化
-                string json = JsonUtility.ToJson(data);
-                
+                // 注意：校验和字段会被序列化，为避免“校验和参与自身计算”导致不稳定，先写入固定占位值。
+                string json;
+
                 // 计算校验和
                 if (_config.EnableChecksum)
                 {
-                    data.Checksum = ComputeChecksum(json);
+                    data.Checksum = "";
+                    var jsonForChecksum = JsonUtility.ToJson(data);
+                    data.Checksum = ComputeChecksum(jsonForChecksum);
+                    json = JsonUtility.ToJson(data);
+                }
+                else
+                {
+                    // 关闭校验时，清空字段，避免残留旧值被写回。
+                    data.Checksum = "";
                     json = JsonUtility.ToJson(data);
                 }
                 
@@ -354,11 +370,16 @@ namespace CYFramework.Core.Save
                 // 校验和验证
                 if (_config.EnableChecksum)
                 {
-                    string expectedChecksum = data.Checksum;
-                    data.Checksum = null;
-                    string actualChecksum = ComputeChecksum(JsonUtility.ToJson(data));
+                    var expectedChecksum = data.Checksum;
+
+                    // 与保存端一致：将 Checksum 置为固定占位值后计算。
+                    data.Checksum = "";
+                    var actualChecksum = ComputeChecksum(JsonUtility.ToJson(data));
+
+                    // 还原，便于调试（并保持数据对象字段语义正确）。
+                    data.Checksum = expectedChecksum;
                     
-                    if (expectedChecksum != actualChecksum)
+                    if (string.IsNullOrEmpty(expectedChecksum) || expectedChecksum != actualChecksum)
                     {
                         CYLog.Warning($"[SaveService] 校验和不匹配，存档可能被篡改: {key}");
                         // 尝试从备份恢复
@@ -774,6 +795,8 @@ namespace CYFramework.Core.Save
         {
             try
             {
+                if (_config.MaxBackupCount <= 0) return;
+
                 string sourcePath = GetSavePath(key);
                 
                 if (_fileSystem == null || !_fileSystem.FileExists(sourcePath)) return;
@@ -797,7 +820,8 @@ namespace CYFramework.Core.Save
             }
             catch (Exception ex)
             {
-                CYLog.Warning($"[SaveService] 创建备份失败: {key}", ex.Message);
+                // 注意：CYLog.Warning 的第二个参数是 tag，不是异常；这里把异常信息写入 message，避免日志丢失。
+                CYLog.Warning($"[SaveService] 创建备份失败: {key}, ex={ex.Message}");
             }
         }
         

@@ -83,6 +83,19 @@
 | `LoadFromCsv<T>(csvText, name, separator)` | CSV 文本, 表名(可选), 分隔符 | `DataTable<T>` | 从 CSV 加载 |
 | `UnloadDataTable(name)` | 表名 | `void` | 卸载数据表 |
 
+#### CY.Save / 存档快捷方法
+| 方法/属性 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `Save` | - | `SaveService` | 获取存档服务（完整 API 见下文 SaveService） |
+| `SaveData<T>(key, data)` | 键名, 数据 | `bool` | 保存（推荐写法，等价 `CY.Save.Save(key, data)`） |
+| `LoadData<T>(key)` | 键名 | `T` | 加载（不存在返回 `new T()`） |
+| `HasSave(key)` | 键名 | `bool` | 是否存在 |
+| `DeleteSave(key)` | 键名 | `void` | 删除 |
+| `SaveData<T>(data)` | 默认键, 数据 | `bool` | 保存默认存档（使用 `SaveService.DefaultSaveKey`） |
+| `LoadData<T>()` | 默认键 | `T` | 加载默认存档 |
+| `HasSave()` | 默认键 | `bool` | 默认存档是否存在 |
+| `DeleteSave()` | 默认键 | `void` | 删除默认存档 |
+
 #### CY 服务定位器快捷方法
 | 方法 | 说明 |
 |------|------|
@@ -770,9 +783,9 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 
 | 方法 | 返回值 | 说明 |
 |------|--------|------|
-| `CheckForUpdateAsync()` | `Task<UpdateCheckResult>` | 检查更新 |
-| `DownloadUpdateAsync(Action<DownloadProgress> onProgress)` | `Task` | 下载更新 |
-| `ApplyUpdateAsync()` | `Task` | 应用更新 |
+| `CheckUpdate()` | `Task<bool>` | 检查更新（解析版本文件，计算差异） |
+| `DownloadUpdate(Action<UpdateProgress> onProgress = null)` | `Task<bool>` | 下载需要更新的内容 |
+| `ApplyUpdate()` | `void` | 应用更新（将下载内容切换为生效版本） |
 
 ---
 

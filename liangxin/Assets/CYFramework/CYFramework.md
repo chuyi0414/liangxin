@@ -601,7 +601,9 @@ public void CopySnapshot()
 
 `CYFramework/Generate Procedure Registry`
 
-该操作会生成：`Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`。
+该操作会生成/更新：
+- `Assets/CYFramework/Resources/CYFramework/ProcedureRegistry.asset`
+- `Assets/CYFramework/link.xml`（IL2CPP/Managed Stripping 裁剪保护，建议提交到版本库）
 
 ## 8. 错误处理与异常策略 [NEW]
 

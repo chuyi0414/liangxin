@@ -202,6 +202,15 @@ namespace CYFramework.Core.Config
         
         [Tooltip("加密密钥 (16字节)")]
         public string EncryptionKey = "CYFramework2024!";
+
+        [Tooltip("是否启用校验和（防篡改）")]
+        public bool EnableChecksum = true;
+
+        [Tooltip("是否启用备份（仅 Native 平台有效）")]
+        public bool EnableBackup = true;
+
+        [Tooltip("最大备份数量（仅 Native 平台有效）")]
+        public int MaxBackupCount = 3;
         
         [Tooltip("自动存档间隔(秒), 0=禁用")]
         public float AutoSaveInterval = 60f;
