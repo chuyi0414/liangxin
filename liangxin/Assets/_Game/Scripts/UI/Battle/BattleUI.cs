@@ -45,24 +45,32 @@ public class BattleUI : UIPanel
     [SerializeField] private TextMeshProUGUI _tmpWavePreview;
 
     [Header("Resource Info")]
-    [SerializeField] private TextMeshProUGUI _tmpGold;
+    [SerializeField] private TextMeshProUGUI _tmpGold;//玩家资金
     [SerializeField] private TextMeshProUGUI _tmpConscienceResource; // 玩家持有良心
     [SerializeField] private TextMeshProUGUI _tmpDarkHeart;           // 玩家持有黑心
-    
-    [Header("Company Status")]
-    [SerializeField] private TextMeshProUGUI _tmpCompanyConscience;   // 公司良心(血条)
-    [SerializeField] private TextMeshProUGUI _tmpCompanyCorruption;   // 公司黑心(污染)
 
     private float _totalDurationForCurrentPhase = 1f; // 用于计算进度条的 Slider.value
+
+    // 资源显示缓存：事件可能在短时间内多次触发，缓存可避免重复刷新导致的额外 UI 开销。
+    // 说明：这里用 int.MinValue 作为“未初始化”的哨兵值，确保首次刷新一定生效。
+    private int _lastGold = int.MinValue;
+    private int _lastConscienceResource = int.MinValue;
+    private int _lastDarkHeart = int.MinValue;
 
     protected override void OnBindUI()
     {
         base.OnBindUI();
-        _BtnExitBattle.onClick.AddListener(OnExitBattleClicked);
+        if (_BtnExitBattle) _BtnExitBattle.onClick.AddListener(OnExitBattleClicked);
         CY.Log($"Stage: {_tmpWaveStage}, Count: {_tmpWaveCount}, Timer: {_tmpRemainingTime}, Slider: {_sliderWaveProgress}, Preview: {_tmpWavePreview}");
         
         // 初始隐藏情报文本
         if (_tmpWavePreview) _tmpWavePreview.gameObject.SetActive(false);
+
+        // 资源 UI 刷新策略（重要性能点）：
+        // - 旧实现：OnUpdate 每帧轮询并用字符串插值写 TMP.text，容易产生 GC 与不必要的 UI 重建。
+        // - 新实现：DepartmentManager 在资源变更时派发 DepartmentResourceChangedEvent，BattleUI 订阅后事件驱动刷新（零 GC）。
+        CY.Event.Subscribe<DepartmentResourceChangedEvent>(OnDepartmentResourceChanged, this);
+        RefreshResourceFromDepartment();
         
         // 监听波次开始事件 (需要 WaveManager 通知)
         // 由于 WaveManager 目前没发事件，我们在 Update 里轮询检查 State 变化也是一种简易做法，
@@ -76,9 +84,17 @@ public class BattleUI : UIPanel
 
     protected override void OnUnbindUI()
     {
+        // 解绑按钮与事件订阅，避免面板反复打开时重复绑定/泄漏。
+        if (_BtnExitBattle) _BtnExitBattle.onClick.RemoveListener(OnExitBattleClicked);
+        CY.Event.UnsubscribeAll(this);
+
         base.OnUnbindUI();
         _lastWaveIndex = -1;
 
+        // 重置缓存，确保面板复用/再次打开时能立刻刷新一次。
+        _lastGold = int.MinValue;
+        _lastConscienceResource = int.MinValue;
+        _lastDarkHeart = int.MinValue;
     }
 
     protected override void OnUpdate(float elapseSeconds, float realElapseSeconds)
@@ -148,17 +164,53 @@ public class BattleUI : UIPanel
             UpdateSliderLogic();
             CheckStateChangeForPreview();
         }
+    }
 
-        // 刷新资源显示
-        var dept = CY.Department;
-        if (dept != null)
+    /// <summary>
+    /// 部门资源变化事件回调：只在数值变化时刷新文本，避免重复刷新造成的额外 UI 开销。
+    /// </summary>
+    private void OnDepartmentResourceChanged(ref DepartmentResourceChangedEvent evt)
+    {
+        ApplyResourceText(evt.Gold, evt.ConscienceResource, evt.DarkHeart);
+    }
+
+    /// <summary>
+    /// 主动刷新一次资源显示（用于面板首次打开时初始化 UI）。
+    /// 注意：这里使用 ServiceLocator.TryGet 防御性获取，避免服务未注册时抛异常导致 UI 打不开。
+    /// </summary>
+    private void RefreshResourceFromDepartment()
+    {
+        if (!ServiceLocator.TryGet<DepartmentManager>(out var dept) || dept == null)
         {
-            if (_tmpGold) _tmpGold.text = $"{dept.Data.Gold}";
-            if (_tmpConscienceResource) _tmpConscienceResource.text = $"{dept.Data.ConscienceResource}";
-            if (_tmpDarkHeart) _tmpDarkHeart.text = $"{dept.Data.DarkHeart}";
-            
-            if (_tmpCompanyConscience) _tmpCompanyConscience.text = $"{dept.Data.CompanyConscience}/{dept.MaxConscience}";
-            if (_tmpCompanyCorruption) _tmpCompanyCorruption.text = $"{dept.Data.CompanyCorruption}/{dept.MaxCompanyCorruption}";
+            return;
+        }
+
+        var data = dept.Data;
+        ApplyResourceText(data.Gold, data.ConscienceResource, data.DarkHeart);
+    }
+
+    /// <summary>
+    /// 将资源数值写入到 TMP 文本。
+    /// 说明：使用 TMP.SetText("{0}", value) 可避免 value.ToString() 产生临时字符串（零 GC）。
+    /// </summary>
+    private void ApplyResourceText(int gold, int conscienceResource, int darkHeart)
+    {
+        if (_tmpGold && gold != _lastGold)
+        {
+            _lastGold = gold;
+            _tmpGold.SetText("{0}", gold);
+        }
+
+        if (_tmpConscienceResource && conscienceResource != _lastConscienceResource)
+        {
+            _lastConscienceResource = conscienceResource;
+            _tmpConscienceResource.SetText("{0}", conscienceResource);
+        }
+
+        if (_tmpDarkHeart && darkHeart != _lastDarkHeart)
+        {
+            _lastDarkHeart = darkHeart;
+            _tmpDarkHeart.SetText("{0}", darkHeart);
         }
     }
     

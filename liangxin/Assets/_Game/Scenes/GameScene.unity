@@ -885,10 +885,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 82e5c39a36d784448bfb60c253029981, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  InitGold: 1000
-  InitConscience: 50
-  InitCorruption: 0
-  MaxCorruption: 100
 --- !u!1 &959842460
 GameObject:
   m_ObjectHideFlags: 0
@@ -1859,6 +1855,7 @@ GameObject:
   - component: {fileID: 1651651862}
   - component: {fileID: 1651651863}
   - component: {fileID: 1651651864}
+  - component: {fileID: 1651651865}
   m_Layer: 6
   m_Name: BaseCamp
   m_TagString: Untagged
@@ -1978,6 +1975,22 @@ BoxCollider2D:
   serializedVersion: 2
   m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
+--- !u!114 &1651651865
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1651651861}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 697994a7b0d62634698cd97eec314ec1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _slot0MaxHp: 1000
+  _slot0CurrentHp: 1000
+  _slot1MaxHp: 500
+  _slot1CurrentHp: 500
 --- !u!1 &1686390596
 GameObject:
   m_ObjectHideFlags: 0
@@ -2341,7 +2354,7 @@ Camera:
   far clip plane: 10
   field of view: 60
   orthographic: 1
-  orthographic size: 5
+  orthographic size: 10
   m_Depth: 10
   m_CullingMask:
     serializedVersion: 2
@@ -2605,6 +2618,9 @@ MonoBehaviour:
     SaveFileName: save.dat
     EnableEncryption: 1
     EncryptionKey: CYFramework2024!
+    EnableChecksum: 1
+    EnableBackup: 1
+    MaxBackupCount: 3
     AutoSaveInterval: 60
     MaxSaveSlots: 3
     SaveVersion: 1

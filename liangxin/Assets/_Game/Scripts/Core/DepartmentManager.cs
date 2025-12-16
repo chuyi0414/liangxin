@@ -175,9 +175,52 @@ public class DepartmentManager : MonoBehaviour, IInitializable, IUpdateable, IDi
 
     public void ChangeGold(int fullAmount)
     {
-        Data.Gold = Mathf.Max(0, Data.Gold + fullAmount);
-        // CY.Event.Post(...)
+        // 说明：
+        // - 资源变化属于低频事件，但 UI 若在 OnUpdate 每帧轮询会产生不必要的字符串分配与 UI 重建开销。
+        // - 这里在“数值真正变化”时派发结构体事件，BattleUI 等监听者即可事件驱动刷新（零 GC）。
+        int oldValue = Data.Gold;
+        int newValue = Mathf.Max(0, oldValue + fullAmount);
+        if (newValue == oldValue)
+        {
+            return;
+        }
+
+        Data.Gold = newValue;
         CY.Log($"[Resource] Gold Changed: {Data.Gold} ({fullAmount})");
+
+        PostDepartmentResourceChangedEvent();
+    }
+
+    // --- 良心资源 ConscienceResource ---
+    public void ChangeConscienceResource(int amount)
+    {
+        int oldValue = Data.ConscienceResource;
+        int newValue = Mathf.Max(0, oldValue + amount);
+        if (newValue == oldValue)
+        {
+            return;
+        }
+
+        Data.ConscienceResource = newValue;
+        CY.Log($"[Resource] ConscienceResource: {Data.ConscienceResource}");
+
+        PostDepartmentResourceChangedEvent();
+    }
+
+    // --- 黑心资源 DarkHeart ---
+    public void ChangeDarkHeart(int amount)
+    {
+        int oldValue = Data.DarkHeart;
+        int newValue = Mathf.Max(0, oldValue + amount);
+        if (newValue == oldValue)
+        {
+            return;
+        }
+
+        Data.DarkHeart = newValue;
+        CY.Log($"[Resource] DarkHeart: {Data.DarkHeart}");
+
+        PostDepartmentResourceChangedEvent();
     }
 
     // --- 公司良心状态 CompanyConscience ---
@@ -185,28 +228,16 @@ public class DepartmentManager : MonoBehaviour, IInitializable, IUpdateable, IDi
     {
         // 良心无下限（负数导致失败），上限为 MaxConscience
         Data.CompanyConscience = Mathf.Min(Data.CompanyConscience + amount, MaxConscience);
-        
+
         CY.Log($"[Resource] CompanyConscience: {Data.CompanyConscience}");
-        
+
         if (Data.CompanyConscience < 0)
         {
             CY.LogError("[Game Over] 良心值已耗尽！公司破产！");
             // TODO: 调用游戏结束接口
         }
-    }
 
-    // --- 良心资源 ConscienceResource ---
-    public void ChangeConscienceResource(int amount)
-    {
-        Data.ConscienceResource = Mathf.Max(0, Data.ConscienceResource + amount);
-        CY.Log($"[Resource] ConscienceResource: {Data.ConscienceResource}");
-    }
-
-    // --- 黑心资源 DarkHeart ---
-    public void ChangeDarkHeart(int amount)
-    {
-        Data.DarkHeart = Mathf.Max(0, Data.DarkHeart + amount);
-        CY.Log($"[Resource] DarkHeart: {Data.DarkHeart}");
+        PostDepartmentResourceChangedEvent();
     }
 
     // --- 公司黑心状态 CompanyCorruption ---
@@ -214,8 +245,26 @@ public class DepartmentManager : MonoBehaviour, IInitializable, IUpdateable, IDi
     {
         Data.CompanyCorruption = Mathf.Clamp(Data.CompanyCorruption + amount, 0, MaxCompanyCorruption);
         CY.Log($"[Resource] CompanyCorruption: {Data.CompanyCorruption}");
+
+        PostDepartmentResourceChangedEvent();
     }
 
+    /// <summary>
+    /// 派发“部门资源变化”事件（战斗 HUD 等模块监听后按需刷新）。
+    /// 注意：事件必须为 struct，且发布必须使用 CY.Event.Post(ref evt)（零 GC）。
+    /// </summary>
+    private void PostDepartmentResourceChangedEvent()
+    {
+        DepartmentResourceChangedEvent evt = new DepartmentResourceChangedEvent
+        {
+            Gold = Data.Gold,
+            ConscienceResource = Data.ConscienceResource,
+            DarkHeart = Data.DarkHeart,
+            CompanyConscience = Data.CompanyConscience,
+            CompanyCorruption = Data.CompanyCorruption,
+        };
+        CY.Event.Post(ref evt);
+    }
 
     // ═══════════ 部门管理接口 ═══════════
 

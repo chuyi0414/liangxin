@@ -71,7 +71,17 @@ public class UIUnitHPBar : MonoBehaviour
 
     public void UpdateHP(float current, float max)
     {
-        _hpSlider.value = current / max;
+        // 防御：避免 max 为 0 导致除零；同时 clamp 防止血量越界导致 UI 抖动
+        if (max <= 0f)
+        {
+            _hpSlider.value = 0f;
+            return;
+        }
+
+        float normalized = current / max;
+        if (normalized < 0f) normalized = 0f;
+        else if (normalized > 1f) normalized = 1f;
+        _hpSlider.value = normalized;
         
         // 简单的受击反馈动画
         // 可以用 DOTween 或者简单的 Coroutine，这里为了 0GC 暂略

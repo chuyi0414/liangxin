@@ -95,7 +95,9 @@ public class EnemyEntity : EntityBase
                 MaxHP = Data.Hp,
                 Damage = 0,
                 WorldPosition = transform.position,
-                IsDead = false
+                IsDead = false,
+                BarStyle = HPBarStyle.Enemy,
+                BarSlot = 0
             };
             CY.Event.Post(ref evt);
         }
@@ -465,7 +467,9 @@ public class EnemyEntity : EntityBase
             MaxHP = Data.Hp,
             Damage = (int)damage,
             WorldPosition = transform.position,
-            IsDead = _currentHp <= 0
+            IsDead = _currentHp <= 0,
+            BarStyle = HPBarStyle.Enemy,
+            BarSlot = 0
         };
         CY.Event.Post(ref evt);
 
