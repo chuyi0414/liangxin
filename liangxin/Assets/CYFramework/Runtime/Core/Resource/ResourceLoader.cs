@@ -50,124 +50,55 @@ namespace CYFramework.Core.Resource
         void Unload(string path);
         
         /// <summary>
-        /// 卸载未使用的资源
+        /// 卸载未使用的资源（需在安全时机手动触发，以避免运行帧尖峰）。
         /// </summary>
-        void UnloadUnused();
-        
-        /// <summary>
-        /// 加载场景
-        /// </summary>
-        void LoadScene(string sceneName, LoadSceneMode mode = LoadSceneMode.Single, Action onComplete = null);
-        
-        /// <summary>
-        /// 异步加载场景
-        /// </summary>
-        AsyncOperation LoadSceneAsync(string sceneName, LoadSceneMode mode = LoadSceneMode.Single);
-        
-        /// <summary>
-        /// 加载并实例化 GameObject
-        /// </summary>
-        GameObject Instantiate(string path, Transform parent = null);
-        
-        /// <summary>
-        /// 异步加载并实例化 GameObject
-        /// </summary>
-        void InstantiateAsync(string path, Action<GameObject> callback, Transform parent = null);
-        
-        /// <summary>
-        /// 预加载资源（不返回，只缓存）
-        /// </summary>
-        void Preload<T>(string path) where T : Object;
-        
-        /// <summary>
-        /// 批量预加载
-        /// </summary>
-        void PreloadAsync(string[] paths, Action onComplete = null, Action<float> onProgress = null);
+        /// <param name="forceGC">是否强制执行 GC（Release 下默认不执行，避免帧尖刺）</param>
+        void UnloadUnused(bool forceGC = false);
     }
-    
+
     /// <summary>
-    /// Resources 资源加载器
-    /// 基础实现，可扩展为 Addressables
+    /// 资源加载器实现
     /// </summary>
-    public class ResourceLoader : IResourceLoader, IInitializable, IDisposableEx
+    public class ResourceLoader : IResourceLoader
     {
+        #region 内部类型定义
+        
         private class CacheEntry
         {
             public Object Asset;
             public long SizeBytes;
             public LinkedListNode<string> LruNode;
         }
-
-        // 资源缓存
-        private readonly Dictionary<string, CacheEntry> _cache = new();
-
-        // LRU：最近使用在头部
-        private readonly LinkedList<string> _lruList = new();
-
-        // 当前缓存占用（估算）
-        private long _cacheBytes;
-
-        // 自动卸载节流：避免在同一帧/短时间内多次调用 Resources.UnloadUnusedAssets 造成尖刺。
-        private float _lastUnloadUnusedTime = -999f;
-        private const float UnloadUnusedMinInterval = 1f;
-
-        // 引用计数（可选）
-        private readonly Dictionary<string, int> _refCounts = new();
         
-        // 加载中的资源（防止重复加载）
-        private readonly Dictionary<string, List<Action<Object>>> _loadingCallbacks = new();
+        #endregion
+
+        #region 字段
         
-        // 配置
-        private ResourceLoadMode _loadMode = ResourceLoadMode.Resources;
-        private int _cacheSizeMB = 100;
+        private readonly Dictionary<string, CacheEntry> _cache = new Dictionary<string, CacheEntry>();
+        private readonly Dictionary<string, int> _refCounts = new Dictionary<string, int>();
+        private readonly Dictionary<string, List<Action<Object>>> _loadingCallbacks = new Dictionary<string, List<Action<Object>>>();
+        private readonly LinkedList<string> _lruList = new LinkedList<string>();
+        
+        private int _asyncLoadPriority = 0;
+        private int _cacheSizeMB = 100; // 默认 100MB 缓存
+        private long _cacheBytes = 0;
         private bool _enableRefCount = true;
-        private int _asyncLoadPriority = 100;
-
-        private long MaxCacheBytes => (long)_cacheSizeMB * 1024L * 1024L;
+        private bool _hasPendingUnload = false;
         
-        public int InitOrder => -40;
-        public int DisposeOrder => 40;
-        
-        public void Initialize()
-        {
-            // 从 CYConfigurator 读取配置
-            var configurator = CYConfigurator.Instance;
-            if (configurator != null)
-            {
-                var config = configurator.GetConfig<ResourceLoaderConfig>();
-                if (config != null)
-                {
-                    _loadMode = config.LoadMode;
-                    _cacheSizeMB = config.CacheSizeMB;
-                    _asyncLoadPriority = config.AsyncLoadPriority;
-                    _enableRefCount = config.EnableRefCount;
+        private long MaxCacheBytes => _cacheSizeMB * 1024L * 1024L;
 
-                    // 当前版本仅实现 Resources；如果配置为 Addressables/AssetBundle，则显式回退并给出提示，确保“配置有行为”。
-                    if (_loadMode != ResourceLoadMode.Resources)
-                    {
-                        CYLog.Warning($"[ResourceLoader] 当前版本未实现 {_loadMode}，将回退到 Resources 模式（AddressablesLabel={config.AddressablesLabel}）");
-                        _loadMode = ResourceLoadMode.Resources;
-                    }
+        #endregion
 
-                    CYLog.Debug($"[ResourceLoader] 使用 CYConfigurator 配置, 模式: {_loadMode}");
-                }
-            }
-            
-            CYLog.Debug("[ResourceLoader] 初始化完成");
-        }
-        
+        /// <summary>
+        /// 销毁/清理
+        /// </summary>
         public void Dispose()
         {
             _cache.Clear();
+            _refCounts.Clear();
             _loadingCallbacks.Clear();
             _lruList.Clear();
-            _refCounts.Clear();
             _cacheBytes = 0;
-            
-#if !UNITY_EDITOR
-            Resources.UnloadUnusedAssets();
-#endif
-            
             CYLog.Debug("[ResourceLoader] 已销毁");
         }
         
@@ -385,10 +316,17 @@ namespace CYFramework.Core.Resource
         /// <param name="forceGC">是否强制执行 GC（Release 下默认不执行，避免帧尖刺）</param>
         public void UnloadUnused(bool forceGC = false)
         {
+            if (!_hasPendingUnload && !forceGC)
+            {
+                CYLog.Debug("[ResourceLoader] 无待卸载的资源，跳过 UnloadUnusedAssets");
+                return;
+            }
+
             // ⚠️ 使用场景建议：
             // - 优先在 Loading 场景或内存压力明显时调用，避免战斗/主循环中触发 GC 帧尖刺
             // - Dev/Editor 默认会执行 GC.Collect，Release 建议仅在必要时传入 forceGC
             Resources.UnloadUnusedAssets();
+            _hasPendingUnload = false;
             
             // GC.Collect() 仅在 Editor/Development 或显式要求时执行
             // 避免在 Release 下产生不可控的帧尖刺
@@ -419,9 +357,16 @@ namespace CYFramework.Core.Resource
         {
             var operation = SceneManager.LoadSceneAsync(sceneName, mode);
             
-            if (onComplete != null)
+            if (operation != null)
             {
-                operation.completed += _ => onComplete();
+                if (onComplete != null)
+                {
+                    operation.completed += _ => onComplete();
+                }
+            }
+            else
+            {
+                onComplete?.Invoke();
             }
         }
         
@@ -522,11 +467,10 @@ namespace CYFramework.Core.Resource
             }
         }
 
-        public void UnloadUnused()
-        {
-            UnloadUnused(forceGC: false);
-        }
+        #endregion
 
+        #region 内部辅助
+        
         private void Retain(string path)
         {
             if (!_enableRefCount) return;
@@ -591,6 +535,7 @@ namespace CYFramework.Core.Resource
             _cache.Remove(path);
             _cacheBytes -= entry.SizeBytes;
             if (_cacheBytes < 0) _cacheBytes = 0;
+            _hasPendingUnload = true;
         }
 
         private void EvictIfNeeded()
@@ -613,6 +558,7 @@ namespace CYFramework.Core.Resource
 
                 if (_enableRefCount && _refCounts.TryGetValue(key, out var refCount) && refCount > 0)
                 {
+                    // 引用计数 > 0 的不淘汰，移到队首
                     _lruList.RemoveLast();
                     _lruList.AddFirst(key);
                     continue;
@@ -624,13 +570,7 @@ namespace CYFramework.Core.Resource
 
             if (evictedAny)
             {
-                // 说明：淘汰仅代表“移除框架缓存引用”，真正释放内存需要 UnloadUnusedAssets。
-                // 这里做节流，避免短时间内多次触发导致帧尖刺。
-                if (Time.unscaledTime - _lastUnloadUnusedTime >= UnloadUnusedMinInterval)
-                {
-                    _lastUnloadUnusedTime = Time.unscaledTime;
-                    Resources.UnloadUnusedAssets();
-                }
+                _hasPendingUnload = true;
             }
         }
 
@@ -646,7 +586,7 @@ namespace CYFramework.Core.Resource
                 return 0;
             }
         }
-
+        
         #endregion
     }
     

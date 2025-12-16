@@ -76,12 +76,13 @@ CY.Timer.Loop(1f, () => Debug.Log("每秒执行"));
 
 // 实体（CY.Entity 返回 EntityManager）
 CY.Entity.RegisterEntity("Enemy", enemyPrefab, 20);
-var enemy = CY.Entity.ShowEntity<EnemyEntity>("Enemy");
-CY.Entity.HideEntity(enemy);
+var enemy = CY.Entity.SpawnEntity<EnemyEntity>("Enemy");
+CY.Entity.RecycleEntity(enemy);
 CY.Entity.PauseEntity(enemy.Id);  // 暂停实体
 
 // UI（CY.UI 返回 UIManager）
 CY.UI.Open<ShopUI>();
+CY.UI.Open<ShopUI, ShopPayload>(in payload);   // 无装箱强类型数据
 CY.UI.ShowConfirm("提示", "确定吗？", onConfirm, onCancel);
 CY.UI.ShowToast("购买成功");
 

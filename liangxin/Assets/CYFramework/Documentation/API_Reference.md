@@ -59,19 +59,21 @@
 | `ChangeProcedure<T>()` | 无 | 切换流程 |
 | `ChangeProcedure<T>(userData)` | 用户数据 | 切换流程（带参数） |
 | `Change(name, userData)` | 流程名称, 用户数据 | 按名称切换流程 |
-| `Current` | - | 获取当前流程 |
-| `CurrentName` | - | 获取当前流程名称 |
+| `CurrentProcedure` | - | 获取当前流程实例 |
+| `CurrentProcedureName` | - | 获取当前流程名称 |
 
 #### CY.Entity（实体系统）
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `RegisterEntity(type, prefab, preload, parent)` | 类型名, 预制体, 预加载数, 父节点 | `void` | 注册实体类型 |
-| `ShowEntity<T>(type, userData)` | 类型名, 用户数据 | `T` | 显示实体 |
-| `ShowEntity(type, userData)` | 类型名, 用户数据 | `IEntity` | 显示实体 |
-| `HideEntity(entityId)` | 实体 ID | `void` | 隐藏实体 |
-| `HideEntity(entity)` | 实体对象 | `void` | 隐藏实体 |
-| `HideAllEntities(type)` | 类型名 | `void` | 隐藏指定类型所有实体 |
-| `HideAllEntities()` | 无 | `void` | 隐藏所有实体 |
+| `SpawnEntity<T>(type, userData)` | 类型名, 用户数据 | `T` | 生成实体 |
+| `SpawnEntity(type, userData)` | 类型名, 用户数据 | `IEntity` | 生成实体 |
+| `RecycleEntity(entityId)` | 实体 ID | `void` | 回收实体到对象池 |
+| `RecycleEntity(entity)` | 实体对象 | `void` | 回收实体到对象池 |
+| `RecycleAllEntities(type)` | 类型名 | `void` | 回收指定类型所有实体 |
+| `RecycleAllEntities()` | 无 | `void` | 回收所有实体 |
+| `HideEntityInstance(entity)` | 实体对象 | `void` | 仅隐藏，不回收到池 |
+| `ShowEntity(entity, userData)` | 实体对象, 用户数据 | `void` | 重新显示已隐藏的实体 |
 | `GetEntity<T>(entityId)` | 实体 ID | `T` | 获取实体 |
 | `GetEntityCount(type)` | 类型名 | `int` | 获取实体数量 |
 
@@ -137,8 +139,8 @@ CY.Timer.Loop(1f, () => CY.LogInfo("每秒执行"));
 
 // ========== 实体 ==========
 CY.Entity.RegisterEntity("Enemy", enemyPrefab, 10);
-var enemy = CY.Entity.ShowEntity<EnemyEntity>("Enemy");
-CY.Entity.HideEntity(enemy);
+var enemy = CY.Entity.SpawnEntity<EnemyEntity>("Enemy");
+CY.Entity.RecycleEntity(enemy);
 
 // ========== 数据表 ==========
 CY.Data.LoadFromCsv<MonsterRow>(csvText);

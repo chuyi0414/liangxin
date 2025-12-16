@@ -9,6 +9,15 @@ using UnityEngine;
 namespace CYFramework.Core.UI
 {
     /// <summary>
+    /// 强类型用户数据接收（避免装箱）。
+    /// </summary>
+    /// <typeparam name="TData">数据类型（建议使用 struct）</typeparam>
+    public interface IUserDataReceiver<TData>
+    {
+        void SetUserData(in TData data);
+    }
+
+    /// <summary>
     /// UI 预制体路径特性
     /// </summary>
     [AttributeUsage(AttributeTargets.Class)]

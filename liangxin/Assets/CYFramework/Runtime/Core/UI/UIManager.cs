@@ -289,61 +289,7 @@ namespace CYFramework.Core.UI
         /// <param name="data">传递给面板的数据</param>
         /// <returns>面板实例，可直接操作</returns>
         public T Open<T>(object data = null) where T : UIPanel
-        {
-            var panelType = typeof(T);
-            
-            // 检查是否已打开
-            if (_openedPanels.TryGetValue(panelType, out var existingPanel))
-            {
-                CYLog.Debug($"[UIManager] 面板已打开，刷新: {panelType.Name}");
-                existingPanel.InternalRefresh(data);
-                return existingPanel as T;
-            }
-            
-            // 获取或创建面板
-            var panel = GetOrCreatePanel<T>();
-            if (panel == null)
-            {
-                CYLog.Error($"[UIManager] 创建面板失败: {panelType.Name}");
-                return null;
-            }
-            
-            // 设置层级
-            var layer = panel.Layer;
-            if (_layerContainers.TryGetValue(layer, out var container))
-            {
-                panel.transform.SetParent(container, false);
-                RestoreSiblingIndex(panel);
-            }
-            
-            // 暂停当前栈顶面板
-            if (panel.IsStackable && _panelStack.Count > 0)
-            {
-                var topPanel = _panelStack.Peek();
-                if (topPanel != null && topPanel != panel)
-                {
-                    topPanel.InternalPause();
-                }
-            }
-            
-            // 激活并初始化
-            panel.gameObject.SetActive(true);
-            panel.InternalInit(data);
-            panel.InternalOpen(data);
-            
-            // 记录
-            _openedPanels[panelType] = panel;
-            
-            // 如果是可堆叠面板，压入栈
-            if (panel.IsStackable)
-            {
-                _panelStack.Push(panel);
-            }
-            
-            CYLog.Debug($"[UIManager] 打开面板: {panelType.Name}");
-            
-            return panel;
-        }
+            => OpenPanelCore<T>(data, null, -1, beforeLifecycle: null, onRefresh: null);
 
         /// <summary>
         /// 打开面板并强制指定 UILayer（覆盖面板自身的 <see cref="UIPanel.Layer"/>）。
@@ -359,30 +305,13 @@ namespace CYFramework.Core.UI
         /// <param name="siblingIndex">同层内的顺序；小于 0 则保持/恢复面板的历史顺序</param>
         public T OpenOnLayer<T>(UILayer layer, object data = null, int siblingIndex = -1) where T : UIPanel
         {
-            var panel = Open<T>(data);
-            if (panel == null) return null;
-
-            if (_layerContainers.TryGetValue(layer, out var container))
-            {
-                panel.transform.SetParent(container, false);
-
-                if (siblingIndex >= 0)
-                {
-                    // 防御：避免越界异常
-                    var childCount = container.childCount;
-                    panel.transform.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, Math.Max(0, childCount - 1)));
-                }
-                else
-                {
-                    RestoreSiblingIndex(panel);
-                }
-            }
-            else
+            if (!_layerContainers.TryGetValue(layer, out var container))
             {
                 CYLog.Warning($"[UIManager] 未找到 UILayer 容器: {layer}");
+                return null;
             }
-
-            return panel;
+            
+            return OpenPanelCore<T>(data, container, siblingIndex, beforeLifecycle: null, onRefresh: null, logContext: $" (Layer={layer})");
         }
 
         /// <summary>
@@ -406,47 +335,150 @@ namespace CYFramework.Core.UI
                 return null;
             }
 
-            var panel = Open<T>(data);
-            if (panel == null) return null;
+            var container = _customLayers.TryGetValue(layerName, out var existing)
+                ? existing
+                : CreateLayer(layerName, sortOrder);
 
-            // 确保自定义层存在
-            Transform container;
-            if (_customLayers.TryGetValue(layerName, out var existing))
-            {
-                container = existing;
-            }
-            else
-            {
-                container = CreateLayer(layerName, sortOrder);
-            }
-
-            panel.transform.SetParent(container, false);
-
-            if (siblingIndex >= 0)
-            {
-                var childCount = container.childCount;
-                panel.transform.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, Math.Max(0, childCount - 1)));
-            }
-            else
-            {
-                RestoreSiblingIndex(panel);
-            }
-
-            return panel;
+            return OpenPanelCore<T>(data, container, siblingIndex, beforeLifecycle: null, onRefresh: null, logContext: $" (CustomLayer={layerName})");
         }
         
         /// <summary>
-        /// 打开面板（强类型数据语义）。
+        /// 打开面板（强类型用户数据，无装箱）。
         /// </summary>
         /// <typeparam name="T">面板类型</typeparam>
-        /// <typeparam name="TData">数据类型（推荐使用 struct）</typeparam>
+        /// <typeparam name="TData">数据类型</typeparam>
         /// <param name="data">传递给面板的数据</param>
         /// <returns>面板实例，可直接操作</returns>
-        public T Open<T, TData>(TData data) where T : UIPanel where TData : struct
+        /// <remarks>面板需实现 <see cref="IUserDataReceiver{TData}"/>，在 <c>SetUserData</c> 中接收数据。</remarks>
+        public T Open<T, TData>(in TData data)
+            where T : UIPanel, IUserDataReceiver<TData>
         {
-            // 说明：UIPanel 的 userData 入口是 object，本方法内部仍会发生一次装箱。
-            // 如需在高频场景完全避免装箱，请使用 Typed MVVM（TypedViewModel + ObservableProperty<T>）。
-            return Open<T>(data);
+            var payload = data;
+            return OpenPanelCore<T>(
+                userData: null,
+                overrideContainer: null,
+                siblingIndex: -1,
+                beforeLifecycle: panel => panel.SetUserData(in payload),
+                onRefresh: panel => panel.SetUserData(in payload),
+                logContext: " (Typed)");
+        }
+        
+        /// <summary>
+        /// 指定 UILayer 打开强类型面板（无装箱）。
+        /// </summary>
+        public T OpenOnLayer<T, TData>(UILayer layer, in TData data, int siblingIndex = -1)
+            where T : UIPanel, IUserDataReceiver<TData>
+        {
+            if (!_layerContainers.TryGetValue(layer, out var container))
+            {
+                CYLog.Warning($"[UIManager] 未找到 UILayer 容器: {layer}");
+                return null;
+            }
+            
+            var payload = data;
+            return OpenPanelCore<T>(
+                userData: null,
+                overrideContainer: container,
+                siblingIndex: siblingIndex,
+                beforeLifecycle: panel => panel.SetUserData(in payload),
+                onRefresh: panel => panel.SetUserData(in payload),
+                logContext: $" (Layer={layer}, Typed)");
+        }
+        
+        /// <summary>
+        /// 指定自定义层打开强类型面板（无装箱）。
+        /// </summary>
+        public T OpenOnCustomLayer<T, TData>(string layerName, int sortOrder, in TData data, int siblingIndex = -1)
+            where T : UIPanel, IUserDataReceiver<TData>
+        {
+            if (string.IsNullOrEmpty(layerName))
+            {
+                CYLog.Warning("[UIManager] OpenOnCustomLayer 失败：layerName 为空");
+                return null;
+            }
+
+            var container = _customLayers.TryGetValue(layerName, out var existing)
+                ? existing
+                : CreateLayer(layerName, sortOrder);
+
+            var payload = data;
+            return OpenPanelCore<T>(
+                userData: null,
+                overrideContainer: container,
+                siblingIndex: siblingIndex,
+                beforeLifecycle: panel => panel.SetUserData(in payload),
+                onRefresh: panel => panel.SetUserData(in payload),
+                logContext: $" (CustomLayer={layerName}, Typed)");
+        }
+        
+        private T OpenPanelCore<T>(
+            object userData,
+            Transform overrideContainer,
+            int siblingIndex,
+            Action<T> beforeLifecycle,
+            Action<T> onRefresh,
+            string logContext = null) where T : UIPanel
+        {
+            logContext ??= string.Empty;
+            var panelType = typeof(T);
+            
+            if (_openedPanels.TryGetValue(panelType, out var existingPanel))
+            {
+                var typedPanel = existingPanel as T;
+                onRefresh?.Invoke(typedPanel);
+                existingPanel.InternalRefresh(userData);
+                CYLog.Debug($"[UIManager] 面板已打开，刷新: {panelType.Name}{logContext}");
+                return typedPanel;
+            }
+
+            var panel = GetOrCreatePanel<T>();
+            if (panel == null)
+            {
+                CYLog.Error($"[UIManager] 创建面板失败: {panelType.Name}{logContext}");
+                return null;
+            }
+
+            var container = overrideContainer ?? GetLayerContainer(panel.Layer);
+            if (container != null)
+            {
+                panel.transform.SetParent(container, false);
+                if (siblingIndex >= 0)
+                {
+                    var childCount = container.childCount;
+                    panel.transform.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, Math.Max(0, childCount - 1)));
+                }
+                else
+                {
+                    RestoreSiblingIndex(panel);
+                }
+            }
+            else
+            {
+                CYLog.Warning($"[UIManager] 未找到 UILayer 容器: {panel.Layer}");
+            }
+
+            if (panel.IsStackable && _panelStack.Count > 0)
+            {
+                var topPanel = _panelStack.Peek();
+                if (topPanel != null && topPanel != panel)
+                {
+                    topPanel.InternalPause();
+                }
+            }
+            
+            panel.gameObject.SetActive(true);
+            beforeLifecycle?.Invoke(panel);
+            panel.InternalInit(userData);
+            panel.InternalOpen(userData);
+            
+            _openedPanels[panelType] = panel;
+            if (panel.IsStackable)
+            {
+                _panelStack.Push(panel);
+            }
+            
+            CYLog.Debug($"[UIManager] 打开面板: {panelType.Name}{logContext}");
+            return panel;
         }
         
         /// <summary>
