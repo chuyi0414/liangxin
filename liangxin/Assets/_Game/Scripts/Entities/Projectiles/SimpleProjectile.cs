@@ -1,4 +1,6 @@
+using CYFramework;
 using CYFramework.Core.Pool;
+using CYFramework.Infrastructure;
 using UnityEngine;
 
 /// <summary>
@@ -39,6 +41,9 @@ public class SimpleProjectile : MonoBehaviour, IPoolable
         // 面向飞行方向
         float angle = Mathf.Atan2(_direction.y, _direction.x) * Mathf.Rad2Deg;
         transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
+
+        // 注册到 UnitManager 以便统一管理（如游戏结束时清理）
+        CY.Unit?.RegisterProjectile(this);
     }
 
     // IPoolable 接口实现
@@ -46,6 +51,9 @@ public class SimpleProjectile : MonoBehaviour, IPoolable
 
     public void OnDespawn()
     {
+        // 从 UnitManager 注销
+        CY.Unit?.UnregisterProjectile(this);
+
         // 重置状态
         _lifeTime = 0;
         _damage = 0;
@@ -103,7 +111,7 @@ public class SimpleProjectile : MonoBehaviour, IPoolable
         }
     }
 
-    private void Recycle()
+    public void Recycle()
     {
         if (_pool != null)
         {

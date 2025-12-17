@@ -80,7 +80,7 @@ public class WaveManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     public void Initialize()
     {
         CY.Log("[WaveManager] Initialize");
-        
+
         ResetBattle();
 
         // 缓存敌人表（若初始化时未加载，将在 PrepareWaveSpawns 再兜底获取）
@@ -88,7 +88,10 @@ public class WaveManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
         {
             _enemyTable = CY.Data.GetDataTable<EnemyRow>("Enemy");
         }
-        
+
+        // 订阅游戏结束事件：游戏失败/退出时立即停止刷怪，避免继续生成敌人
+        CY.Event.Subscribe<OverGameEvent>(OnGameOver, this);
+
         if (AutoStartWave)
         {
             StartBattle();
@@ -129,6 +132,8 @@ public class WaveManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
         CY.Log("[WaveManager] Dispose");
         State = WaveState.None;
         _enemyTable = null;
+        // 显式反订阅，防止对象销毁后仍被事件总线持有引用
+        CY.Event.UnsubscribeAll(this);
     }
 
     // ═══════════ Unity 桥接 ═══════════
@@ -166,6 +171,7 @@ public class WaveManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
         RemainingTime = 0;
         CurrentTemplate = null;
         _enemyTable = CY.Data.HasDataTable("Enemy") ? CY.Data.GetDataTable<EnemyRow>("Enemy") : null;
+        ClearWaveRuntimeState();
     }
 
     /// <summary>
@@ -270,6 +276,10 @@ public class WaveManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     public void StopWave()
     {
         State = WaveState.None;
+        RemainingTime = 0f;
+        WaveTimer = 0f;
+        CurrentTemplate = null;
+        ClearWaveRuntimeState();
     }
 
     // ═══════════ 刷怪核心逻辑 ═══════════
@@ -488,6 +498,33 @@ public class WaveManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
         }
 
         return pool[pool.Count - 1];
+    }
+
+    /// <summary>
+    /// 游戏失败/退出时的清理：清空刷怪状态，避免残留计时与队列
+    /// </summary>
+    /// <param name="evt"></param>
+    private void OnGameOver(ref OverGameEvent evt)
+    {
+        CY.Log("[WaveManager] 接收到游戏结束事件，停止刷怪");
+        StopWave();
+    }
+
+    /// <summary>
+    /// 清理波次运行时状态，防止重开时使用旧的刷怪队列/计时
+    /// </summary>
+    private void ClearWaveRuntimeState()
+    {
+        _nextSpawnTime = 0f;
+        _totalMonstersInWave = 0;
+        _spawnedCount = 0;
+        _currentStrategy = null;
+        _currentRhythm = null;
+        _strategyFixedPointIndex = -1;
+        if (_waveEnemyIds != null)
+        {
+            _waveEnemyIds.Clear();
+        }
     }
 
     private void SpawnNextMonster()

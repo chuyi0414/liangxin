@@ -12,7 +12,7 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
 {
     // ═══════════ 配置 ═══════════
     [Header("基础配置")]
-    [SerializeField] private GameObject _baseCamp; // 大本营位置
+    [SerializeField] private BaseCamp _baseCamp; // 大本营位置
 
     // ═══════════ 运行时数据 ═══════════
     
@@ -38,15 +38,6 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     /// 所有活跃的敌方单位
     /// </summary>
     public List<EntityBase> ActiveEnemies { get; private set; } = new List<EntityBase>();
-
-    public void RegisterFriendly(EntityBase unit)
-    {
-        if (!ActiveFriendlyUnits.Contains(unit))
-        {
-            ActiveFriendlyUnits.Add(unit);
-            if (unit is PlayerEntity player) CurrentPlayer = player;
-        }
-    }
 
     public void UnregisterFriendly(EntityBase unit)
     {
@@ -76,6 +67,9 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     /// <summary>
     /// 根据 ID 获取单位（包括友方和敌方）
     /// </summary>
+    /// <summary>
+    /// 根据 ID 获取单位（包括友方和敌方）
+    /// </summary>
     public EntityBase GetUnit(int id)
     {
         // 优先找友方
@@ -89,6 +83,27 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
             if (unit.Id == id) return unit;
         }
         return null;
+    }
+
+    /// <summary>
+    /// 所有活跃的投射物（子弹）
+    /// </summary>
+    public HashSet<SimpleProjectile> ActiveProjectiles { get; private set; } = new HashSet<SimpleProjectile>();
+
+    public void RegisterProjectile(SimpleProjectile projectile)
+    {
+        if (projectile != null && !ActiveProjectiles.Contains(projectile))
+        {
+            ActiveProjectiles.Add(projectile);
+        }
+    }
+
+    public void UnregisterProjectile(SimpleProjectile projectile)
+    {
+        if (projectile != null && ActiveProjectiles.Contains(projectile))
+        {
+            ActiveProjectiles.Remove(projectile);
+        }
     }
 
     // ═══════════ 框架生命周期 ═══════════
@@ -110,10 +125,10 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
         _deployedUnitIds.Clear();
         CurrentPlayer = null;
 
-        if (_baseCamp != null)
-        {
-            BaseCampCollider = _baseCamp.GetComponent<Collider2D>();
-        }
+        // 订阅游戏结束事件：确保失败/退出时统一回收敌人与血条
+        CY.Event.Subscribe<OverGameEvent>(OnOverGame, this);
+
+        _baseCamp = CY.Entity.SpawnEntity<BaseCamp>("BaseCamp", "Prefabs/Entities/BaseCamp", EntityGroup.Default);
     }
 
     /// <summary>
@@ -134,7 +149,10 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
         ActiveFriendlyUnits.Clear();
         ActiveEnemies.Clear();
         _deployedUnitIds.Clear();
+        ActiveProjectiles.Clear();
         CurrentPlayer = null;
+        // 显式反订阅，避免管理器销毁后仍被事件总线持有引用
+        CY.Event.UnsubscribeAll(this);
     }
 
     // ═══════════ Unity 桥接 ═══════════
@@ -246,6 +264,65 @@ public class UnitManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
     public void AddCost(int amount)
     {
         CY.Department.ChangeGold(amount);
+    }
+
+    /// <summary>
+    /// 游戏失败/退出事件回调：回收所有敌人并通知血条回收
+    /// </summary>
+    /// <param name="evt">游戏结束事件（结构体，零 GC）</param>
+    private void OnOverGame(ref OverGameEvent evt)
+    {
+        CY.Log("[UnitManager] 接收到游戏结束事件，开始回收所有敌人和血条");
+        RecycleAllEnemiesAndHPBars();
+    }
+
+    /// <summary>
+    /// 回收当前场景中所有敌人，并广播死亡事件回收血条
+    /// </summary>
+    private void RecycleAllEnemiesAndHPBars()
+    {
+        // 1. 回收敌人
+        if (ActiveEnemies != null && ActiveEnemies.Count > 0)
+        {
+            for (int i = ActiveEnemies.Count - 1; i >= 0; i--)
+            {
+                var enemy = ActiveEnemies[i];
+                if (enemy == null) continue;
+
+                // 先通知血条管理器回收对应血条
+                UnitDeadEvent deadEvt = new UnitDeadEvent { UnitID = enemy.Id };
+                CY.Event.Post(ref deadEvt);
+
+                // 立即回收实体，防止游戏结束后继续留在场景或逻辑更新
+                CY.Entity.RecycleEntity(enemy);
+            }
+            ActiveEnemies.Clear();
+        }
+
+        // 2. 回收子弹
+        RecycleAllProjectiles();
+    }
+
+    /// <summary>
+    /// 回收所有活跃的投射物
+    /// </summary>
+    private void RecycleAllProjectiles()
+    {
+        if (ActiveProjectiles == null || ActiveProjectiles.Count == 0) return;
+
+        // 使用临时列表缓存，因为 Recycle 会调用 Unregister 修改 ActiveProjectiles 集合
+        // 这里不能直接 foreach ActiveProjectiles
+        var temp = new List<SimpleProjectile>(ActiveProjectiles);
+        foreach (var projectile in temp)
+        {
+            if (projectile != null)
+            {
+                // SimpleProjectile 现在已经公开了 Recycle 方法
+                projectile.Recycle();
+            }
+        }
+        // 清空列表
+        ActiveProjectiles.Clear();
     }
 
     public void RecruitUnit(int unitDataId, Vector3 position)

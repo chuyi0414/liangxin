@@ -33,6 +33,7 @@ public class MainUI : UIPanel
     private void OnStartGameClicked()
     {
         CY.LogInfo("按下了按钮");
+        
         CY.Procedure.ChangeProcedure<BattleProcedure>();
     }
 }

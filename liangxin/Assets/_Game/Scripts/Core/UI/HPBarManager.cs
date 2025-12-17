@@ -99,7 +99,7 @@ public class HPBarManager : UIPanel
         CY.Event.Subscribe<UnitDeadEvent>(OnUnitDead);
 
         // 主动请求 BaseCamp 推送一次初始血量，避免“满血且长时间不受击”导致血条一直不生成。
-        TryRequestBaseCampInitialBars();
+        //TryRequestBaseCampInitialBars();
     }
 
     protected override void OnClose(bool isShutdown, object userData)

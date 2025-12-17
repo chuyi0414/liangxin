@@ -59,3 +59,15 @@ public struct DepartmentResourceChangedEvent
     public int CompanyConscience;
     public int CompanyCorruption;
 }
+
+[StructLayout(LayoutKind.Auto)]
+public struct StartGameEvent
+{
+
+}
+
+[StructLayout(LayoutKind.Auto)]
+public struct OverGameEvent
+{
+
+}

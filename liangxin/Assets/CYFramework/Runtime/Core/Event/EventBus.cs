@@ -80,14 +80,14 @@ namespace CYFramework.Core.Event
         // 订阅者对象到订阅列表的映射（用于自动解绑）
         private readonly Dictionary<object, List<EventSubscription>> _targetSubscriptions = new();
         
-        // 临时列表，避免迭代时修改
-        private readonly List<EventSubscription> _tempHandlers = new();
+        // 临时列表池，支持递归派发（避免递归时共用一个 tempHandlers 导致崩溃）
+        private readonly Stack<List<EventSubscription>> _tempListsPool = new();
         
         // 待移除的订阅
         private readonly List<EventSubscription> _pendingRemove = new();
         
-        // 是否正在派发事件
-        private bool _isDispatching;
+        // 派发深度
+        private int _dispatchingDepth = 0;
         
         // 延迟事件反射缓存（避免每次 GetMethod/MakeGenericMethod）
         private System.Reflection.MethodInfo _postBoxedMethod;
@@ -125,6 +125,7 @@ namespace CYFramework.Core.Event
             _targetSubscriptions.Clear();
             _subscribeAllCache.Clear();
             _subscribeGenericCache.Clear();
+            _tempListsPool.Clear();
             CYLog.Debug("[EventBus] 已销毁");
         }
         
@@ -220,7 +221,7 @@ namespace CYFramework.Core.Event
                     }
                 }
 
-                if (_isDispatching)
+                if (_dispatchingDepth > 0)
                 {
                     // 派发中标记为待移除
                     sub.IsActive = false;
@@ -379,27 +380,47 @@ namespace CYFramework.Core.Event
             if (!_subscriptions.TryGetValue(eventType, out var list)) return;
             if (list.Count == 0) return;
             
-            _isDispatching = true;
-            
-            // 复制到临时列表，避免迭代时修改问题
-            _tempHandlers.Clear();
-            _tempHandlers.AddRange(list);
-            
-            foreach (var sub in _tempHandlers)
+            // 获取临时列表（从池中取或新建）
+            List<EventSubscription> tempHandlers;
+            if (_tempListsPool.Count > 0)
             {
-                if (!sub.IsActive) continue;
-                
-                try
+                tempHandlers = _tempListsPool.Pop();
+            }
+            else
+            {
+                tempHandlers = new List<EventSubscription>(8);
+            }
+
+            _dispatchingDepth++;
+            
+            // 复制到临时列表
+            tempHandlers.AddRange(list);
+            
+            try 
+            {
+                // 遍历执行（使用 for 循环稍微比 foreach 快一点点，且避免 Enumerator 分配，虽然 List.Enumerator 是 struct）
+                // 这里用 foreach 保持原样也行，但既然改了就安全第一
+                foreach (var sub in tempHandlers)
                 {
-                    ((EventHandler<T>)sub.Handler)(ref evt);
-                }
-                catch (Exception ex)
-                {
-                    CYLog.Error($"[EventBus] 事件处理异常: {eventType.Name}", ex);
+                    if (!sub.IsActive) continue;
+                    
+                    try
+                    {
+                        ((EventHandler<T>)sub.Handler)(ref evt);
+                    }
+                    catch (Exception ex)
+                    {
+                        CYLog.Error($"[EventBus] 事件处理异常: {eventType.Name}", ex);
+                    }
                 }
             }
-            
-            _isDispatching = false;
+            finally
+            {
+                // 清理并归还列表到池中
+                tempHandlers.Clear();
+                _tempListsPool.Push(tempHandlers);
+                _dispatchingDepth--;
+            }
         }
         
         /// <summary>

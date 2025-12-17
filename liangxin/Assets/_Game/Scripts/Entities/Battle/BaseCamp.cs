@@ -1,4 +1,6 @@
 using CYFramework;
+using CYFramework.Core.Entity;
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -8,7 +10,7 @@ using UnityEngine;
 /// - BaseCamp 默认有两条血条（Slot0/Slot1），可用于“护盾/城墙 + 本体”等需求。
 /// - 事件发布必须使用 CY.Event.Post(ref evt)，并且事件必须是 struct（符合 CYFramework 约束）。
 /// </summary>
-public class BaseCamp : MonoBehaviour
+public class BaseCamp : EntityBase
 {
     /// <summary>
     /// BaseCamp 的事件 UnitID（BaseCamp 不是 EntityBase，这里使用固定 ID 作为事件键）。
@@ -31,25 +33,48 @@ public class BaseCamp : MonoBehaviour
     public float Slot1CurrentHp => _slot1CurrentHp;
     public float Slot1MaxHp => _slot1MaxHp;
 
-
-    private void Awake()
+    protected override void OnEntityInit(object userData)
     {
+        base.OnEntityInit(userData);
         // 保证初始值不越界（编辑器配置错误时兜底）
         if (_slot0MaxHp < 0f) _slot0MaxHp = 0f;
         if (_slot1MaxHp < 0f) _slot1MaxHp = 0f;
         _slot0CurrentHp = Mathf.Clamp(_slot0CurrentHp, 0f, _slot0MaxHp);
         _slot1CurrentHp = Mathf.Clamp(_slot1CurrentHp, 0f, _slot1MaxHp);
+
+        CY.Event.Subscribe<StartGameEvent>(StartGame, this);
+        CY.Event.Subscribe<OverGameEvent>(OverGame, this);
     }
 
-    private void Start()
+    /// <summary>
+    /// 开始游戏事件接收
+    /// </summary>
+    /// <param name="evt"></param>
+    private void StartGame(ref StartGameEvent evt)
     {
-        // 低频：延迟到下一帧发布，增加“HPBarManager 已订阅事件”的概率。
-        // 同时 HPBarManager 也会主动调用 PostInitialHPEvents()，双保险。
         CY.Timer.NextFrame(PostInitialHPEvents);
     }
 
-    private void OnDestroy()
+    /// <summary>
+    /// 结束游戏事件接收
+    /// </summary>
+    /// <param name="evt"></param>
+    private void OverGame(ref OverGameEvent evt)
     {
+        // 通知 UI 回收所有血条（Slot0/Slot1）。
+        UnitDeadEvent deadEvt = new UnitDeadEvent { UnitID = BaseCampUnitId };
+        CY.Event.Post(ref deadEvt);
+    }
+
+    protected override void OnEntityShow(object userData)
+    {
+        base.OnEntityShow(userData);
+        
+    }
+
+    protected override void OnEntityRecycle()
+    {
+        base.OnEntityRecycle();
         // BaseCamp 被销毁时，通知 UI 回收所有血条（Slot0/Slot1）。
         UnitDeadEvent deadEvt = new UnitDeadEvent { UnitID = BaseCampUnitId };
         CY.Event.Post(ref deadEvt);

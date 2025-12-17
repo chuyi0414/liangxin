@@ -288,6 +288,10 @@ public class BattleUI : UIPanel
     /// </summary>
     private void OnExitBattleClicked()
     {
+        OverGameEvent evt = new OverGameEvent { };
+        CY.Event.Post<OverGameEvent>(ref evt);
+
+
         //返回菜单流程
         CY.Procedure.ChangeProcedure<MenuProcedure>();
     }

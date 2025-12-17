@@ -14,6 +14,10 @@ public class BattleProcedure : ProcedureBase
     /// </summary>
     protected override void OnEnter(ProcedureBase previousProcedure)
     {
+        //发送游戏开始事件
+        StartGameEvent evt = new StartGameEvent { };
+        CY.Event.Post<StartGameEvent>(ref evt);
+
         // 1. 创建玩家（老板）
         CY.Unit.SpawnPlayer();
         

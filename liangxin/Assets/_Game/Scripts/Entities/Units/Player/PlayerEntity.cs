@@ -1,6 +1,7 @@
 ﻿using CYFramework;
 using CYFramework.Core.Entity;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 /// <summary>
 /// 玩家（老板）实体
@@ -21,6 +22,9 @@ public class PlayerEntity : EntityBase
 
     [Header("Physics")]
     [SerializeField] private PhysicsMaterial2D _frictionlessMaterial; // 可在 Inspector 绑定零摩擦材质
+
+    //初始位置
+    private Vector3 _initialPosition = new Vector3(3,0,0);
 
     protected override void OnEntityInit(object userData)
     {
@@ -44,6 +48,8 @@ public class PlayerEntity : EntityBase
         {
             CY.LogError("[PlayerEntity] 缺少 Rigidbody2D 组件，无法移动！");
         }
+
+        transform.position = _initialPosition;
     }
 
     protected override void OnEntityShow(object userData)
