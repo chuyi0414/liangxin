@@ -12,6 +12,10 @@ public class UIUnitHPBar : MonoBehaviour
     [SerializeField] private TMP_Text _damageText; // 可选，如果用来飘字
     [SerializeField] private CanvasGroup _canvasGroup;
 
+    [Header("Texts（可选）")]
+    [SerializeField] private UITmpValueText _hpFractionText; // 显示“100/100”
+    [SerializeField] private UITmpValueText _hpPercentText;  // 显示“100%”
+
     private Transform _targetTransform;
     private Vector3 _offset;
     private int _ownerUnitID;
@@ -40,6 +44,10 @@ public class UIUnitHPBar : MonoBehaviour
         _hpSlider.value = 1f;
         _canvasGroup.alpha = 1f;
         if (_damageText) _damageText.text = "";
+
+        // 对象池复用：避免上一次显示内容“残留”到下一次使用。
+        if (_hpFractionText) _hpFractionText.Clear();
+        if (_hpPercentText) _hpPercentText.Clear();
     }
     
     private float _lastLogTime;
@@ -75,6 +83,10 @@ public class UIUnitHPBar : MonoBehaviour
         if (max <= 0f)
         {
             _hpSlider.value = 0f;
+
+            // 边界：最大值不合法时，文本按 0/0 与 0% 处理（避免出现 NaN/Infinity）。
+            if (_hpFractionText) _hpFractionText.SetFraction(0, 0);
+            if (_hpPercentText) _hpPercentText.SetPercent(0);
             return;
         }
 
@@ -82,6 +94,19 @@ public class UIUnitHPBar : MonoBehaviour
         if (normalized < 0f) normalized = 0f;
         else if (normalized > 1f) normalized = 1f;
         _hpSlider.value = normalized;
+
+        // 文本显示：使用 TMP.SetText 内部格式化，避免字符串拼接产生 GC。
+        // 说明：事件触发频率一般低于每帧，但依然建议走零 GC 路径，避免战斗高压场景产生抖动。
+        if (_hpFractionText)
+        {
+            // 这里按“整数血量”显示；若你的设计是小数血量，可在 UITmpValueText 中扩展 float 格式化。
+            _hpFractionText.SetFraction(Mathf.RoundToInt(current), Mathf.RoundToInt(max));
+        }
+
+        if (_hpPercentText)
+        {
+            _hpPercentText.SetPercentFromFraction(current, max);
+        }
         
         // 简单的受击反馈动画
         // 可以用 DOTween 或者简单的 Coroutine，这里为了 0GC 暂略

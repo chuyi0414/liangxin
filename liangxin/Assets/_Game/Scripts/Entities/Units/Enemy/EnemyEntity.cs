@@ -89,7 +89,7 @@ public class EnemyEntity : EntityBase
             OnBorn(); // 子类钩子
 
             // 发送初始 HP 事件，让血条Manager能立即生成血条
-            UnitHPChangedEvent evt = new UnitHPChangedEvent {
+            /*UnitHPChangedEvent evt = new UnitHPChangedEvent {
                 UnitID = Id,
                 CurrentHP = _currentHp,
                 MaxHP = Data.Hp,
@@ -99,7 +99,7 @@ public class EnemyEntity : EntityBase
                 BarStyle = HPBarStyle.Enemy,
                 BarSlot = 0
             };
-            CY.Event.Post(ref evt);
+            CY.Event.Post(ref evt);*/
         }
         else
         {

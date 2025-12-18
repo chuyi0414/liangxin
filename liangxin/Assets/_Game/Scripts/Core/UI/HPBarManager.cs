@@ -154,8 +154,9 @@ public class HPBarManager : UIPanel
         }
 
         bar.UpdateHP(evt.CurrentHP, evt.MaxHP);
-
-        if (evt.IsDead || evt.CurrentHP <= 0f)
+        
+        // 只有在明确 IsDead 时才回收血条（支持 0/Max 的资源条存在）
+        if (evt.IsDead)
         {
             RecycleBar(evt.BarStyle, bar);
             _activeBars.Remove(key);
@@ -211,8 +212,8 @@ public class HPBarManager : UIPanel
         {
             Style = HPBarStyle.BaseCamp,
             Prefab = enemyPrefab1,
-            WorldOffset = new Vector3(0f, 0f, 0f),
-            SlotSpacingY = 1f
+            WorldOffset = new Vector3(0f, 1f, 0f),
+            SlotSpacingY = 0f
         };
 
         var baseCampSlot1 = new HPBarStyleSetting
@@ -220,7 +221,7 @@ public class HPBarManager : UIPanel
             Style = HPBarStyle.BaseCamp,
             Prefab = enemyPrefab2,
             WorldOffset = new Vector3(0f, 0f, 0f),
-            SlotSpacingY = 1f
+            SlotSpacingY = 0.5f
         };
 
         _styleMap[HPBarStyle.BaseCamp] = baseCampSlot0;

@@ -18,29 +18,26 @@ public class BaseCamp : EntityBase
     /// </summary>
     public const int BaseCampUnitId = 0;
 
-    [Header("HP (Slot0/Slot1)")]
-    [SerializeField] private float _slot0MaxHp = 1000f;
-    [SerializeField] private float _slot0CurrentHp = 1000f;
+    [Header("Core Resources (Mapped from DepartmentManager)")]
+    [Tooltip("Slot 0: 公司良心 (生存血条，归零失败)")]
+    [SerializeField] private float _conscienceHp; 
+    [SerializeField] private float _conscienceMaxHp;
 
-    [SerializeField] private float _slot1MaxHp = 500f;
-    [SerializeField] private float _slot1CurrentHp = 500f;
+    [Tooltip("Slot 1: 公司黑心 (污染指数，满值可能有负面效果)")]
+    [SerializeField] private float _corruptionHp;
+    [SerializeField] private float _corruptionMaxHp;
 
-    /// <summary>Slot0 当前/最大（通常作为主血条）</summary>
-    public float Slot0CurrentHp => _slot0CurrentHp;
-    public float Slot0MaxHp => _slot0MaxHp;
+    /// <summary>Slot0: 公司良心 (CompanyConscience)</summary>
+    public float Slot0CurrentHp => _conscienceHp;
+    public float Slot0MaxHp => _conscienceMaxHp;
 
-    /// <summary>Slot1 当前/最大（第二条血条：护盾/城墙等）</summary>
-    public float Slot1CurrentHp => _slot1CurrentHp;
-    public float Slot1MaxHp => _slot1MaxHp;
+    /// <summary>Slot1: 公司黑心 (CompanyCorruption)</summary>
+    public float Slot1CurrentHp => _corruptionHp;
+    public float Slot1MaxHp => _corruptionMaxHp;
 
     protected override void OnEntityInit(object userData)
     {
         base.OnEntityInit(userData);
-        // 保证初始值不越界（编辑器配置错误时兜底）
-        if (_slot0MaxHp < 0f) _slot0MaxHp = 0f;
-        if (_slot1MaxHp < 0f) _slot1MaxHp = 0f;
-        _slot0CurrentHp = Mathf.Clamp(_slot0CurrentHp, 0f, _slot0MaxHp);
-        _slot1CurrentHp = Mathf.Clamp(_slot1CurrentHp, 0f, _slot1MaxHp);
 
         CY.Event.Subscribe<StartGameEvent>(StartGame, this);
         CY.Event.Subscribe<OverGameEvent>(OverGame, this);
@@ -84,32 +81,60 @@ public class BaseCamp : EntityBase
     /// 主动推送一次初始血量（用于生成血条）。
     /// 注意：EventBus 默认不缓存事件，因此初始事件应在 UI 订阅后至少触发一次。
     /// </summary>
+    /// <summary>
+    /// 主动推送一次初始血量（用于生成血条）。
+    /// 注意：EventBus 默认不缓存事件，因此初始事件应在 UI 订阅后至少触发一次。
+    /// </summary>
     public void PostInitialHPEvents()
     {
+        _conscienceMaxHp = CY.Department.MaxConscience;
+        _conscienceHp = CY.Department.Data.CompanyConscience;
+
+        _corruptionMaxHp = CY.Department.MaxCompanyCorruption;
+        _corruptionHp = CY.Department.Data.CompanyCorruption;
         // 允许多次调用：EventBus 不缓存事件，且 HPBarManager 可能晚于 BaseCamp Start 才订阅。
         // 重复发送不会重复生成血条（HPBarManager 以 (UnitID, Style, Slot) 作为唯一键）。
-        PostHPChanged(0, _slot0CurrentHp, _slot0MaxHp, 0, false);
-        PostHPChanged(1, _slot1CurrentHp, _slot1MaxHp, 0, false);
+        PostHPChanged(0, _conscienceHp, _conscienceMaxHp, 0, false);
+        PostHPChanged(1, _corruptionHp, _corruptionMaxHp, 0, false);
     }
 
     /// <summary>
-    /// 修改 Slot0 血量（可被战斗逻辑调用）。
+    /// 修改 Slot0: 公司良心 (生存血条)
     /// </summary>
     public void SetSlot0Hp(float current, float max, int damage = 0, bool isCritical = false)
     {
-        _slot0MaxHp = Mathf.Max(0f, max);
-        _slot0CurrentHp = Mathf.Clamp(current, 0f, _slot0MaxHp);
-        PostHPChanged(0, _slot0CurrentHp, _slot0MaxHp, damage, isCritical);
+        float oldVal = _conscienceHp;
+        _conscienceMaxHp = Mathf.Max(0f, max);
+        _conscienceHp = Mathf.Clamp(current, 0f, _conscienceMaxHp);
+        
+        // 双向同步：通知 DepartmentManager 更新全局数据
+        // 注意：DepartmentManager 使用 int，这里会有精度丢弃
+        if (CY.Department != null)
+        {
+            int delta = (int)(_conscienceHp - oldVal);
+            if (delta != 0) CY.Department.ChangeCompanyConscience(delta);
+        }
+
+        PostHPChanged(0, _conscienceHp, _conscienceMaxHp, damage, isCritical);
     }
 
     /// <summary>
-    /// 修改 Slot1 血量（第二条血条）。
+    /// 修改 Slot1: 公司黑心 (污染指数)
     /// </summary>
     public void SetSlot1Hp(float current, float max, int damage = 0, bool isCritical = false)
     {
-        _slot1MaxHp = Mathf.Max(0f, max);
-        _slot1CurrentHp = Mathf.Clamp(current, 0f, _slot1MaxHp);
-        PostHPChanged(1, _slot1CurrentHp, _slot1MaxHp, damage, isCritical);
+        float oldVal = _corruptionHp;
+        _corruptionMaxHp = Mathf.Max(0f, max);
+        _corruptionHp = Mathf.Clamp(current, 0f, _corruptionMaxHp);
+
+         // 双向同步：通知 DepartmentManager 更新全局数据
+        if (CY.Department != null)
+        {
+            int delta = (int)(_corruptionHp - oldVal);
+            if (delta != 0) CY.Department.ChangeCompanyCorruption(delta);
+        }
+
+        PostHPChanged(1, _corruptionHp, _corruptionMaxHp, damage, isCritical);
     }
 
     /// <summary>
@@ -125,7 +150,8 @@ public class BaseCamp : EntityBase
             Damage = damage,
             IsCritical = isCritical,
             WorldPosition = transform.position,
-            IsDead = current <= 0f,
+            // 只有 Slot 0 (良心血条) 归零才代表实体死亡；Slot 1 (污染) 归零是好事，不应销毁
+            IsDead = (slot == 0 && current <= 0f),
             BarStyle = HPBarStyle.BaseCamp,
             BarSlot = slot
         };

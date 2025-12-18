@@ -90,6 +90,8 @@ public class WaveManager : MonoBehaviour, IInitializable, IUpdateable, IDisposab
         }
 
         // 订阅游戏结束事件：游戏失败/退出时立即停止刷怪，避免继续生成敌人
+        // 防止重复订阅
+        CY.Event.Unsubscribe<OverGameEvent>(OnGameOver);
         CY.Event.Subscribe<OverGameEvent>(OnGameOver, this);
 
         if (AutoStartWave)
