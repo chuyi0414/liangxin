@@ -240,25 +240,32 @@ public class EnemyEntity : EntityBase
     {
         // 0. 绝对优先级：大本营保护区 (Red Zone)
         // 无论当前在打谁，只要走进了大本营的攻击范围（+缓冲），强制转火大本营
+        float distToBase = float.MaxValue;
+        float distToBaseSqr = float.MaxValue;
+        Collider2D baseCollider = null;
+
         if (CY.Unit != null && CY.Unit.BaseCampPoint != null)
         {
-            float distToBase;
-            var baseCollider = CY.Unit.BaseCampCollider;
+            baseCollider = CY.Unit.BaseCampCollider;
             
             if (baseCollider != null)
             {
                 Vector3 closest = baseCollider.ClosestPoint(transform.position);
-                distToBase = Vector3.Distance(transform.position, closest);
+                Vector3 delta = transform.position - closest;
+                distToBaseSqr = delta.sqrMagnitude;
+                distToBase = Mathf.Sqrt(distToBaseSqr);
             }
             else
             {
-                distToBase = Vector3.Distance(transform.position, CY.Unit.BaseCampPoint.position);
+                Vector3 delta = transform.position - CY.Unit.BaseCampPoint.position;
+                distToBaseSqr = delta.sqrMagnitude;
+                distToBase = Mathf.Sqrt(distToBaseSqr);
             }
             
             // 判定：如果在大本营核心区域内
             // 判定：使用滞后比较 (Hysteresis) 防止反复横跳
             // 1. 进入阈值 (Enter Threshold): 只要靠近了大本营一定距离，就强制吸引
-            float enterThreshold = Data.Range + 2.0f; 
+            float enterThreshold = Data.Range + 1.0f; 
             // 2. 退出阈值 (Exit Threshold): 一旦锁定了大本营，除非被拉得特别远，否则绝不转火
             float exitThreshold = Data.Range + 5.0f;
 
@@ -325,6 +332,13 @@ public class EnemyEntity : EntityBase
         // 如果找到了更近的 -> 切换
         if (bestUnit != null)
         {
+            if (CY.Unit != null && CY.Unit.BaseCampPoint != null && distToBaseSqr < minDist)
+            {
+                _target = CY.Unit.BaseCampPoint;
+                _targetCollider = baseCollider;
+                return;
+            }
+
             _target = bestUnit.transform;
             _targetCollider = null; // 切换目标时清空缓存
         }

@@ -111,17 +111,17 @@ public class BattleUI : UIPanel
                     // 如果是第0波（还没开始第1波），显示“准备中”
                     if (CY.Wave.CurrentWaveIndex == 0)
                     {
-                        _tmpWaveStage.text = "战斗准备中...";
+                        _tmpWaveStage.text = "准备中";
                     }
                     else
                     {
                         // 之后的波次间隙
-                        _tmpWaveStage.text = "敌人正在组织攻势...";
+                        _tmpWaveStage.text = "敌人正在计划重组";
                     }
                 }
                 else if (CY.Wave.State == WaveManager.WaveState.Fighting)
                 {
-                    _tmpWaveStage.text = "战斗中";
+                    _tmpWaveStage.text = "";
                 }
                 else
                 {
@@ -153,7 +153,10 @@ public class BattleUI : UIPanel
             {
                 if (CY.Wave.State != WaveManager.WaveState.None)
                 {
-                    _tmpRemainingTime.text = $"{CY.Wave.RemainingTime:F1}s";
+                    int totalSeconds = Mathf.CeilToInt(Mathf.Max(0f, CY.Wave.RemainingTime));
+                    int minutes = totalSeconds / 60;
+                    int seconds = totalSeconds % 60;
+                    _tmpRemainingTime.text = $"{minutes:00}:{seconds:00}";
                 }
                 else
                 {

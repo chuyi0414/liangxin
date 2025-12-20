@@ -212,7 +212,7 @@ public class HPBarManager : UIPanel
         {
             Style = HPBarStyle.BaseCamp,
             Prefab = enemyPrefab1,
-            WorldOffset = new Vector3(0f, 1f, 0f),
+            WorldOffset = new Vector3(0f, 0.8f, 0f),
             SlotSpacingY = 0f
         };
 
@@ -350,19 +350,5 @@ public class HPBarManager : UIPanel
         }
 
         s_removeKeysCache.Clear();
-    }
-
-    /// <summary>
-    /// 主动请求 BaseCamp 发送一次初始血量事件。
-    /// 说明：事件总线默认不做缓存，若 BaseCamp 在本面板订阅之前已发过“初始 HP 事件”，UI 会错过。
-    /// </summary>
-    private void TryRequestBaseCampInitialBars()
-    {
-        if (CY.Unit == null || CY.Unit.BaseCampPoint == null) return;
-
-        var baseCamp = CY.Unit.BaseCampPoint.GetComponent<BaseCamp>();
-        if (baseCamp == null) return;
-
-        baseCamp.PostInitialHPEvents();
     }
 }

@@ -36,8 +36,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 200, y: 30}
+  m_AnchoredPosition: {x: 0, y: 10.4625}
+  m_SizeDelta: {x: 200, y: 9.075}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &5296102670177666665
 MonoBehaviour:
@@ -54,7 +54,7 @@ MonoBehaviour:
   _hpSlider: {fileID: 3371112049566666707}
   _damageText: {fileID: 7421305864015267244}
   _canvasGroup: {fileID: 7504816235075802394}
-  _hpFractionText: {fileID: 4997335486716536411}
+  _hpFractionText: {fileID: 0}
   _hpPercentText: {fileID: 0}
 --- !u!225 &7504816235075802394
 CanvasGroup:
@@ -126,7 +126,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.254717, g: 0.254717, b: 0.254717, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -485,7 +485,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u6C61\u67D3:0%"
+  m_text: 
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: c7de02e98d023314d9ff9a67790b9769, type: 2}
   m_sharedMaterial: {fileID: -5460135408750244798, guid: c7de02e98d023314d9ff9a67790b9769, type: 2}
@@ -512,11 +512,11 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 30
+  m_fontSize: 36
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
-  m_fontSizeMin: 18
+  m_fontSizeMin: 1
   m_fontSizeMax: 72
   m_fontStyle: 0
   m_HorizontalAlignment: 2
