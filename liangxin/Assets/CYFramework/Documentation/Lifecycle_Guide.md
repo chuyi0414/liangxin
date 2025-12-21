@@ -1,4 +1,4 @@
-# CYFramework 生命周期指南
+﻿# CYFramework 生命周期指南
 
 ## 总览
 
@@ -137,7 +137,6 @@ public class BattleProcedure : ProcedureBase
     // 切换流程
     void SomeMethod()
     {
-        ChangeProcedure("Victory");  // 按名称
         ChangeProcedure<VictoryProcedure>();  // 按类型
     }
 }
@@ -152,7 +151,7 @@ public class BattleProcedure : ProcedureBase
 ```csharp
 public class EnemyEntity : EntityBase
 {
-    public override string EntityType => "Enemy";
+    // EntityType 由 EntityManager 在 Spawn 时注入，无需 override
     
     // 1. 初始化（首次创建时）
     protected override void OnEntityInit(object userData) { }
@@ -197,11 +196,11 @@ public class EnemyEntity : EntityBase
 ```
 CY.Entity.RegisterEntity("Enemy", prefab)  →  预创建对象池
             ↓
-CY.Entity.ShowEntity("Enemy", data)  →  OnEntityInit → OnEntityShow
+CY.Entity.SpawnEntity("Enemy", data)  →  OnEntityInit → OnEntityShow
             ↓
         [每帧自动]  →  OnEntityUpdate
             ↓
-CY.Entity.HideEntity(entity)  →  OnEntityHide → OnEntityRecycle
+CY.Entity.RecycleEntity(entity)  →  OnEntityHide → OnEntityRecycle
             ↓
         [回到对象池等待复用]
 ```
@@ -221,26 +220,26 @@ public class BattlePanel : UIPanel
         // 绑定按钮事件等
     }
     
-    // 2. 显示（打开/刷新）
-    protected override void OnShow(object data)
+    // 2. 打开（Open 时）
+    protected override void OnOpen(object userData)
     {
         // 刷新数据
     }
     
     // 3. 每帧更新 - Update（动画、计时器等）
-    protected override void OnUpdate(float deltaTime)
+    protected override void OnUpdate(float elapseSeconds, float realElapseSeconds)
     {
         // UI 动画、倒计时等
     }
     
     // 4. 延迟更新 - LateUpdate（位置跟随等）
-    protected override void OnLateUpdate(float deltaTime)
+    protected override void OnLateUpdate(float elapseSeconds, float realElapseSeconds)
     {
         // 跟随目标位置等
     }
     
-    // 5. 隐藏（关闭时）
-    protected override void OnHide()
+    // 5. 关闭（Close 时）
+    protected override void OnClose(bool isShutdown, object userData)
     {
         // 停止动画等
     }
@@ -256,15 +255,15 @@ public class BattlePanel : UIPanel
 ### 使用流程
 
 ```
-CY.UI.Open<BattlePanel>()  →  OnBindUI → OnShow
+CY.UI.Open<BattlePanel>()  →  OnBindUI → OnOpen
             ↓
         [每帧自动]  →  OnUpdate → OnLateUpdate
             ↓
-CY.UI.Close<BattlePanel>()  →  OnHide → OnUnbindUI
+CY.UI.Close<BattlePanel>()  →  OnClose → OnUnbindUI
             ↓
         [缓存到对象池]
             ↓
-CY.UI.Open<BattlePanel>()  →  OnBindUI → OnShow（复用）
+CY.UI.Open<BattlePanel>()  →  OnBindUI → OnOpen（复用）
 ```
 
 ---
@@ -351,7 +350,7 @@ Unity Start
 | 游戏入口 | `GameEntryBase` | `OnGameInit`, `RegisterProcedures`, `OnGameStart` |
 | 游戏流程 | `ProcedureBase` | `OnEnter`, `OnUpdate`, `OnLeave` |
 | 游戏实体 | `EntityBase` | `OnEntityShow`, `OnEntityFixedUpdate`, `OnEntityUpdate`, `OnEntityLateUpdate`, `OnEntityHide` |
-| UI 面板 | `UIPanel` | `OnBindUI`, `OnShow`, `OnUpdate`, `OnLateUpdate`, `OnHide` |
+| UI 面板 | `UIPanel` | `OnBindUI`, `OnOpen`, `OnUpdate`, `OnLateUpdate`, `OnClose`, `OnUnbindUI` |
 | 自定义系统 | `ServiceBase` | `Initialize`, `OnUpdate`, `Dispose` |
 
 **记住**：你只需要重写你需要的方法，其他的框架会处理！

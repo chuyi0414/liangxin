@@ -44,10 +44,23 @@
 #### CY.Timer（计时器系统）
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
+| `Delay(seconds, onComplete)` | 秒数, 回调 | `Timer` | 延迟执行（默认使用配置的 UseUnscaledTime） |
 | `Delay(seconds, onComplete, useUnscaledTime)` | 秒数, 回调, 是否不受时间缩放 | `Timer` | 延迟执行 |
+| `Delay(seconds, onComplete, onProgress, useUnscaledTime)` | 秒数, 回调, 进度回调, 是否不受时间缩放 | `Timer` | 延迟执行（带进度 0~1） |
+| `Loop(interval, onTick)` | 间隔, 回调 | `Timer` | 循环执行（默认使用配置的 UseUnscaledTime） |
 | `Loop(interval, onTick, useUnscaledTime)` | 间隔, 回调, 是否不受时间缩放 | `Timer` | 循环执行 |
+| `Loop(interval, onTick, onProgress, useUnscaledTime)` | 间隔, 回调, 进度回调, 是否不受时间缩放 | `Timer` | 循环执行（带进度 0~1） |
 | `NextFrame(onComplete)` | 回调 | `void` | 下一帧执行 |
+| `NextFrameTimer(onComplete)` | 回调 | `Timer` | 下一帧执行（返回 Timer，等价 Delay(0f)） |
+| `Cancel(timer)` | 计时器 | `void` | 取消指定计时器 |
+| `Cancel(timerId)` | 计时器 ID | `void` | 按 ID 取消 |
+| `TryCancel(timerId)` | 计时器 ID | `bool` | 尝试取消（找不到返回 false） |
+| `GetTimer(timerId)` | 计时器 ID | `Timer` | 获取计时器 |
+| `HasTimer(timerId)` | 计时器 ID | `bool` | 是否存在且未完成 |
+| `Pause(timerId)` | 计时器 ID | `void` | 暂停计时器 |
+| `Resume(timerId)` | 计时器 ID | `void` | 恢复计时器 |
 | `CancelAll()` | 无 | `void` | 取消所有计时器 |
+| `ActiveCount` | - | `int` | 活跃计时器数量 |
 
 #### CY.Procedure（流程系统）
 | 方法 | 参数 | 说明 |
@@ -56,34 +69,53 @@
 | `AutoRegisterAll(assembly)` | 程序集(可选) | 自动注册 [AutoRegisterProcedure] 标记的流程 |
 | `Start<T>()` | 无 | 启动流程系统 |
 | `Start(name)` | 流程名称 | 按名称启动 |
+| `StartEntry()` | 无 | 启动入口流程（按配置或注册顺序） |
 | `ChangeProcedure<T>()` | 无 | 切换流程 |
 | `ChangeProcedure<T>(userData)` | 用户数据 | 切换流程（带参数） |
 | `Change(name, userData)` | 流程名称, 用户数据 | 按名称切换流程 |
+| `TryChange(name, userData)` | 流程名称, 用户数据 | 尝试切换（不存在返回 false） |
+| `ChangeIfNot<T>(userData)` | 用户数据 | 当前不是目标流程时才切换 |
 | `CurrentProcedure` | - | 获取当前流程实例 |
-| `CurrentProcedureName` | - | 获取当前流程名称 |
+| `CurrentProcedureName` | - | 获取当前流程类型名 |
+| `CurrentName` | - | 获取当前流程注册名（优先返回注册名） |
 
 #### CY.Entity（实体系统）
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `RegisterEntity(type, prefab, preload, parent)` | 类型名, 预制体, 预加载数, 父节点 | `void` | 注册实体类型 |
+| `RegisterEntity(type, assetPath, groupName, preload)` | 类型名, 资源路径, 分组名, 预加载数 | `bool` | 注册实体类型（自动加载资源） |
 | `SpawnEntity<T>(type, userData)` | 类型名, 用户数据 | `T` | 生成实体 |
 | `SpawnEntity(type, userData)` | 类型名, 用户数据 | `IEntity` | 生成实体 |
+| `SpawnEntity<T>(type, assetPath, groupName, userData)` | 类型名, 资源路径, 分组名, 用户数据 | `T` | 生成实体（自动注册） |
 | `RecycleEntity(entityId)` | 实体 ID | `void` | 回收实体到对象池 |
 | `RecycleEntity(entity)` | 实体对象 | `void` | 回收实体到对象池 |
 | `RecycleAllEntities(type)` | 类型名 | `void` | 回收指定类型所有实体 |
 | `RecycleAllEntities()` | 无 | `void` | 回收所有实体 |
 | `HideEntityInstance(entity)` | 实体对象 | `void` | 仅隐藏，不回收到池 |
 | `ShowEntity(entity, userData)` | 实体对象, 用户数据 | `void` | 重新显示已隐藏的实体 |
+| `SetEntityVisible(entity, visible, userData)` | 实体对象, 可见性, 用户数据 | `void` | 设置可见性（不回收） |
+| `PauseEntity(entityId)` | 实体 ID | `void` | 暂停单个实体 |
+| `ResumeEntity(entityId)` | 实体 ID | `void` | 恢复单个实体 |
+| `PauseAllEntities()` | 无 | `void` | 暂停所有实体 |
+| `ResumeAllEntities()` | 无 | `void` | 恢复所有实体 |
 | `GetEntity<T>(entityId)` | 实体 ID | `T` | 获取实体 |
+| `GetEntities(type)` | 类型名 | `IReadOnlyList<IEntity>` | 获取指定类型所有实体 |
 | `GetEntityCount(type)` | 类型名 | `int` | 获取实体数量 |
+| `HasEntity(entityId)` | 实体 ID | `bool` | 是否存在 |
 
 #### CY.Data（数据表系统）
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `CreateDataTable<T>(name)` | 表名(可选) | `DataTable<T>` | 创建数据表 |
 | `GetDataTable<T>(name)` | 表名(可选) | `DataTable<T>` | 获取数据表 |
+| `HasDataTable(name)` | 表名 | `bool` | 是否存在 |
 | `LoadFromCsv<T>(csvText, name, separator)` | CSV 文本, 表名(可选), 分隔符 | `DataTable<T>` | 从 CSV 加载 |
+| `LoadFromJson<T>(jsonText, name)` | JSON 文本, 表名(可选) | `DataTable<T>` | 从 JSON 加载（要求 rows 包装） |
+| `LoadFromJsonObject<T>(jsonText, name)` | JSON 文本, 表名(可选) | `DataTable<T>` | 从 JSON 单对象加载 |
+| `LoadFromJsonObject<T>(jsonText, name, autoFixIdIfZero)` | JSON 文本, 表名(可选), 是否自动补 Id | `DataTable<T>` | 从 JSON 单对象加载（可自动补 Id） |
+| `LoadFromScriptableObject<T, TSO>(so, getter, name)` | SO, 行获取器, 表名(可选) | `DataTable<T>` | 从 SO 加载 |
 | `UnloadDataTable(name)` | 表名 | `void` | 卸载数据表 |
+| `UnloadAllDataTables()` | 无 | `void` | 卸载所有数据表 |
 
 #### CY.Save / 存档快捷方法
 | 方法/属性 | 参数 | 返回值 | 说明 |
@@ -143,7 +175,10 @@ var enemy = CY.Entity.SpawnEntity<EnemyEntity>("Enemy");
 CY.Entity.RecycleEntity(enemy);
 
 // ========== 数据表 ==========
-CY.Data.LoadFromCsv<MonsterRow>(csvText);
+  CY.Data.LoadFromCsv<MonsterRow>(csvText);
+  CY.Data.LoadFromJson<MonsterRow>(jsonText);
+  CY.Data.LoadFromJsonObject<MonsterRow>(jsonText);
+  CY.Data.LoadFromJsonObject<MonsterRow>(jsonText, autoFixIdIfZero: true);
 var monster = CY.Data.GetDataTable<MonsterRow>().GetRow(1001);
 ```
 
@@ -165,6 +200,7 @@ var monster = CY.Data.GetDataTable<MonsterRow>().GetRow(1001);
 | `TryGet<T>(out T service)` | `out T service` | `bool` | 安全获取服务 |
 | `Get(Type type)` | `Type serviceType` | `object` | 按类型获取 |
 | `IsRegistered<T>()` | 无 | `bool` | 检查是否已注册 |
+| `Unregister<T>()` | 无 | `void` | 注销服务 |
 | `InitializeAll()` | 无 | `void` | 初始化所有 IInitializable 服务 |
 | `ClearScoped()` | 无 | `void` | 清理 Scoped 作用域服务 |
 | `DisposeAll()` | 无 | `void` | 销毁所有服务 |
@@ -297,6 +333,9 @@ public enum LogLevel { Verbose = 0, Debug = 1, Info = 2, Warning = 3, Error = 4,
 | `UnsubscribeAll(object target)` | 目标对象 | 取消对象的所有订阅 |
 | `Post<T>(ref T evt)` | 事件数据 | 发布事件（必须用 ref） |
 | `PostDelayed<T>(T evt, int frames = 1)` | 事件数据, 延迟帧数 | 延迟发布 |
+| `PostNextFrame<T>(T evt)` | 事件数据 | 下一帧发布（等价 PostDelayed(frames: 1)） |
+| `HasSubscribers<T>()` | 无 | 是否存在订阅者 |
+| `TryPost<T>(ref T evt)` | 事件数据 | 有订阅者时才发布，返回是否发布 |
 
 **EventHandler 委托**:
 ```csharp
@@ -382,11 +421,17 @@ fsm.AddState(new IdleState())
 #### ProcedureManager 类
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `AddProcedure<T>()` | 无 | `ProcedureManager` | 注册流程 |
-| `AddProcedure(ProcedureBase)` | 流程实例 | `ProcedureManager` | 注册流程实例 |
-| `Start<T>()` | 无 | `void` | 启动流程系统 |
+| `AddProcedure<T>(name)` | 名称(可选) | `ProcedureManager` | 注册流程 |
+| `AddProcedure(ProcedureBase, name)` | 流程实例, 名称(可选) | `ProcedureManager` | 注册流程实例 |
+| `AutoRegisterAll(assembly)` | 程序集(可选) | `void` | 自动注册 [AutoRegisterProcedure] 标记的流程 |
+| `Start<T>()` | 无 | `void` | 按类型启动 |
+| `Start(name)` | 流程名称 | `void` | 按名称启动 |
+| `StartEntry()` | 无 | `void` | 启动入口流程（按配置或注册顺序） |
 | `ChangeProcedure<T>()` | 无 | `void` | 切换流程 |
 | `ChangeProcedure<T>(userData)` | 用户数据 | `void` | 切换流程（带参数） |
+| `Change(name, userData)` | 流程名称, 用户数据 | `void` | 按名称切换 |
+| `TryChange(name, userData)` | 流程名称, 用户数据 | `bool` | 尝试切换 |
+| `ChangeIfNot<T>(userData)` | 用户数据 | `bool` | 当前不是目标流程时才切换 |
 | `GetProcedure<T>()` | 无 | `T` | 获取指定流程 |
 | `Stop()` | 无 | `void` | 停止流程系统 |
 
@@ -395,6 +440,7 @@ fsm.AddState(new IdleState())
 | `CurrentProcedure` | `ProcedureBase` | 当前流程 |
 | `IsRunning` | `bool` | 是否运行中 |
 | `UpdateOrder` | `int` | 更新优先级（默认 -50） |
+| `CurrentName` | `string` | 当前流程注册名（优先返回注册名） |
 
 #### ProcedureBase 基类
 ```csharp
@@ -402,9 +448,9 @@ public abstract class ProcedureBase
 {
     protected ProcedureManager Owner { get; }
     
-    protected internal virtual void OnEnter(ProcedureBase previous) { }
-    protected internal virtual void OnUpdate(float deltaTime) { }
-    protected internal virtual void OnLeave(ProcedureBase next) { }
+    protected virtual void OnEnter(ProcedureBase previous) { }
+    protected virtual void OnUpdate(float deltaTime) { }
+    protected virtual void OnLeave(ProcedureBase next) { }
     
     protected void ChangeProcedure<T>() where T : ProcedureBase;
     protected void ChangeProcedure<T>(object userData) where T : ProcedureBase;
@@ -423,19 +469,19 @@ public abstract class ProcedureBase<TData> : ProcedureBase
 ```csharp
 public class MenuProcedure : ProcedureBase
 {
-    protected internal override void OnEnter(ProcedureBase previous)
+    protected override void OnEnter(ProcedureBase previous)
     {
         CYLog.Info("进入主菜单");
         // 显示菜单 UI
     }
     
-    protected internal override void OnUpdate(float dt)
+    protected override void OnUpdate(float dt)
     {
         if (Input.GetKeyDown(KeyCode.Space))
             ChangeProcedure<GameProcedure>();
     }
     
-    protected internal override void OnLeave(ProcedureBase next)
+    protected override void OnLeave(ProcedureBase next)
     {
         // 关闭菜单 UI
     }
@@ -451,10 +497,21 @@ public class MenuProcedure : ProcedureBase
 #### TimerManager 类
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
+| `Delay(seconds, onComplete)` | 秒数, 回调 | `Timer` | 延迟执行 |
 | `Delay(seconds, onComplete, useUnscaledTime)` | 秒数, 回调, 是否不受缩放 | `Timer` | 延迟执行 |
+| `Delay(seconds, onComplete, onProgress, useUnscaledTime)` | 秒数, 回调, 进度回调, 是否不受缩放 | `Timer` | 延迟执行（带进度） |
+| `Loop(interval, onTick)` | 间隔, 回调 | `Timer` | 循环执行 |
 | `Loop(interval, onTick, useUnscaledTime)` | 间隔, 回调, 是否不受缩放 | `Timer` | 循环执行 |
+| `Loop(interval, onTick, onProgress, useUnscaledTime)` | 间隔, 回调, 进度回调, 是否不受缩放 | `Timer` | 循环执行（带进度） |
 | `NextFrame(onComplete)` | 回调 | `void` | 下一帧执行 |
+| `NextFrameTimer(onComplete)` | 回调 | `Timer` | 下一帧执行（返回 Timer） |
 | `Cancel(Timer)` | 计时器 | `void` | 取消计时器 |
+| `Cancel(timerId)` | 计时器 ID | `void` | 按 ID 取消 |
+| `TryCancel(timerId)` | 计时器 ID | `bool` | 尝试取消 |
+| `GetTimer(timerId)` | 计时器 ID | `Timer` | 获取计时器 |
+| `HasTimer(timerId)` | 计时器 ID | `bool` | 是否存在且未完成 |
+| `Pause(timerId)` | 计时器 ID | `void` | 暂停 |
+| `Resume(timerId)` | 计时器 ID | `void` | 恢复 |
 | `CancelAll()` | 无 | `void` | 取消所有 |
 
 | 属性 | 类型 | 说明 |
@@ -533,15 +590,25 @@ public interface IPoolable
 |------|------|--------|------|
 | `Initialize(Transform root)` | 根节点 | `void` | 初始化 |
 | `RegisterEntity(type, prefab, preload, parent)` | 类型名, 预制体, 预加载数, 父节点 | `void` | 注册实体类型 |
-| `ShowEntity<T>(type, userData)` | 类型名, 用户数据 | `T` | 显示实体 |
-| `HideEntity(entityId)` | 实体 ID | `void` | 隐藏实体 |
-| `HideEntity(entity)` | 实体对象 | `void` | 隐藏实体 |
-| `HideAllEntities(type)` | 类型名 | `void` | 隐藏指定类型 |
-| `HideAllEntities()` | 无 | `void` | 隐藏所有 |
+| `RegisterEntity(type, assetPath, groupName, preload)` | 类型名, 资源路径, 分组名, 预加载数 | `bool` | 注册实体类型（自动加载资源） |
+| `SpawnEntity<T>(type, userData)` | 类型名, 用户数据 | `T` | 生成实体 |
+| `SpawnEntity(type, userData)` | 类型名, 用户数据 | `IEntity` | 生成实体 |
+| `SpawnEntity<T>(type, assetPath, groupName, userData)` | 类型名, 资源路径, 分组名, 用户数据 | `T` | 生成实体（自动注册） |
+| `RecycleEntity(entityId)` | 实体 ID | `void` | 回收实体 |
+| `RecycleEntity(entity)` | 实体对象 | `void` | 回收实体 |
+| `RecycleAllEntities(type)` | 类型名 | `void` | 回收指定类型 |
+| `RecycleAllEntities()` | 无 | `void` | 回收所有 |
+| `HideEntityInstance(entity)` | 实体对象 | `void` | 仅隐藏，不回收 |
+| `ShowEntity(entity, userData)` | 实体对象, 用户数据 | `void` | 重新显示已隐藏实体 |
+| `SetEntityVisible(entity, visible, userData)` | 实体对象, 可见性, 用户数据 | `void` | 设置可见性（不回收） |
 | `GetEntity<T>(entityId)` | 实体 ID | `T` | 获取实体 |
 | `GetEntities(type)` | 类型名 | `IReadOnlyList<IEntity>` | 获取所有指定类型 |
 | `GetEntityCount(type)` | 类型名 | `int` | 获取数量 |
 | `HasEntity(entityId)` | 实体 ID | `bool` | 是否存在 |
+| `PauseEntity(entityId)` | 实体 ID | `void` | 暂停单个实体 |
+| `ResumeEntity(entityId)` | 实体 ID | `void` | 恢复单个实体 |
+| `PauseAllEntities()` | 无 | `void` | 暂停所有实体 |
+| `ResumeAllEntities()` | 无 | `void` | 恢复所有实体 |
 
 #### IEntity 接口
 ```csharp
@@ -550,12 +617,17 @@ public interface IEntity
     int Id { get; }
     string EntityType { get; }
     bool IsVisible { get; }
+    bool IsPaused { get; }
     GameObject GameObject { get; }
     
     void OnInit(int id, object userData);
     void OnShow(object userData);
     void OnHide();
+    void OnPause();
+    void OnResume();
+    void OnFixedUpdate(float deltaTime);
     void OnUpdate(float deltaTime);
+    void OnLateUpdate(float deltaTime);
     void OnRecycle();
 }
 ```
@@ -567,13 +639,18 @@ public abstract class EntityBase : MonoBehaviour, IEntity
     public int Id { get; }
     public abstract string EntityType { get; }
     public bool IsVisible { get; }
+    public bool IsPaused { get; }
     protected object UserData { get; }
     
     // 子类重写
     protected virtual void OnEntityInit(object userData) { }
     protected virtual void OnEntityShow(object userData) { }
     protected virtual void OnEntityHide() { }
+    protected virtual void OnEntityPause() { }
+    protected virtual void OnEntityResume() { }
+    protected virtual void OnEntityFixedUpdate(float deltaTime) { }
     protected virtual void OnEntityUpdate(float deltaTime) { }
+    protected virtual void OnEntityLateUpdate(float deltaTime) { }
     protected virtual void OnEntityRecycle() { }
 }
 ```
@@ -582,7 +659,7 @@ public abstract class EntityBase : MonoBehaviour, IEntity
 ```csharp
 public class EnemyEntity : EntityBase
 {
-    public override string EntityType => "Enemy";
+    // EntityType 由 EntityManager 在 Spawn 时注入，无需 override
     
     private int _hp;
     
@@ -606,7 +683,7 @@ public class EnemyEntity : EntityBase
 
 // 使用
 CY.Entity.RegisterEntity("Enemy", enemyPrefab, 20);
-var enemy = CY.Entity.ShowEntity<EnemyEntity>("Enemy", new EnemyData { MaxHp = 100 });
+var enemy = CY.Entity.SpawnEntity<EnemyEntity>("Enemy", new EnemyData { MaxHp = 100 });
 ```
 
 ---
@@ -624,9 +701,18 @@ var enemy = CY.Entity.ShowEntity<EnemyEntity>("Enemy", new EnemyData { MaxHp = 1
 | `GetDataTable<T>(name)` | 表名 | `DataTable<T>` | 获取数据表 |
 | `HasDataTable(name)` | 表名 | `bool` | 是否存在 |
 | `LoadFromCsv<T>(csvText, name, separator)` | CSV 文本, 表名, 分隔符 | `DataTable<T>` | 从 CSV 加载 |
+| `LoadFromJson<T>(jsonText, name)` | JSON 文本, 表名 | `DataTable<T>` | 从 JSON 加载（要求 rows 包装） |
+| `LoadFromJsonObject<T>(jsonText, name)` | JSON 文本, 表名 | `DataTable<T>` | 从 JSON 单对象加载 |
+| `LoadFromJsonObject<T>(jsonText, name, autoFixIdIfZero)` | JSON 文本, 表名, 是否自动补 Id | `DataTable<T>` | 从 JSON 单对象加载（可自动补 Id） |
 | `LoadFromScriptableObject<T, TSO>(so, getter, name)` | SO, 行获取器, 表名 | `DataTable<T>` | 从 SO 加载 |
 | `UnloadDataTable(name)` | 表名 | `void` | 卸载数据表 |
 | `UnloadAllDataTables()` | 无 | `void` | 卸载所有 |
+
+**JSON 说明**：
+- `LoadFromJson<T>()` 使用 `JsonUtility`，JSON 根必须为 `{ "rows": [ ... ] }`（或 `Rows`）。
+- `LoadFromJsonObject<T>()` 使用单对象 JSON：`{ "Id": 1, ... }`。
+- `LoadFromJsonObject<T>(..., autoFixIdIfZero)` 为 `true` 时会尝试自动写入 `Id=1`（仅加载阶段反射）。
+- `T` 的字段名需与 JSON 键一致；属性不会被赋值。
 
 #### IDataRow 接口
 ```csharp
@@ -708,9 +794,15 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 | `Load<T>(string path)` | 资源路径 | `T` | 同步加载 |
 | `LoadAsync<T>(string path, Action<T> callback)` | 路径, 回调 | `void` | 异步加载（回调） |
 | `LoadAsync<T>(string path)` | 路径 | `Task<T>` | 异步加载（Task） |
+| `IsCached(string path)` | 路径 | `bool` | 是否已缓存 |
+| `TryGetCached<T>(string path, out T asset)` | 路径 | `bool` | 尝试从缓存获取（不触发加载） |
+| `TryLoad<T>(string path, out T asset)` | 路径 | `bool` | TryLoad 形态（成功返回 true） |
+| `GetRefCount(string path)` | 路径 | `int` | 获取引用计数（启用时） |
+| `RetainAsset(string path)` | 路径 | `void` | 手动增加引用计数 |
+| `ReleaseAsset(string path)` | 路径 | `void` | 手动减少引用计数 |
 | `Unload(string path)` | 路径 | `void` | 卸载指定资源（仅对缓存条目生效） |
-| `UnloadUnused()` | 无 | `void` | 卸载未使用资源（包装 `Resources.UnloadUnusedAssets`） |
-| `LoadScene(string sceneName, LoadSceneMode mode, Action onComplete)` | 场景名, 模式, 回调 | `void` | 加载场景（同步触发回调） |
+| `UnloadUnused(bool forceGC = false)` | 是否强制 GC | `void` | 卸载未使用资源 |
+| `LoadScene(string sceneName, LoadSceneMode mode, Action onComplete)` | 场景名, 模式, 回调 | `void` | 加载场景（AsyncOperation 完成后回调） |
 | `LoadSceneAsync(string sceneName, LoadSceneMode mode)` | 场景名, 模式 | `AsyncOperation` | 异步加载场景 |
 | `Instantiate(string path, Transform parent = null)` | 路径, 父节点 | `GameObject` | 加载并实例化 |
 | `InstantiateAsync(string path, Action<GameObject> callback, Transform parent = null)` | 路径, 回调, 父节点 | `void` | 异步加载并实例化 |
@@ -728,12 +820,16 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 |------|------|--------|
 | `Get(string url)` | URL | `Task<HttpResponse>` |
 | `Post(string url, string body, string contentType = "application/json")` | URL, Body, ContentType | `Task<HttpResponse>` |
+| `GetJson<T>(string url)` | URL | `Task<T>` |
+| `PostJson<TBody, TResponse>(string url, TBody body)` | URL, Body | `Task<TResponse>` |
 
 #### WebSocket 方法
 | 方法 | 参数 | 返回值 |
 |------|------|--------|
 | `ConnectWebSocket(string url)` | WebSocket URL | `Task` |
 | `SendWebSocket(string message)` | 消息内容 | `void` |
+| `TrySendWebSocket(string message)` | 消息内容 | `bool` |
+| `SendWebSocketOrQueue(string message)` | 消息内容 | `void` |
 | `CloseWebSocket()` | 无 | `void` |
 
 #### 事件
@@ -755,7 +851,22 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 | `Load<T>(string key)` | 键名 | `T` | 加载（不存在返回 `new T()`，`T : SaveDataBase, new()`） |
 | `Exists(string key)` | 键名 | `bool` | 检查是否存在 |
 | `Delete(string key)` | 键名 | `void` | 删除存档 |
-| `SaveAll()` | 无 | `void` | 保存所有缓存（当前为简化实现） |
+| `DefaultSaveKey` | - | `string` | 默认存档 Key |
+| `MaxSaveSlots` | - | `int` | 最大存档槽位数 |
+| `Save<T>(T data)` | 数据 | `bool` | 保存默认存档 |
+| `Load<T>()` | 无 | `T` | 加载默认存档 |
+| `SaveSlot<T>(slotIndex, data)` | 槽位, 数据 | `bool` | 保存指定槽位 |
+| `LoadSlot<T>(slotIndex)` | 槽位 | `T` | 加载指定槽位 |
+| `ExistsSlot(slotIndex)` | 槽位 | `bool` | 槽位是否存在 |
+| `DeleteSlot(slotIndex)` | 槽位 | `void` | 删除槽位 |
+| `TryLoad<T>(key, out data)` | 键名 | `bool` | 尝试加载（不存在不创建） |
+| `LoadOrCreate<T>(key)` | 键名 | `T` | 加载或创建并缓存 |
+| `MarkDirty(key)` | 键名 | `void` | 标记脏数据 |
+| `SaveDirty(key)` | 键名 | `bool` | 保存单个脏数据 |
+| `SaveAllDirty()` | 无 | `void` | 保存所有脏数据 |
+| `SaveAll()` | 无 | `void` | 保存所有缓存 |
+| `ClearCache(key)` | 键名 | `void` | 清理单个缓存 |
+| `ClearAllCache()` | 无 | `void` | 清理所有缓存 |
 | `RegisterMigration(IMigration migration)` | 迁移器 | `void` | 注册版本迁移器链 |
 | `SetCurrentVersion(int version)` | 版本号 | `void` | 设置当前存档版本 |
 
@@ -768,7 +879,7 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 | 方法 | 参数 | 说明 |
 |------|------|------|
 | `PlayBGM(string name, float volume = 1f, bool loop = true)` | 音乐名, 音量, 循环 | 播放背景音乐 |
-| `StopBGM(float fadeOut = 0.5f)` | 淡出时间 | 停止背景音乐 |
+| `StopBGM(float fadeOut = -1f)` | 淡出时间 | 停止背景音乐（< 0 使用配置默认淡出） |
 | `PauseBGM()` | 无 | 暂停 BGM |
 | `ResumeBGM()` | 无 | 恢复 BGM |
 | `PlaySFX(string name, float volume = 1f)` | 音效名, 音量 | 播放音效 |
@@ -776,6 +887,10 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 | `SetBGMVolume(float volume)` | 音量 (0-1) | 设置 BGM 音量 |
 | `SetSFXVolume(float volume)` | 音量 (0-1) | 设置音效音量 |
 | `Mute(bool mute)` | 是否静音 | 静音开关 |
+| `IsMuted` | - | 是否静音 |
+| `PreloadBGM(string name)` | 音乐名 | 预加载 BGM |
+| `PreloadSFX(string name)` | 音效名 | 预加载 SFX |
+| `PreloadAsync(string[] names, Action onComplete)` | 名称数组, 回调 | 批量预加载 |
 
 ---
 
@@ -800,6 +915,12 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `Open<T>(object data = null)` | 传递数据 | `T` | 打开面板 |
+| `Open<T, TData>(in TData data)` | 强类型数据 | `T` | 打开面板（无装箱） |
+| `OpenOnLayer<T>(UILayer layer, object data = null, int siblingIndex = -1)` | 层级, 数据, 顺序 | `T` | 指定层级打开 |
+| `OpenOnCustomLayer<T>(string layerName, int sortOrder, object data = null, int siblingIndex = -1)` | 自定义层, 排序, 数据, 顺序 | `T` | 指定自定义层打开 |
+| `OpenOnLayer<T, TData>(UILayer layer, in TData data, int siblingIndex = -1)` | 层级, 强类型数据, 顺序 | `T` | 指定层级打开（无装箱） |
+| `OpenOnCustomLayer<T, TData>(string layerName, int sortOrder, in TData data, int siblingIndex = -1)` | 自定义层, 排序, 强类型数据, 顺序 | `T` | 指定自定义层打开（无装箱） |
+| `OpenAsync<T>(Action<T> onOpened, object data = null)` | 回调, 数据 | `void` | 异步打开面板 |
 | `Close<T>()` | 无 | `void` | 关闭指定面板 |
 | `Close(Type panelType)` | 面板类型 | `void` | 按类型关闭 |
 | `Close(UIPanel panel)` | 面板实例 | `void` | 关闭面板实例 |
@@ -810,7 +931,11 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 | `IsOpened<T>()` | 无 | `bool` | 检查面板是否已打开 |
 | `Preload<T>()` | 无 | `void` | 预加载面板 |
 | `ShowToast(string msg, float duration = 2f)` | 消息, 时长 | `void` | 显示 Toast |
+| `ShowSuccess(string msg)` | 消息 | `void` | 显示成功提示 |
+| `ShowError(string msg)` | 消息 | `void` | 显示错误提示 |
+| `ShowWarning(string msg)` | 消息 | `void` | 显示警告提示 |
 | `ShowConfirm(string title, string content, Action onConfirm, Action onCancel)` | 标题, 内容, 回调 | `void` | 确认对话框 |
+| `ShowAlert(string title, string content, Action onConfirm)` | 标题, 内容, 回调 | `void` | 提示对话框 |
 
 **UILayer 枚举**:
 | 值 | 数值 | 说明 |
@@ -844,8 +969,17 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 |------|------|
 | `OnBindUI()` | 绑定 UI 事件（按钮点击等） |
 | `OnUnbindUI()` | 解绑 UI 事件 |
-| `OnShow(object data)` | 面板显示时调用【必须实现】 |
-| `OnHide()` | 面板隐藏时调用 |
+| `OnInit(object userData)` | 面板初始化（每次打开/从对象池取出都会调用） |
+| `OnOpen(object userData)` | 面板打开时调用 |
+| `OnClose(bool isShutdown, object userData)` | 面板关闭时调用 |
+| `OnShow()` | 从隐藏状态恢复显示时调用 |
+| `OnHide()` | 面板隐藏（不关闭）时调用 |
+| `OnRefresh(object userData)` | 已打开状态下再次 Open 时调用 |
+| `OnPause()` | 被新面板覆盖时调用 |
+| `OnResume()` | 覆盖面板关闭后恢复时调用 |
+| `OnUpdate(float elapseSeconds, float realElapseSeconds)` | 每帧更新（逻辑/真实时间） |
+| `OnLateUpdate(float elapseSeconds, float realElapseSeconds)` | 延迟更新 |
+| `OnRecycle()` | 回收到对象池时调用 |
 
 **公开方法**:
 | 方法 | 说明 |
@@ -899,6 +1033,16 @@ public class MyPanel : UIPanel { }
 | `ReplaceAll(IEnumerable<T>)` | 替换所有 |
 | `Sort(Comparison<T>)` | 排序 |
 
+#### Typed MVVM（高频 UI 推荐）
+
+**命名空间**: `CYFramework.Core.UI.MVVM`
+
+| 类型 | 说明 |
+|------|------|
+| `ObservableProperty<T>` | 无装箱可观察属性（高频刷新用） |
+| `TypedViewModel` | 高性能 ViewModel 基类（配合 ObservableProperty） |
+| `TypedMVVMPanel<TViewModel>` | 强类型 MVVM 面板基类 |
+
 ---
 
 ### 3.4 通用 UI 组件
@@ -907,12 +1051,13 @@ public class MyPanel : UIPanel { }
 
 **命名空间**: `CYFramework.Core.UI.Components`
 
-| 静态方法 | 参数 | 说明 |
-|----------|------|------|
+| 方法 | 参数 | 说明 |
+|------|------|------|
 | `Show(string content, float duration = 2f)` | 内容, 时长 | 普通提示 |
 | `ShowSuccess(string content)` | 内容 | 成功提示（绿色） |
 | `ShowError(string content)` | 内容 | 错误提示（红色） |
 | `ShowWarning(string content)` | 内容 | 警告提示（黄色） |
+| `ClearAll()` | 无 | 清空所有 Toast（实例方法） |
 
 #### UIDialog（对话框）
 
@@ -948,6 +1093,9 @@ public class MyPanel : UIPanel { }
 | `RemoveItem(int index)` | 索引 | 移除项 |
 | `Clear()` | 无 | 清空列表 |
 | `GetItem(int index)` | 索引 | 获取项 |
+| `ScrollToIndex(int index, bool animated = true)` | 索引, 是否动画 | 滚动到指定项 |
+| `ScrollToTop(bool animated = true)` | 是否动画 | 滚动到顶部 |
+| `ScrollToBottom(bool animated = true)` | 是否动画 | 滚动到底部 |
 
 **事件**:
 | 事件 | 参数 | 说明 |

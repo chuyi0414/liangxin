@@ -1,2 +1,0 @@
-Id,Code,Name,Hp,MoveSpeed,Attack,AttackSpeed,Range,AttackType,ProjectilePath,CommandRange,CommandRangeGrowth,RespawnTime,GoldLossPercent,ConscienceLoss,PickupRange,PrefabPath,PortraitPath
-1,Player01,良心老板,200,4,5,1,6,1,Prefabs/Entities/Projectiles/PlayerBullet,3,1,3,0.2,30,2,Prefabs/Units/Player/GoodBoss,Portraits/Units/Player/GoodBoss

@@ -1,7 +1,0 @@
-Key,ValueInt,ValueFloat,ValueString,Description
-InitGold,1000,0,,初始资金
-InitCompanyConscience,100,0,,初始公司良心(状态)
-InitConscienceResource,0,0,,初始良心资源(货币)
-InitDarkHeart,0,0,,初始黑心资源(货币)
-MaxConscience,100,0,,公司良心上限
-MaxCompanyCorruption,100,0,,公司黑心上限

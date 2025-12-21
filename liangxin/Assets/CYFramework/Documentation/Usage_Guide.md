@@ -274,6 +274,37 @@ Unity 游戏循环
 
 ---
 
+### 3.4 框架核心服务优先级参考（以代码为准）
+
+以下数值来自 `Assets/CYFramework/Runtime/Core` 的源码。规则：**数值小的先执行**，`DisposeOrder` **数值大的先销毁**。未实现对应接口的服务以 `-` 标记。
+
+| 服务 | InitOrder | TickOrder | UpdateOrder | LateUpdateOrder | DisposeOrder | 源文件 |
+|------|-----------|-----------|-------------|-----------------|--------------|--------|
+| EventBus | -100 | -100 | - | - | 100 | `Assets/CYFramework/Runtime/Core/Event/EventBus.cs` |
+| ConfigLoader | -50 | - | - | - | 50 | `Assets/CYFramework/Runtime/Core/Config/ConfigLoader.cs` |
+| TimerManager | -50 | - | -100 | - | - | `Assets/CYFramework/Runtime/Core/Timer/TimerManager.cs` |
+| ProcedureManager | -30 | - | -50 | - | - | `Assets/CYFramework/Runtime/Core/Procedure/ProcedureManager.cs` |
+| PoolManager | 0 | - | 50 | - | 0 | `Assets/CYFramework/Runtime/Core/Pool/ObjectPool.cs` |
+| NetworkService | 10 | 10 | - | - | 10 | `Assets/CYFramework/Runtime/Core/Network/NetworkService.cs` |
+| FSMManager | 10 | - | 50 | - | 10 | `Assets/CYFramework/Runtime/Core/FSM/FSM.cs` |
+| SaveService | 20 | - | 20 | - | 20 | `Assets/CYFramework/Runtime/Core/Save/SaveService.cs` |
+| SceneLoader | 20 | - | - | - | 20 | `Assets/CYFramework/Runtime/Core/Scene/SceneLoader.cs` |
+| AudioService | 30 | - | 100 | - | 30 | `Assets/CYFramework/Runtime/Core/Audio/AudioService.cs` |
+| HotUpdateService | 40 | - | - | - | 40 | `Assets/CYFramework/Runtime/Core/HotUpdate/HotUpdateService.cs` |
+| UIManager | 50 | - | 100 | 100 | 50 | `Assets/CYFramework/Runtime/Core/UI/UIManager.cs` |
+| EntityManager | 60 | 0 | 0 | 0 | 0 | `Assets/CYFramework/Runtime/Core/Entity/EntityManager.cs` |
+
+**建议（需要“晚于框架核心服务”时）**：
+| 类型 | 推荐值 | 说明 |
+|------|--------|------|
+| `InitOrder` | `>= 100` | 晚于 UI(50)/Entity(60) 的初始化 |
+| `TickOrder` | `>= 50` | 晚于 EventBus(-100)/Entity(0)/Network(10) 的 Tick |
+| `UpdateOrder` | `>= 200` | 晚于 Timer(-100)/Procedure(-50)/Entity(0)/UI(100)/Audio(100) |
+| `LateUpdateOrder` | `>= 200` | 晚于 Entity(0)/UI(100) 的 LateUpdate |
+| `DisposeOrder` | `<= -100` | **注意销毁是“数值大的先销毁”**，要最后销毁请用更小的值 |
+
+---
+
 ## 4. 第一步：让框架跑起来
 
 ### 4.1 准备工作
@@ -389,7 +420,7 @@ public class MyGame : MonoBehaviour
         CY.Timer.Loop(1f, () => CY.LogInfo("每秒执行一次"));
         
         // 流程切换
-        CY.Procedure.Change<BattleProcedure>();
+        CY.Procedure.ChangeProcedure<BattleProcedure>();
     }
     
     void OnDestroy()
@@ -928,14 +959,17 @@ fsm.Start(PlayerState.Idle);
 ### 11.3 完整 API
 
 ```csharp
-// 显示实体
-var enemy = CY.Entity.ShowEntity<Enemy>("Enemy", enemyData);
+// 生成实体
+var enemy = CY.Entity.SpawnEntity<Enemy>("Enemy", enemyData);
 
-// 隐藏实体
-CY.Entity.HideEntity(enemy.Id);
-CY.Entity.HideEntity(enemy);
-CY.Entity.HideAllEntities("Enemy");  // 隐藏所有敌人
-CY.Entity.HideAllEntities();         // 隐藏全部
+// 仅隐藏（不回收）
+CY.Entity.HideEntityInstance(enemy);
+
+// 回收到池
+CY.Entity.RecycleEntity(enemy.Id);
+CY.Entity.RecycleEntity(enemy);
+CY.Entity.RecycleAllEntities("Enemy");  // 回收所有敌人
+CY.Entity.RecycleAllEntities();         // 回收全部
 
 // 暂停/恢复 - 单个
 CY.Entity.PauseEntity(entityId);
@@ -961,7 +995,7 @@ bool exists = CY.Entity.HasEntity(entityId);
 ```csharp
 public class Enemy : EntityBase
 {
-    public override string EntityType => "Enemy";
+    // EntityType 由 EntityManager 在 Spawn 时注入，无需 override
     
     private float _speed = 5f;
     private Animator _animator;
@@ -1007,7 +1041,7 @@ public class Enemy : EntityBase
 
 ## 12. 数据表系统详解
 
-数据表用于管理“只读配置”（怪物、道具、技能、关卡等）。框架提供 `DataTableManager`，支持从 CSV 文本加载。
+数据表用于管理“只读配置”（怪物、道具、技能、关卡等）。框架提供 `DataTableManager`，支持从 CSV / ScriptableObject / JSON 文本加载（JSON 支持 rows 包装和单对象）。
 
 ### 12.1 定义数据行（必须实现 IDataRow）
 
@@ -1043,6 +1077,15 @@ using UnityEngine;
 var csvText = Resources.Load<TextAsset>("Config/Monster").text;
 CY.Data.LoadFromCsv<MonsterRow>(csvText);
 
+// 从 JSON 文本加载（JSON 必须使用 rows 包装）
+var jsonText = Resources.Load<TextAsset>("Config/MonsterJson").text;
+CY.Data.LoadFromJson<MonsterRow>(jsonText);
+
+// 从 JSON 单对象加载（不需要 rows 包装）
+var jsonSingle = Resources.Load<TextAsset>("Config/MonsterSingle").text;
+CY.Data.LoadFromJsonObject<MonsterRow>(jsonSingle);
+CY.Data.LoadFromJsonObject<MonsterRow>(jsonSingle, autoFixIdIfZero: true);
+
 // 读取数据
 var table = CY.Data.GetDataTable<MonsterRow>();
 var monster = table.GetRow(1001);
@@ -1051,6 +1094,26 @@ if (monster != null)
     CYLog.Info($"怪物：{monster.Name} HP={monster.Hp} Speed={monster.Speed}");
 }
 ```
+
+**JSON 格式要求**（JsonUtility 不支持根数组）：
+```json
+{
+  "rows": [
+    { "Id": 1001, "Name": "Slime", "Hp": 30, "Speed": 1.2 }
+  ]
+}
+```
+
+**JSON 单对象示例**：
+```json
+{ "Id": 1, "Name": "OnlyOne", "Hp": 10, "Speed": 1.0 }
+```
+
+**JSON 注意事项**：
+- `LoadFromJson<T>()` 使用 `JsonUtility`，字段名大小写需与 JSON 键一致。
+- 若你使用属性（get/set）而非字段，`JsonUtility` 不会赋值；请改用 public 字段，或自行做反序列化后再 `AddRow`。
+- `LoadFromJsonObject<T>()` 仍然需要 `Id`（DataTable 以 `Id` 作为唯一键）。
+- `LoadFromJsonObject<T>(..., autoFixIdIfZero)` 可自动补 `Id=1`（仅加载阶段反射）。
 
 ### 12.3 条件查询（注意 GC）
 
@@ -1329,10 +1392,10 @@ public class MainMenuPanel : UIPanel
     }
     
     /// <summary>
-    /// 面板显示时调用
+    /// 面板打开时调用
     /// 在这里初始化数据、刷新 UI
     /// </summary>
-    protected override void OnShow(object data)
+    protected override void OnOpen(object userData)
     {
         // 显示版本号
         _versionText.text = $"v{Application.version}";
@@ -1343,10 +1406,10 @@ public class MainMenuPanel : UIPanel
     }
     
     /// <summary>
-    /// 面板隐藏时调用
+    /// 面板关闭时调用
     /// 在这里清理状态
     /// </summary>
-    protected override void OnHide()
+    protected override void OnClose(bool isShutdown, object userData)
     {
         // 可以在这里做清理工作
     }
@@ -1425,9 +1488,9 @@ var data = new ShopPanelData
 uiManager.Open<ShopPanel>(data);
 
 // 在 ShopPanel 中接收
-protected override void OnShow(object data)
+protected override void OnOpen(object userData)
 {
-    var shopData = data as ShopPanelData;
+    var shopData = userData as ShopPanelData;
     if (shopData != null)
     {
         _goldText.text = shopData.PlayerGold.ToString();
@@ -1601,7 +1664,7 @@ public class PlayerInfoPanel : MVVMPanel<PlayerInfoViewModel>
     [SerializeField] private Text _hpText;
     [SerializeField] private Text _goldText;
     
-    protected override void OnShow(object data)
+    protected override void OnOpen(object userData)
     {
         // 初始刷新
         RefreshAll();
@@ -1657,6 +1720,57 @@ var panel = uiManager.Get<PlayerInfoPanel>();
 panel.ViewModel.Gold += 100;  // 金币显示自动刷新
 panel.ViewModel.Level++;       // 等级显示自动刷新
 panel.ViewModel.HP -= 20;      // 血条自动刷新
+```
+
+### 13.8 Typed MVVM（高频 UI 推荐）
+
+> 高刷 UI（血条/倒计时/战斗 HUD）建议使用 Typed MVVM，避免 ViewModel 的 object 装箱。
+
+```csharp
+using CYFramework.Core.UI.MVVM;
+using UnityEngine;
+using UnityEngine.UI;
+
+public sealed class BattleHudViewModel : TypedViewModel
+{
+    public readonly ObservableProperty<int> HP = new ObservableProperty<int>("HP", 100);
+    public readonly ObservableProperty<int> MaxHP = new ObservableProperty<int>("MaxHP", 100);
+}
+
+public sealed class BattleHudPanel : TypedMVVMPanel<BattleHudViewModel>
+{
+    [SerializeField] private Slider _hpBar;
+
+    protected override void OnBindViewModel()
+    {
+        // 订阅属性变化（注意：OnUnbindViewModel 中要解除订阅）
+        ViewModel.HP.Subscribe(OnHpChanged);
+        ViewModel.MaxHP.Subscribe(OnMaxHpChanged);
+        RefreshHP();
+    }
+
+    protected override void OnUnbindViewModel()
+    {
+        ViewModel.HP.Unsubscribe(OnHpChanged);
+        ViewModel.MaxHP.Unsubscribe(OnMaxHpChanged);
+    }
+
+    private void OnHpChanged(ref ObservableProperty<int>.ChangedEventArgs args)
+    {
+        RefreshHP();
+    }
+
+    private void OnMaxHpChanged(ref ObservableProperty<int>.ChangedEventArgs args)
+    {
+        RefreshHP();
+    }
+
+    private void RefreshHP()
+    {
+        int max = ViewModel.MaxHP.Value;
+        _hpBar.value = max > 0 ? (float)ViewModel.HP.Value / max : 0f;
+    }
+}
 ```
 
 ---
@@ -2289,7 +2403,7 @@ public static class ProjectNetwork
 {
     public static async Task FetchConfigAsync()
     {
-        var resp = await CY.HttpGet("https://example.com/config.json");
+        var resp = await CY.Network.Get("https://example.com/config.json");
         if (resp == null || !resp.IsSuccess)
         {
             CYLog.Warning($"[Net] FetchConfig 失败: {(resp == null ? "null" : resp.Error)}");

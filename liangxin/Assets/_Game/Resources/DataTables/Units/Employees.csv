@@ -1,4 +1,0 @@
-Id,Code,JobTitle,Department,Lv1Desc,Lv2Desc,Lv5Task,Lv5Ultimate,Hp,Attack,AttackSpeed,MoveSpeed,Range,RecruitCost,UpgradeCostLv2,UpgradeCostLv3,UpgradeCostLv4,Lv1SkillId,Lv2SkillId,Lv5SkillId,PrefabPath,PortraitPath
-1,F01,金牌骑手,1,徒步狂奔：车坏了没钱修只能靠双腿跑,电动车冲锋：每3秒发起一次长距离冲撞,保持最高速冲刺60秒不停,千手配送：身后生成3个分身继续冲撞敌人,100,10,1,5,1.5,50,100,200,400,skill_rider_lv1,skill_rider_lv2,skill_rider_lv5,Prefabs/Units/Employees/Rider,Portraits/Units/Employees/Rider
-2,F02,网约车司机,1,手机照明：只能用手机闪光灯晃敌人眼,远光灯改造：每5秒开启远光灯使敌人命中率为0,搭载队友累计行驶5000米,拼车专线：车内塞进3名队友无敌可攻击,120,8,0.8,4,2,60,120,220,420,skill_driver_lv1,skill_driver_lv2,skill_driver_lv5,Prefabs/Units/Employees/Driver,Portraits/Units/Employees/Driver
-3,F03,环卫工人,1,破扫把：工具老旧只能单体拍打,工业高压枪：每4秒喷射水流推开敌人5米,清除100个污秽地块,垃圾分类：将小怪吸入打包射出造成中毒,110,12,0.9,3,1,55,110,210,410,skill_cleaner_lv1,skill_cleaner_lv2,skill_cleaner_lv5,Prefabs/Units/Employees/Cleaner,Portraits/Units/Employees/Cleaner

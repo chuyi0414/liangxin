@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using CYFramework.Infrastructure;
 using UnityEngine;
@@ -246,6 +247,120 @@ namespace CYFramework.Core.DataTable
             CYLog.Info($"[DataTableManager] 加载数据表: {name}, 行数: {dataTable.Count}");
             return dataTable;
         }
+
+        /// <summary>
+        /// 从 JSON 文本加载数据表（要求外层为 rows/Rows 数组包装）。
+        /// </summary>
+        /// <remarks>
+        /// JsonUtility 不支持根数组，因此 JSON 必须为：{ "rows": [ { ... }, ... ] }
+        /// T 需可被 JsonUtility 反序列化（建议加 [Serializable]，字段使用 public 或 [SerializeField]）。
+        /// </remarks>
+        public DataTable<T> LoadFromJson<T>(string jsonText, string name = null) where T : class, IDataRow, new()
+        {
+            var dataTable = CreateDataTable<T>(name);
+
+            if (string.IsNullOrEmpty(jsonText))
+            {
+                CYLog.Warning($"[DataTableManager] JSON 为空，加载失败: {name ?? typeof(T).Name}");
+                return dataTable;
+            }
+
+            JsonTableWrapper<T> wrapper;
+            try
+            {
+                wrapper = JsonUtility.FromJson<JsonTableWrapper<T>>(jsonText);
+            }
+            catch (Exception ex)
+            {
+                CYLog.Error($"[DataTableManager] 解析 JSON 失败: {name ?? typeof(T).Name} - {ex.Message}");
+                return dataTable;
+            }
+
+            var rows = wrapper?.rows ?? wrapper?.Rows;
+            if (rows == null || rows.Count == 0)
+            {
+                CYLog.Warning($"[DataTableManager] JSON rows 为空: {name ?? typeof(T).Name}");
+                return dataTable;
+            }
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                if (row == null)
+                {
+                    continue;
+                }
+                dataTable.AddRow(row);
+            }
+
+            CYLog.Info($"[DataTableManager] 加载数据表(JSON): {name ?? typeof(T).Name}, 行数: {dataTable.Count}");
+            return dataTable;
+        }
+
+        /// <summary>
+        /// 从 JSON 单对象加载数据表（不需要 rows 包装）。
+        /// </summary>
+        /// <remarks>
+        /// JsonUtility 不支持根数组，但支持单对象：{ "Id": 1, ... }。
+        /// T 需可被 JsonUtility 反序列化（建议加 [Serializable]，字段使用 public 或 [SerializeField]）。
+        /// </remarks>
+        public DataTable<T> LoadFromJsonObject<T>(string jsonText, string name = null) where T : class, IDataRow, new()
+        {
+            return LoadFromJsonObject<T>(jsonText, name, autoFixIdIfZero: false);
+        }
+
+        /// <summary>
+        /// 从 JSON 单对象加载数据表（不需要 rows 包装，可选自动补 Id）。
+        /// </summary>
+        /// <remarks>
+        /// autoFixIdIfZero=true 时会尝试通过反射写入 Id（仅发生在加载阶段）。
+        /// </remarks>
+        public DataTable<T> LoadFromJsonObject<T>(string jsonText, string name, bool autoFixIdIfZero) where T : class, IDataRow, new()
+        {
+            var dataTable = CreateDataTable<T>(name);
+
+            if (string.IsNullOrEmpty(jsonText))
+            {
+                CYLog.Warning($"[DataTableManager] JSON 为空，加载失败: {name ?? typeof(T).Name}");
+                return dataTable;
+            }
+
+            T row;
+            try
+            {
+                row = JsonUtility.FromJson<T>(jsonText);
+            }
+            catch (Exception ex)
+            {
+                CYLog.Error($"[DataTableManager] 解析 JSON 单对象失败: {name ?? typeof(T).Name} - {ex.Message}");
+                return dataTable;
+            }
+
+            if (row == null)
+            {
+                CYLog.Warning($"[DataTableManager] JSON 单对象为空: {name ?? typeof(T).Name}");
+                return dataTable;
+            }
+
+            if (row.Id == 0)
+            {
+                if (autoFixIdIfZero)
+                {
+                    if (!TrySetRowId(row, 1))
+                    {
+                        CYLog.Warning($"[DataTableManager] JSON 单对象 Id=0，且自动补 Id 失败: {name ?? typeof(T).Name}");
+                    }
+                }
+                else
+                {
+                    CYLog.Warning($"[DataTableManager] JSON 单对象 Id=0，建议手动设置唯一 Id: {name ?? typeof(T).Name}");
+                }
+            }
+
+            dataTable.AddRow(row);
+            CYLog.Info($"[DataTableManager] 加载数据表(JSON 单对象): {name ?? typeof(T).Name}, 行数: {dataTable.Count}");
+            return dataTable;
+        }
         
         /// <summary>
         /// 从 ScriptableObject 加载数据表
@@ -293,6 +408,46 @@ namespace CYFramework.Core.DataTable
         
         private readonly StringBuilder _csvParseBuffer = new StringBuilder(256);
         private readonly List<string> _csvParseResult = new List<string>(32);
+
+        [Serializable]
+        private class JsonTableWrapper<T>
+        {
+            public List<T> rows;
+            public List<T> Rows;
+        }
+
+        /// <summary>
+        /// 尝试写入行 Id（仅在加载阶段使用反射，避免运行时开销）。
+        /// </summary>
+        private static bool TrySetRowId<T>(T row, int id) where T : class
+        {
+            var type = row.GetType();
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+            var field = type.GetField("Id", flags) ?? type.GetField("id", flags);
+            if (field != null && field.FieldType == typeof(int))
+            {
+                field.SetValue(row, id);
+                return true;
+            }
+
+            var prop = type.GetProperty("Id", flags) ?? type.GetProperty("id", flags);
+            if (prop != null && prop.PropertyType == typeof(int) && prop.CanWrite)
+            {
+                prop.SetValue(row, id);
+                return true;
+            }
+
+            // 兼容自动属性的后备字段
+            field = type.GetField("<Id>k__BackingField", flags) ?? type.GetField("<id>k__BackingField", flags);
+            if (field != null && field.FieldType == typeof(int))
+            {
+                field.SetValue(row, id);
+                return true;
+            }
+
+            return false;
+        }
         
         /// <summary>
         /// 解析 CSV 行（使用 StringBuilder 降低 GC）
