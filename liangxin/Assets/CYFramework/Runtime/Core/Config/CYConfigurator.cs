@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // CYFramework 2.2 - 运行时配置器
 // 功能：挂载到 CYFramework 预制体上，提供可视化配置
 // ============================================================================
@@ -19,49 +19,94 @@ namespace CYFramework.Core.Config
     public class CYConfigurator : MonoBehaviour
     {
         [Header("框架配置文件")]
+        /// <summary>
+        /// 引用 ScriptableObject 配置文件，留空则使用默认配置
+        /// </summary>
         [Tooltip("引用 ScriptableObject 配置文件，留空则使用默认配置")]
+        /// <summary>
+        /// 框架配置资产
+        /// </summary>
         public CYFrameworkConfig ConfigAsset;
         
         [Header("=== 或使用内联配置 ===")]
         [Space(10)]
         
         [Header("框架启动")]
+        /// <summary>
+        /// 启动配置
+        /// </summary>
         public BootstrapConfig Bootstrap = new();
         
         [Header("日志")]
+        /// <summary>
+        /// 日志配置
+        /// </summary>
         public LogServiceConfig Log = new();
         
         [Header("音频")]
+        /// <summary>
+        /// 音频配置
+        /// </summary>
         public AudioConfig Audio = new();
         
         [Header("UI")]
+        /// <summary>
+        /// UI 配置
+        /// </summary>
         public UIManagerConfig UI = new();
         
         [Header("网络")]
+        /// <summary>
+        /// 网络配置
+        /// </summary>
         public NetworkServiceConfig Network = new();
         
         [Header("存档")]
+        /// <summary>
+        /// 存档配置
+        /// </summary>
         public SaveServiceConfig Save = new();
         
         [Header("热更新")]
+        /// <summary>
+        /// 热更新配置
+        /// </summary>
         public HotUpdateServiceConfig HotUpdate = new();
         
         [Header("对象池")]
+        /// <summary>
+        /// 对象池配置
+        /// </summary>
         public PoolManagerConfig Pool = new();
         
         [Header("实体")]
+        /// <summary>
+        /// 实体配置
+        /// </summary>
         public EntityManagerConfig Entity = new();
         
         [Header("资源")]
+        /// <summary>
+        /// 资源配置
+        /// </summary>
         public ResourceLoaderConfig Resource = new();
         
         [Header("计时器")]
+        /// <summary>
+        /// 计时器配置
+        /// </summary>
         public TimerManagerConfig Timer = new();
         
         [Header("流程")]
+        /// <summary>
+        /// 流程配置
+        /// </summary>
         public ProcedureManagerConfig Procedure = new();
         
         [Header("调试")]
+        /// <summary>
+        /// 调试配置
+        /// </summary>
         public DebugToolsConfig Debug = new();
         
         /// <summary>
@@ -69,7 +114,7 @@ namespace CYFramework.Core.Config
         /// </summary>
         public T GetConfig<T>() where T : class
         {
-            var type = typeof(T);
+            var type = typeof(T); // 目标类型
             
             if (type == typeof(BootstrapConfig))
                 return (ConfigAsset != null ? ConfigAsset.Bootstrap : Bootstrap) as T;
@@ -106,6 +151,9 @@ namespace CYFramework.Core.Config
         /// </summary>
         public static CYConfigurator Instance { get; private set; }
         
+        /// <summary>
+        /// Unity Awake
+        /// </summary>
         private void Awake()
         {
             if (Instance == null)
@@ -114,6 +162,9 @@ namespace CYFramework.Core.Config
             }
         }
         
+        /// <summary>
+        /// Unity OnDestroy
+        /// </summary>
         private void OnDestroy()
         {
             if (Instance == this)

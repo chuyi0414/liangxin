@@ -55,20 +55,62 @@ namespace CYFramework.Core.Entity
     /// </summary>
     public interface IEntity
     {
+        /// <summary>
+        /// 实体唯一 ID（由 EntityManager 分配）
+        /// </summary>
         int Id { get; }
+        /// <summary>
+        /// 实体类型标识（通常是注册时的 Key）
+        /// </summary>
         string EntityType { get; }
+        /// <summary>
+        /// 实体是否可见
+        /// </summary>
         bool IsVisible { get; }
+        /// <summary>
+        /// 实体是否暂停
+        /// </summary>
         bool IsPaused { get; }
+        /// <summary>
+        /// 实体对应的 GameObject
+        /// </summary>
         GameObject GameObject { get; }
         
+        /// <summary>
+        /// 初始化实体
+        /// </summary>
         void OnInit(int id, object userData);
+        /// <summary>
+        /// 显示实体
+        /// </summary>
         void OnShow(object userData);
+        /// <summary>
+        /// 隐藏实体
+        /// </summary>
         void OnHide();
+        /// <summary>
+        /// 暂停实体
+        /// </summary>
         void OnPause();
+        /// <summary>
+        /// 恢复实体
+        /// </summary>
         void OnResume();
+        /// <summary>
+        /// 固定帧更新
+        /// </summary>
         void OnFixedUpdate(float deltaTime);
+        /// <summary>
+        /// 每帧更新
+        /// </summary>
         void OnUpdate(float deltaTime);
+        /// <summary>
+        /// 延迟更新
+        /// </summary>
         void OnLateUpdate(float deltaTime);
+        /// <summary>
+        /// 回收实体
+        /// </summary>
         void OnRecycle();
     }
     
@@ -77,23 +119,51 @@ namespace CYFramework.Core.Entity
     /// </summary>
     public abstract class EntityBase : MonoBehaviour, IEntity, IPoolable
     {
+        /// <summary>
+        /// 实体唯一 ID
+        /// </summary>
         public int Id { get; private set; }
         
+        /// <summary>
+        /// 实体类型标识
+        /// </summary>
         private string _entityType;
+        /// <summary>
+        /// 实体类型标识（可由子类保护性设置）
+        /// </summary>
         public string EntityType 
         { 
             get => _entityType; 
+            // 保护性设置
             protected set => _entityType = value; 
         }
 
+        /// <summary>
+        /// 设置实体类型标识（供管理器注入）
+        /// </summary>
         public void SetEntityType(string type) => _entityType = type;
 
+        /// <summary>
+        /// 实体是否可见
+        /// </summary>
         public bool IsVisible { get; private set; }
+        /// <summary>
+        /// 实体是否暂停
+        /// </summary>
         public bool IsPaused { get; private set; }
+        /// <summary>
+        /// 实体对应的 GameObject
+        /// </summary>
         public GameObject GameObject => gameObject;
         
+        /// <summary>
+        /// 用户数据缓存
+        /// </summary>
         protected object UserData { get; private set; }
         
+        /// <summary>
+        /// 初始化实体
+        /// </summary>
         public void OnInit(int id, object userData)
         {
             Id = id;
@@ -102,6 +172,9 @@ namespace CYFramework.Core.Entity
             OnEntityInit(userData);
         }
         
+        /// <summary>
+        /// 显示实体
+        /// </summary>
         public void OnShow(object userData)
         {
             UserData = userData;
@@ -111,6 +184,9 @@ namespace CYFramework.Core.Entity
             OnEntityShow(userData);
         }
         
+        /// <summary>
+        /// 隐藏实体
+        /// </summary>
         public void OnHide()
         {
             IsVisible = false;
@@ -118,6 +194,9 @@ namespace CYFramework.Core.Entity
             gameObject.SetActive(false);
         }
         
+        /// <summary>
+        /// 暂停实体
+        /// </summary>
         public void OnPause()
         {
             if (IsPaused) return;
@@ -125,6 +204,9 @@ namespace CYFramework.Core.Entity
             OnEntityPause();
         }
         
+        /// <summary>
+        /// 恢复实体
+        /// </summary>
         public void OnResume()
         {
             if (!IsPaused) return;
@@ -132,6 +214,9 @@ namespace CYFramework.Core.Entity
             OnEntityResume();
         }
         
+        /// <summary>
+        /// 固定帧更新
+        /// </summary>
         public void OnFixedUpdate(float deltaTime)
         {
             if (IsVisible && !IsPaused)
@@ -140,6 +225,9 @@ namespace CYFramework.Core.Entity
             }
         }
         
+        /// <summary>
+        /// 每帧更新
+        /// </summary>
         public void OnUpdate(float deltaTime)
         {
             if (IsVisible && !IsPaused)
@@ -148,6 +236,9 @@ namespace CYFramework.Core.Entity
             }
         }
         
+        /// <summary>
+        /// 延迟更新
+        /// </summary>
         public void OnLateUpdate(float deltaTime)
         {
             if (IsVisible && !IsPaused)
@@ -156,6 +247,9 @@ namespace CYFramework.Core.Entity
             }
         }
         
+        /// <summary>
+        /// 回收实体
+        /// </summary>
         public void OnRecycle()
         {
             OnEntityRecycle();
@@ -165,18 +259,51 @@ namespace CYFramework.Core.Entity
         }
         
         // IPoolable
+        /// <summary>
+        /// 对象池生成回调
+        /// </summary>
         public void OnSpawn() { }
+        /// <summary>
+        /// 对象池回收回调
+        /// </summary>
         public void OnDespawn() => OnRecycle();
         
         // 子类重写
+        /// <summary>
+        /// 实体初始化（子类重写）
+        /// </summary>
         protected virtual void OnEntityInit(object userData) { }
+        /// <summary>
+        /// 实体显示（子类重写）
+        /// </summary>
         protected virtual void OnEntityShow(object userData) { }
+        /// <summary>
+        /// 实体隐藏（子类重写）
+        /// </summary>
         protected virtual void OnEntityHide() { }
+        /// <summary>
+        /// 实体暂停（子类重写）
+        /// </summary>
         protected virtual void OnEntityPause() { }   // 实体暂停（暂停动画/特效）
+        /// <summary>
+        /// 实体恢复（子类重写）
+        /// </summary>
         protected virtual void OnEntityResume() { }  // 实体恢复
+        /// <summary>
+        /// 固定帧更新（子类重写）
+        /// </summary>
         protected virtual void OnEntityFixedUpdate(float deltaTime) { }  // 物理/AI 逻辑
+        /// <summary>
+        /// 每帧更新（子类重写）
+        /// </summary>
         protected virtual void OnEntityUpdate(float deltaTime) { }       // 常规更新
+        /// <summary>
+        /// 延迟更新（子类重写）
+        /// </summary>
         protected virtual void OnEntityLateUpdate(float deltaTime) { }   // 相机跟随等
+        /// <summary>
+        /// 实体回收（子类重写）
+        /// </summary>
         protected virtual void OnEntityRecycle() { }
     }
     
@@ -185,9 +312,21 @@ namespace CYFramework.Core.Entity
     /// </summary>
     public class EntityInfo
     {
+        /// <summary>
+        /// 实体类型标识
+        /// </summary>
         public string EntityType;
+        /// <summary>
+        /// 实体预制体
+        /// </summary>
         public GameObject Prefab;
+        /// <summary>
+        /// 预加载数量
+        /// </summary>
         public int PreloadCount;
+        /// <summary>
+        /// 实体父节点
+        /// </summary>
         public Transform Parent;
     }
     
@@ -196,15 +335,42 @@ namespace CYFramework.Core.Entity
     /// </summary>
     public class EntityManager : IInitializable, ITickable, IUpdateable, ILateUpdateable, IDisposableEx
     {
+        /// <summary>
+        /// 初始化顺序
+        /// </summary>
         public int InitOrder => 60;  // 在 UIManager 之后初始化
+        /// <summary>
+        /// Tick 顺序
+        /// </summary>
         public int TickOrder => 0;
+        /// <summary>
+        /// Update 顺序
+        /// </summary>
         public int UpdateOrder => 0;
+        /// <summary>
+        /// LateUpdate 顺序
+        /// </summary>
         public int LateUpdateOrder => 0;
+        /// <summary>
+        /// 释放顺序
+        /// </summary>
         public int DisposeOrder => 0;
         
+        /// <summary>
+        /// 实体类型信息表
+        /// </summary>
         private readonly Dictionary<string, EntityInfo> _entityInfos = new();
+        /// <summary>
+        /// 实体实例表（ID -> 实例）
+        /// </summary>
         private readonly Dictionary<int, IEntity> _entities = new();
+        /// <summary>
+        /// 实体分组（类型 -> 实例列表）
+        /// </summary>
         private readonly Dictionary<string, List<IEntity>> _entityGroups = new();
+        /// <summary>
+        /// 实体对象池（类型 -> 队列）
+        /// </summary>
         private readonly Dictionary<string, Queue<IEntity>> _entityPools = new();
 
         // HideAllEntities/HideAllEntities(string) 使用的复用缓冲，避免每次 new List 产生 GC
@@ -214,21 +380,48 @@ namespace CYFramework.Core.Entity
         // 说明：EntityManager 允许在实体逻辑内 Spawn/Recycle 其他实体，因此必须避免直接 foreach Dictionary.Values。
         private readonly List<IEntity> _updateBuffer = new(256);
         
+        /// <summary>
+        /// 下一个实体 ID
+        /// </summary>
         private int _nextEntityId = 1;
+        /// <summary>
+        /// 实体根节点
+        /// </summary>
         private Transform _entityRoot;
+        /// <summary>
+        /// 实体回收池根节点
+        /// </summary>
         private Transform _poolRoot; // 实体回收站根节点
         
         // 配置
+        /// <summary>
+        /// 实体预制体路径前缀
+        /// </summary>
         private string _entityPrefabPath = "Entities/";
+        /// <summary>
+        /// 默认预加载数量
+        /// </summary>
         private int _defaultPreloadCount = 5;
+        /// <summary>
+        /// 对象池最大容量
+        /// </summary>
         private int _maxPoolSize = 100;
+        /// <summary>
+        /// Update 间隔（跳帧倍数）
+        /// </summary>
         private int _updateInterval = 1;
+        /// <summary>
+        /// 实体分组名称列表
+        /// </summary>
         private string[] _entityGroupNames = { "Players", "Enemies", "NPCs", "Props", "Effects" };
 
         // Update/LateUpdate 帧计数：用于 UpdateInterval 跳帧
         private int _updateFrameCount;
         
         // 分组容器
+        /// <summary>
+        /// 分组容器（分组名 -> Transform）
+        /// </summary>
         private readonly Dictionary<string, Transform> _groupContainers = new();
         
         /// <summary>
@@ -246,10 +439,12 @@ namespace CYFramework.Core.Entity
         public void Initialize(Transform entityRoot)
         {
             // 从 CYConfigurator 读取配置
-             var configurator = CYConfigurator.Instance;
+            // 配置中心
+            var configurator = CYConfigurator.Instance;
             if (configurator != null)
             {
                 // 读取资源路径配置
+                // 资源加载器配置
                 var resourceConfig = configurator.GetConfig<ResourceLoaderConfig>();
                 if (resourceConfig != null)
                 {
@@ -257,6 +452,7 @@ namespace CYFramework.Core.Entity
                 }
                 
                 // 读取实体管理器配置
+                // 实体管理器配置
                 var config = configurator.GetConfig<EntityManagerConfig>();
                 if (config != null)
                 {
@@ -275,6 +471,7 @@ namespace CYFramework.Core.Entity
             if (_entityRoot == null)
             {
                 // 先尝试查找场景中已存在的实体根节点
+                // 场景中已有的实体根节点
                 var existingRoot = GameObject.Find("[Entities]");
                 if (existingRoot != null)
                 {
@@ -287,6 +484,7 @@ namespace CYFramework.Core.Entity
                 }
                 else
                 {
+                    // 新创建的根节点对象
                     var go = new GameObject("[Entities]");
                     GameObject.DontDestroyOnLoad(go);
                     _entityRoot = go.transform;
@@ -297,6 +495,7 @@ namespace CYFramework.Core.Entity
             // 创建回收池根节点（独立根节点，与 [UIPools] 保持一致）
             if (_poolRoot == null)
             {
+                // 回收池根对象
                 var poolGo = new GameObject("[EntityPools]");
                 UnityEngine.Object.DontDestroyOnLoad(poolGo);
                 _poolRoot = poolGo.transform;
@@ -304,9 +503,11 @@ namespace CYFramework.Core.Entity
             }
             
             // 合并枚举分组到当前分组列表（去重）
+            // 最终分组集合
             var finalGroups = new HashSet<string>(_entityGroupNames);
             foreach (var name in Enum.GetNames(typeof(EntityGroup)))
             {
+                // 枚举分组名称
                 // Default 通常作为根节点下的散养实体，或者不需要专门容器，看情况。这里如果是 Default 就不创建名为 "Default" 的节点了
                 if (name != "Default") 
                 {
@@ -329,7 +530,9 @@ namespace CYFramework.Core.Entity
         {
             foreach (var groupName in _entityGroupNames)
             {
+                // 当前分组名称
                 // 先查找已存在的分组
+                // 已存在的分组容器
                 var existing = _entityRoot.Find(groupName);
                 if (existing != null)
                 {
@@ -338,6 +541,7 @@ namespace CYFramework.Core.Entity
                 else
                 {
                     // 创建新分组
+                    // 分组节点对象
                     var groupGo = new GameObject(groupName);
                     groupGo.transform.SetParent(_entityRoot);
                     _groupContainers[groupName] = groupGo.transform;
@@ -351,6 +555,7 @@ namespace CYFramework.Core.Entity
         /// </summary>
         public Transform GetGroupContainer(string groupName)
         {
+            // 分组容器
             if (_groupContainers.TryGetValue(groupName, out var container))
             {
                 return container;
@@ -367,12 +572,14 @@ namespace CYFramework.Core.Entity
         /// <returns>分组 Transform</returns>
         public Transform CreateGroup(string groupName)
         {
+            // 已存在的分组容器
             if (_groupContainers.TryGetValue(groupName, out var existing))
             {
                 CYLog.Warning($"[EntityManager] 分组已存在: {groupName}");
                 return existing;
             }
             
+            // 分组节点对象
             var groupGo = new GameObject(groupName);
             groupGo.transform.SetParent(_entityRoot);
             _groupContainers[groupName] = groupGo.transform;
@@ -388,6 +595,7 @@ namespace CYFramework.Core.Entity
         {
             foreach (var name in groupNames)
             {
+                // 当前分组名称
                 CreateGroup(name);
             }
         }
@@ -405,6 +613,7 @@ namespace CYFramework.Core.Entity
         /// </summary>
         public string[] GetAllGroupNames()
         {
+            // 分组名称数组
             var names = new string[_groupContainers.Count];
             _groupContainers.Keys.CopyTo(names, 0);
             return names;
@@ -425,6 +634,7 @@ namespace CYFramework.Core.Entity
                 return;
             }
             
+            // 实体类型信息
             var info = new EntityInfo
             {
                 EntityType = entityType,
@@ -439,14 +649,17 @@ namespace CYFramework.Core.Entity
             
             // 预加载
             // 注意：预加载本质上是“预创建并放入池”，也受池容量上限影响，避免误配置导致内存暴涨。
+            // 预热数量（受池上限限制）
             int warmupCount = preloadCount;
             if (_maxPoolSize > 0)
             {
                 warmupCount = Mathf.Min(preloadCount, _maxPoolSize);
             }
 
+            // i 为索引
             for (int i = 0; i < warmupCount; i++)
             {
+                // 预创建的实体实例
                 var entity = CreateEntityInstance(info);
                 if (entity == null)
                 {
@@ -476,6 +689,7 @@ namespace CYFramework.Core.Entity
         {
             if (_entityInfos.ContainsKey(entityType)) return true;
 
+            // 资源加载器
             var loader = ServiceLocator.Get<CYFramework.Core.Resource.IResourceLoader>();
             if (loader == null)
             {
@@ -483,6 +697,7 @@ namespace CYFramework.Core.Entity
                 return false;
             }
 
+            // 加载的预制体
             var prefab = loader.Load<GameObject>(assetPath);
             if (prefab == null)
             {
@@ -497,6 +712,7 @@ namespace CYFramework.Core.Entity
             }
 
             // 确定父节点：如果指定了 groupName，尝试获取/创建分组容器
+            // 目标父节点
             Transform parent = null;
             if (!string.IsNullOrEmpty(groupName))
             {
@@ -560,7 +776,9 @@ namespace CYFramework.Core.Entity
             return SpawnEntity<T>(entityType, userData);
         }
 
-        // 重载：为了方便，如果不传 groupName
+        /// <summary>
+        /// 生成/显示实体（自动加载版，默认分组）
+        /// </summary>
         public T SpawnEntity<T>(string entityType, string assetPath, object userData = null) where T : class, IEntity
         {
             return SpawnEntity<T>(entityType, assetPath, null, userData);
@@ -574,12 +792,14 @@ namespace CYFramework.Core.Entity
         /// <returns>实体接口</returns>
         public IEntity SpawnEntity(string entityType, object userData = null)
         {
+            // 实体类型信息
             if (!_entityInfos.TryGetValue(entityType, out var info))
             {
                 CYLog.Error($"[EntityManager] 未注册的实体类型: {entityType}");
                 return null;
             }
             
+            // 实体实例
             IEntity entity;
             
             // 从池中获取或创建新实体
@@ -593,6 +813,7 @@ namespace CYFramework.Core.Entity
             }
             
             // 初始化并显示
+            // 分配实体 ID
             int entityId = _nextEntityId++;
             
             // 确保父节点正确（如果是从池里取出来的，它可能在 PoolRoot 下）
@@ -617,6 +838,7 @@ namespace CYFramework.Core.Entity
         /// <param name="entityId">实体ID</param>
         public void RecycleEntity(int entityId)
         {
+            // 目标实体实例
             if (!_entities.TryGetValue(entityId, out var entity))
             {
                 return;
@@ -634,11 +856,16 @@ namespace CYFramework.Core.Entity
             RecycleEntityInternal(entity);
         }
         
+        /// <summary>
+        /// 回收实体的内部流程
+        /// </summary>
         private void RecycleEntityInternal(IEntity entity)
         {
             // 重要：回收时不能先调用 entity.OnRecycle()，因为 EntityBase.OnRecycle 会把 Id 重置为 0，
             // 若先重置再从 _entities 删除，会导致实体表残留（严重内存/逻辑错误）。
+            // 实体 ID
             var entityId = entity.Id;
+            // 实体类型
             var entityType = entity.EntityType;
 
             // 回收前先隐藏（如果还没隐藏）
@@ -652,6 +879,7 @@ namespace CYFramework.Core.Entity
 
             if (!string.IsNullOrEmpty(entityType) && _entityGroups.TryGetValue(entityType, out var group))
             {
+                // 对应类型分组
                 group.Remove(entity);
             }
 
@@ -667,6 +895,7 @@ namespace CYFramework.Core.Entity
             // 回收到池
             if (!string.IsNullOrEmpty(entityType) && _entityPools.TryGetValue(entityType, out var pool))
             {
+                // 对应类型对象池
                 // 池容量控制：超出上限直接销毁，避免长时间运行池无限增长。
                 if (_maxPoolSize > 0 && pool.Count >= _maxPoolSize)
                 {
@@ -745,6 +974,7 @@ namespace CYFramework.Core.Entity
         /// </summary>
         public void RecycleAllEntities(string entityType)
         {
+            // 指定类型分组
             if (!_entityGroups.TryGetValue(entityType, out var group))
             {
                 return;
@@ -752,6 +982,7 @@ namespace CYFramework.Core.Entity
             
             _hideBuffer.Clear();
             _hideBuffer.AddRange(group);
+            // i 为索引
             for (int i = 0; i < _hideBuffer.Count; i++)
             {
                 RecycleEntityInternal(_hideBuffer[i]);
@@ -765,16 +996,19 @@ namespace CYFramework.Core.Entity
         {
             _hideBuffer.Clear();
             _hideBuffer.AddRange(_entities.Values);
+            // i 为索引
             for (int i = 0; i < _hideBuffer.Count; i++)
             {
                 RecycleEntityInternal(_hideBuffer[i]);
             }
         }
-
-                /// 获取实体
+        
+        /// <summary>
+        /// 获取实体
         /// </summary>
         public IEntity GetEntity(int entityId)
         {
+            // 实体实例
             return _entities.TryGetValue(entityId, out var entity) ? entity : null;
         }
         
@@ -791,6 +1025,7 @@ namespace CYFramework.Core.Entity
         /// </summary>
         public IReadOnlyList<IEntity> GetEntities(string entityType)
         {
+            // 实体分组列表
             return _entityGroups.TryGetValue(entityType, out var group) ? group : Array.Empty<IEntity>();
         }
         
@@ -804,6 +1039,7 @@ namespace CYFramework.Core.Entity
                 return _entities.Count;
             }
             
+            // 实体分组列表
             return _entityGroups.TryGetValue(entityType, out var group) ? group.Count : 0;
         }
         
@@ -822,6 +1058,7 @@ namespace CYFramework.Core.Entity
         {
             if (_entities.TryGetValue(entityId, out var entity))
             {
+                // 目标实体实例
                 entity.OnPause();
             }
         }
@@ -833,6 +1070,7 @@ namespace CYFramework.Core.Entity
         {
             if (_entities.TryGetValue(entityId, out var entity))
             {
+                // 目标实体实例
                 entity.OnResume();
             }
         }
@@ -842,10 +1080,12 @@ namespace CYFramework.Core.Entity
         /// </summary>
         public void PauseEntities(string entityType)
         {
+            // 指定类型分组
             if (_entityGroups.TryGetValue(entityType, out var group))
             {
                 foreach (var entity in group)
                 {
+                    // 分组中的实体
                     entity.OnPause();
                 }
             }
@@ -856,10 +1096,12 @@ namespace CYFramework.Core.Entity
         /// </summary>
         public void ResumeEntities(string entityType)
         {
+            // 指定类型分组
             if (_entityGroups.TryGetValue(entityType, out var group))
             {
                 foreach (var entity in group)
                 {
+                    // 分组中的实体
                     entity.OnResume();
                 }
             }
@@ -872,6 +1114,7 @@ namespace CYFramework.Core.Entity
         {
             foreach (var entity in _entities.Values)
             {
+                // 已注册的实体
                 entity.OnPause();
             }
         }
@@ -883,13 +1126,19 @@ namespace CYFramework.Core.Entity
         {
             foreach (var entity in _entities.Values)
             {
+                // 已注册的实体
                 entity.OnResume();
             }
         }
         
+        /// <summary>
+        /// 创建实体实例（实例化预制体）
+        /// </summary>
         private IEntity CreateEntityInstance(EntityInfo info)
         {
+            // 实体 GameObject
             var go = GameObject.Instantiate(info.Prefab, info.Parent);
+            // 实体组件
             var entity = go.GetComponent<IEntity>();
             
             if (entity == null)
@@ -902,13 +1151,16 @@ namespace CYFramework.Core.Entity
             // 注入 EntityType (解决对象池 Key 不一致问题)
             if (entity is EntityBase entityBase)
             {
+                // EntityBase 实例
                 entityBase.SetEntityType(info.EntityType);
             }
             
             return entity;
         }
         
-        // ITickable - 固定帧更新（物理/AI）
+        /// <summary>
+        /// 固定帧更新（物理/AI）
+        /// </summary>
         public void Tick(float deltaTime)
         {
             if (_entities.Count == 0) return;
@@ -916,8 +1168,10 @@ namespace CYFramework.Core.Entity
             _updateBuffer.Clear();
             _updateBuffer.AddRange(_entities.Values);
 
+            // i 为索引
             for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                // 当前实体
                 var entity = _updateBuffer[i];
                 if (entity == null) continue;
                 if (entity.Id <= 0) continue; // 已回收
@@ -926,7 +1180,9 @@ namespace CYFramework.Core.Entity
             }
         }
         
-        // IUpdateable - 每帧更新
+        /// <summary>
+        /// 每帧更新
+        /// </summary>
         public void OnUpdate(float deltaTime)
         {
             if (_updateInterval > 1)
@@ -943,8 +1199,10 @@ namespace CYFramework.Core.Entity
             _updateBuffer.Clear();
             _updateBuffer.AddRange(_entities.Values);
 
+            // i 为索引
             for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                // 当前实体
                 var entity = _updateBuffer[i];
                 if (entity == null) continue;
                 if (entity.Id <= 0) continue; // 已回收
@@ -953,7 +1211,9 @@ namespace CYFramework.Core.Entity
             }
         }
         
-        // ILateUpdateable - 延迟更新（相机跟随等）
+        /// <summary>
+        /// 延迟更新（相机跟随等）
+        /// </summary>
         public void OnLateUpdate(float deltaTime)
         {
             if (_updateInterval > 1 && (_updateFrameCount % _updateInterval) != 0)
@@ -966,8 +1226,10 @@ namespace CYFramework.Core.Entity
             _updateBuffer.Clear();
             _updateBuffer.AddRange(_entities.Values);
 
+            // i 为索引
             for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                // 当前实体
                 var entity = _updateBuffer[i];
                 if (entity == null) continue;
                 if (entity.Id <= 0) continue; // 已回收
@@ -976,7 +1238,9 @@ namespace CYFramework.Core.Entity
             }
         }
         
-        // IDisposableEx
+        /// <summary>
+        /// 释放实体管理器
+        /// </summary>
         public void Dispose()
         {
             RecycleAllEntities();
@@ -984,8 +1248,10 @@ namespace CYFramework.Core.Entity
             // 销毁池中的实体
             foreach (var pool in _entityPools.Values)
             {
+                // 当前对象池
                 while (pool.Count > 0)
                 {
+                    // 池中的实体
                     var entity = pool.Dequeue();
                     if (entity.GameObject != null)
                     {

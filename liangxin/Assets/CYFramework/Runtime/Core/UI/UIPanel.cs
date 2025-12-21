@@ -14,6 +14,9 @@ namespace CYFramework.Core.UI
     /// <typeparam name="TData">数据类型（建议使用 struct）</typeparam>
     public interface IUserDataReceiver<TData>
     {
+        /// <summary>
+        /// 设置强类型用户数据
+        /// </summary>
         void SetUserData(in TData data);
     }
 
@@ -23,8 +26,15 @@ namespace CYFramework.Core.UI
     [AttributeUsage(AttributeTargets.Class)]
     public class UIPrefabAttribute : Attribute
     {
+        /// <summary>
+        /// 预制体资源路径
+        /// </summary>
         public string Path { get; }
         
+        /// <summary>
+        /// UI 预制体路径特性构造
+        /// </summary>
+        /// <param name="path">Resources/Addressable 中的预制体路径</param>
         public UIPrefabAttribute(string path)
         {
             Path = path;
@@ -82,6 +92,9 @@ namespace CYFramework.Core.UI
                 return _rectTransform;
             }
         }
+        /// <summary>
+        /// RectTransform 缓存，避免重复 GetComponent
+        /// </summary>
         private RectTransform _rectTransform;
         
         /// <summary>
@@ -100,6 +113,9 @@ namespace CYFramework.Core.UI
                 return _canvasGroup;
             }
         }
+        /// <summary>
+        /// CanvasGroup 缓存，控制交互与透明度
+        /// </summary>
         private CanvasGroup _canvasGroup;
         
         /// <summary>
@@ -224,6 +240,9 @@ namespace CYFramework.Core.UI
             OnLateUpdate(elapseSeconds, realElapseSeconds);
         }
         
+        /// <summary>
+        /// Unity 销毁回调，确保解绑 UI 事件
+        /// </summary>
         protected virtual void OnDestroy()
         {
             OnUnbindUI();
@@ -355,6 +374,7 @@ namespace CYFramework.Core.UI
             // 默认：缩放弹出
             // 注意：动画时长来自 UIManagerConfig.DefaultAnimDuration（通过 UIManager.DefaultAnimDuration 暴露）。
             // 当配置为 0 时，表示不播放动画（直接显示最终状态），避免仍然产生一帧插值导致“看起来还有动画”。
+            // 动画时长（受配置控制）
             float duration = Manager != null ? Manager.DefaultAnimDuration : 0.15f;
             if (duration <= 0f)
             {
@@ -373,6 +393,7 @@ namespace CYFramework.Core.UI
         {
             // 默认：缩放收缩
             // 当配置为 0 时，直接回调完成（用于“立即关闭”需求，例如切场景/战斗 HUD 高频切换）。
+            // 动画时长（受配置控制）
             float duration = Manager != null ? Manager.DefaultAnimDuration : 0.1f;
             if (duration <= 0f)
             {
@@ -397,12 +418,15 @@ namespace CYFramework.Core.UI
                 yield break;
             }
 
+            // 动画起始缩放值
             Vector3 startScale = transform.localScale;
+            // 当前已流逝时间
             float elapsed = 0f;
             
             while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
+                // 归一化进度
                 float t = elapsed / duration;
                 // 使用缓动曲线
                 t = 1f - Mathf.Pow(1f - t, 3f); // EaseOutCubic

@@ -97,65 +97,117 @@ namespace CYFramework.Core.UI
     /// </summary>
     public class UIManager : IInitializable, IUpdateable, ILateUpdateable, IDisposableEx
     {
-        // 配置
+        /// <summary>
+        /// UI 管理器运行时配置
+        /// </summary>
         private UIConfig _config;
         
-        // 根节点
+        /// <summary>
+        /// UI 根节点（UIRoot）
+        /// </summary>
         private Transform _uiRoot;
+        /// <summary>
+        /// UI 相机（UICamera）
+        /// </summary>
         private Camera _uiCamera;
+        /// <summary>
+        /// 根 Canvas（所有 UI 层级容器的父级）
+        /// </summary>
         private Canvas _rootCanvas;
         
-        // 层级容器
+        /// <summary>
+        /// 预设层级容器（UILayer 对应 Transform）
+        /// </summary>
         private readonly Dictionary<UILayer, Transform> _layerContainers = new();
         
-        // 自定义层级容器
+        /// <summary>
+        /// 自定义层级容器（层名 -> Transform）
+        /// </summary>
         private readonly Dictionary<string, Transform> _customLayers = new();
         
-        // 已打开的面板
+        /// <summary>
+        /// 已打开的面板（类型 -> 实例）
+        /// </summary>
         private readonly Dictionary<Type, UIPanel> _openedPanels = new();
         
-        // 面板栈（用于返回逻辑）
+        /// <summary>
+        /// 面板栈（用于返回/恢复逻辑）
+        /// </summary>
         private readonly Stack<UIPanel> _panelStack = new();
 
-        // 面板栈整理用临时缓冲（避免频繁分配）
+        /// <summary>
+        /// 面板栈整理用临时缓冲（避免频繁分配）
+        /// </summary>
         private readonly List<UIPanel> _stackBuffer = new();
         
-        // 更新循环用临时列表（避免遍历时集合被修改导致崩溃）
+        /// <summary>
+        /// 更新循环用临时列表（避免遍历时集合被修改导致异常）
+        /// </summary>
         private readonly List<UIPanel> _updateBuffer = new();
         
-        // 缓存的面板（对象池）
+        /// <summary>
+        /// 面板对象池（类型 -> 队列）
+        /// </summary>
         private readonly Dictionary<Type, Queue<UIPanel>> _panelPool = new();
 
-        // 回收前的兄弟顺序缓存，保证从对象池取回后恢复原层级顺序
+        /// <summary>
+        /// 回收前的兄弟顺序缓存，保证从对象池取回后恢复原层级顺序
+        /// </summary>
         private readonly Dictionary<UIPanel, int> _panelSiblingIndex = new();
 
-        // 预加载的预制体
+        /// <summary>
+        /// 预加载的预制体缓存（路径 -> 预制体）
+        /// </summary>
         private readonly Dictionary<string, GameObject> _prefabCache = new();
 
-        // UI 对象池根节点（统一存放回收的 UI 面板）
+        /// <summary>
+        /// UI 对象池根节点（统一存放回收的 UI 面板）
+        /// </summary>
         private Transform _uiPoolRoot;
+        /// <summary>
+        /// UI 对象池根节点是否由 UIManager 运行时创建
+        /// </summary>
         private bool _poolRootCreatedByManager;   // 仅在运行时创建时标记，便于退出时销毁
         
-        // 资源加载器
+        /// <summary>
+        /// 资源加载器（由 ServiceLocator 提供）
+        /// </summary>
         private IResourceLoader _resourceLoader;
         
+        /// <summary>
+        /// 初始化顺序
+        /// </summary>
         public int InitOrder => 50;
+        /// <summary>
+        /// Update 顺序（UI 在实体之后更新）
+        /// </summary>
         public int UpdateOrder => 100;      // UI 在实体之后更新
+        /// <summary>
+        /// LateUpdate 顺序
+        /// </summary>
         public int LateUpdateOrder => 100;
+        /// <summary>
+        /// 销毁顺序
+        /// </summary>
         public int DisposeOrder => 50;
         
         #region 生命周期
         
+        /// <summary>
+        /// 初始化 UI 系统
+        /// </summary>
         public void Initialize()
         {
             _config = new UIConfig();
             _resourceLoader = ServiceLocator.Get<IResourceLoader>();
             
             // 从 CYConfigurator 读取配置
+            // 配置入口实例
             var configurator = CYConfigurator.Instance;
             if (configurator != null)
             {
                 // 读取资源路径配置
+                // 资源加载器配置
                 var resourceConfig = configurator.GetConfig<ResourceLoaderConfig>();
                 if (resourceConfig != null)
                 {
@@ -163,6 +215,7 @@ namespace CYFramework.Core.UI
                 }
                 
                 // 读取 UI 管理器配置
+                // UI 管理器配置
                 var externalConfig = configurator.GetConfig<UIManagerConfig>();
                 if (externalConfig != null)
                 {
@@ -190,11 +243,14 @@ namespace CYFramework.Core.UI
             // 创建配置中的自定义层级
             if (configurator != null)
             {
+                // UI 配置（用于自定义层级）
                 var uiConfig = configurator.GetConfig<UIManagerConfig>();
                 if (uiConfig?.CustomLayers != null)
                 {
+                    // 遍历自定义层级配置
                     foreach (var layer in uiConfig.CustomLayers)
                     {
+                        // 当前层级配置项
                         if (!string.IsNullOrEmpty(layer.Name))
                         {
                             CreateLayer(layer.Name, layer.SortOrder);
@@ -206,17 +262,23 @@ namespace CYFramework.Core.UI
             CYLog.Info("[UIManager] 初始化完成");
         }
         
+        /// <summary>
+        /// 驱动 UI 面板 Update
+        /// </summary>
         public void OnUpdate(float deltaTime)
         {
             // 驱动所有已打开面板的 Update
             // 使用临时列表避免遍历时集合被修改导致 InvalidOperationException
+            // 真实时间增量（不受 Time.timeScale 影响）
             float realDeltaTime = Time.unscaledDeltaTime;
             
             _updateBuffer.Clear();
             _updateBuffer.AddRange(_openedPanels.Values);
             
+            // 遍历索引
             for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                // 当前面板
                 var panel = _updateBuffer[i];
                 if (panel != null && panel.IsOpened)
                 {
@@ -225,17 +287,23 @@ namespace CYFramework.Core.UI
             }
         }
         
+        /// <summary>
+        /// 驱动 UI 面板 LateUpdate
+        /// </summary>
         public void OnLateUpdate(float deltaTime)
         {
             // 驱动所有已打开面板的 LateUpdate
             // 使用临时列表避免遍历时集合被修改导致 InvalidOperationException
+            // 真实时间增量（不受 Time.timeScale 影响）
             float realDeltaTime = Time.unscaledDeltaTime;
             
             _updateBuffer.Clear();
             _updateBuffer.AddRange(_openedPanels.Values);
             
+            // 遍历索引
             for (int i = 0; i < _updateBuffer.Count; i++)
             {
+                // 当前面板
                 var panel = _updateBuffer[i];
                 if (panel != null && panel.IsOpened)
                 {
@@ -244,6 +312,9 @@ namespace CYFramework.Core.UI
             }
         }
         
+        /// <summary>
+        /// 销毁 UI 系统并释放资源
+        /// </summary>
         public void Dispose()
         {
             // 关闭所有面板（标记为系统关闭）
@@ -305,6 +376,7 @@ namespace CYFramework.Core.UI
         /// <param name="siblingIndex">同层内的顺序；小于 0 则保持/恢复面板的历史顺序</param>
         public T OpenOnLayer<T>(UILayer layer, object data = null, int siblingIndex = -1) where T : UIPanel
         {
+            // 目标层级容器
             if (!_layerContainers.TryGetValue(layer, out var container))
             {
                 CYLog.Warning($"[UIManager] 未找到 UILayer 容器: {layer}");
@@ -335,6 +407,7 @@ namespace CYFramework.Core.UI
                 return null;
             }
 
+            // 自定义层级容器（不存在则创建）
             var container = _customLayers.TryGetValue(layerName, out var existing)
                 ? existing
                 : CreateLayer(layerName, sortOrder);
@@ -353,6 +426,7 @@ namespace CYFramework.Core.UI
         public T Open<T, TData>(in TData data)
             where T : UIPanel, IUserDataReceiver<TData>
         {
+            // 复制一份数据，避免直接捕获 in 参数
             var payload = data;
             return OpenPanelCore<T>(
                 userData: null,
@@ -369,12 +443,14 @@ namespace CYFramework.Core.UI
         public T OpenOnLayer<T, TData>(UILayer layer, in TData data, int siblingIndex = -1)
             where T : UIPanel, IUserDataReceiver<TData>
         {
+            // 目标层级容器
             if (!_layerContainers.TryGetValue(layer, out var container))
             {
                 CYLog.Warning($"[UIManager] 未找到 UILayer 容器: {layer}");
                 return null;
             }
             
+            // 复制一份数据，避免直接捕获 in 参数
             var payload = data;
             return OpenPanelCore<T>(
                 userData: null,
@@ -397,10 +473,12 @@ namespace CYFramework.Core.UI
                 return null;
             }
 
+            // 自定义层级容器（不存在则创建）
             var container = _customLayers.TryGetValue(layerName, out var existing)
                 ? existing
                 : CreateLayer(layerName, sortOrder);
 
+            // 复制一份数据，避免直接捕获 in 参数
             var payload = data;
             return OpenPanelCore<T>(
                 userData: null,
@@ -411,6 +489,9 @@ namespace CYFramework.Core.UI
                 logContext: $" (CustomLayer={layerName}, Typed)");
         }
         
+        /// <summary>
+        /// 面板打开核心流程（复用/创建、挂载层级、生命周期触发）
+        /// </summary>
         private T OpenPanelCore<T>(
             object userData,
             Transform overrideContainer,
@@ -420,10 +501,13 @@ namespace CYFramework.Core.UI
             string logContext = null) where T : UIPanel
         {
             logContext ??= string.Empty;
+            // 面板类型缓存
             var panelType = typeof(T);
             
+            // 已存在的面板实例
             if (_openedPanels.TryGetValue(panelType, out var existingPanel))
             {
+                // 强转后的面板类型
                 var typedPanel = existingPanel as T;
                 onRefresh?.Invoke(typedPanel);
                 existingPanel.InternalRefresh(userData);
@@ -431,6 +515,7 @@ namespace CYFramework.Core.UI
                 return typedPanel;
             }
 
+            // 新建或取出面板实例
             var panel = GetOrCreatePanel<T>();
             if (panel == null)
             {
@@ -438,12 +523,14 @@ namespace CYFramework.Core.UI
                 return null;
             }
 
+            // 目标容器（若传入覆盖容器则优先）
             var container = overrideContainer ?? GetLayerContainer(panel.Layer);
             if (container != null)
             {
                 panel.transform.SetParent(container, false);
                 if (siblingIndex >= 0)
                 {
+                    // 当前层级子节点数量
                     var childCount = container.childCount;
                     panel.transform.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, Math.Max(0, childCount - 1)));
                 }
@@ -459,6 +546,7 @@ namespace CYFramework.Core.UI
 
             if (panel.IsStackable && _panelStack.Count > 0)
             {
+                // 当前栈顶面板
                 var topPanel = _panelStack.Peek();
                 if (topPanel != null && topPanel != panel)
                 {
@@ -496,6 +584,7 @@ namespace CYFramework.Core.UI
         /// <param name="panelType">面板类型</param>
         public void Close(Type panelType)
         {
+            // 目标面板实例
             if (!_openedPanels.TryGetValue(panelType, out var panel))
             {
                 return;
@@ -528,6 +617,7 @@ namespace CYFramework.Core.UI
                 return;
             }
             
+            // 当前栈顶面板
             var topPanel = _panelStack.Peek();
             ClosePanel(topPanel);
         }
@@ -537,8 +627,10 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void CloseAll(bool isShutdown = false)
         {
+            // 复制一份列表，避免遍历中修改集合
             var panelsToClose = new List<UIPanel>(_openedPanels.Values);
             
+            // 逐个关闭
             foreach (var panel in panelsToClose)
             {
                 ClosePanel(panel, isShutdown);
@@ -552,8 +644,10 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void CloseLayer(UILayer layer)
         {
+            // 需关闭的面板集合
             var panelsToClose = new List<UIPanel>();
             
+            // 遍历当前已打开面板
             foreach (var panel in _openedPanels.Values)
             {
                 if (panel.Layer == layer)
@@ -562,6 +656,7 @@ namespace CYFramework.Core.UI
                 }
             }
             
+            // 逐个关闭
             foreach (var panel in panelsToClose)
             {
                 ClosePanel(panel);
@@ -573,6 +668,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public T Get<T>() where T : UIPanel
         {
+            // 目标面板实例
             if (_openedPanels.TryGetValue(typeof(T), out var panel))
             {
                 return panel as T;
@@ -617,6 +713,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public bool TryGet<T>(out T panel) where T : UIPanel
         {
+            // 已打开的面板实例
             if (_openedPanels.TryGetValue(typeof(T), out var p))
             {
                 panel = p as T;
@@ -640,6 +737,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public UIPanel Get(Type panelType)
         {
+            // 已打开的面板实例
             return _openedPanels.TryGetValue(panelType, out var panel) ? panel : null;
         }
 
@@ -648,6 +746,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public T OpenIfNotOpened<T>(object data = null) where T : UIPanel
         {
+            // 已打开的面板实例
             if (_openedPanels.TryGetValue(typeof(T), out var existingPanel))
             {
                 return existingPanel as T;
@@ -670,6 +769,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public bool Refresh<T>(object data = null) where T : UIPanel
         {
+            // 已打开的面板实例
             if (_openedPanels.TryGetValue(typeof(T), out var panel))
             {
                 panel.InternalRefresh(data);
@@ -684,6 +784,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public bool Refresh(Type panelType, object data = null)
         {
+            // 已打开的面板实例
             if (_openedPanels.TryGetValue(panelType, out var panel))
             {
                 panel.InternalRefresh(data);
@@ -720,6 +821,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public bool CloseIfOpened<T>() where T : UIPanel
         {
+            // 已打开的面板实例
             if (!_openedPanels.TryGetValue(typeof(T), out var panel))
             {
                 return false;
@@ -734,6 +836,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public bool CloseIfOpened(Type panelType)
         {
+            // 已打开的面板实例
             if (!_openedPanels.TryGetValue(panelType, out var panel))
             {
                 return false;
@@ -753,7 +856,9 @@ namespace CYFramework.Core.UI
                 return false;
             }
 
+            // 面板类型
             var panelType = panel.GetType();
+            // 已打开且被管理的面板实例
             if (!_openedPanels.TryGetValue(panelType, out var openedPanel) || openedPanel != panel)
             {
                 return false;
@@ -773,6 +878,7 @@ namespace CYFramework.Core.UI
                 return;
             }
 
+            // 遍历索引
             for (int i = 0; i < panelTypes.Length; i++)
             {
                 Close(panelTypes[i]);
@@ -789,6 +895,7 @@ namespace CYFramework.Core.UI
                 return;
             }
 
+            // 遍历索引
             for (int i = 0; i < layers.Length; i++)
             {
                 CloseLayer(layers[i]);
@@ -832,8 +939,10 @@ namespace CYFramework.Core.UI
         /// <param name="data">传递给面板的数据</param>
         public void OpenAsync<T>(Action<T> onOpened, object data = null) where T : UIPanel
         {
+            // 面板类型
             var panelType = typeof(T);
 
+            // 已打开的面板实例
             if (_openedPanels.TryGetValue(panelType, out var existingPanel))
             {
                 existingPanel.InternalRefresh(data);
@@ -841,15 +950,20 @@ namespace CYFramework.Core.UI
                 return;
             }
 
+            // 是否存在可复用的池中实例
             bool hasPooledInstance = false;
+            // 对应类型的对象池
             if (_config.EnablePool && _panelPool.TryGetValue(panelType, out var pool) && pool.Count > 0)
             {
                 hasPooledInstance = true;
             }
 
+            // 预制体路径
             var path = GetPrefabPath(panelType);
             if (hasPooledInstance || _prefabCache.ContainsKey(path))
             {
+                // 已有资源或池中实例，直接同步打开
+                // 打开的面板实例
                 var panel = Open<T>(data);
                 onOpened?.Invoke(panel);
                 return;
@@ -865,6 +979,7 @@ namespace CYFramework.Core.UI
                 }
 
                 _prefabCache[path] = prefab;
+                // 异步加载完成后打开面板
                 var panel = Open<T>(data);
                 onOpened?.Invoke(panel);
             });
@@ -875,11 +990,14 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void Preload<T>() where T : UIPanel
         {
+            // 面板类型
             var panelType = typeof(T);
+            // 预制体路径
             var path = GetPrefabPath(panelType);
             
             if (!_prefabCache.ContainsKey(path))
             {
+                // 预制体缓存
                 var prefab = _resourceLoader.Load<GameObject>(path);
                 if (prefab != null)
                 {
@@ -956,6 +1074,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void ShowConfirm(string title, string content, Action onConfirm, Action onCancel = null)
         {
+            // 对话框配置
             var config = new Components.DialogConfig
             {
                 Title = title,
@@ -972,6 +1091,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void ShowAlert(string title, string content, Action onConfirm = null)
         {
+            // 对话框配置
             var config = new Components.DialogConfig
             {
                 Title = title,
@@ -994,15 +1114,18 @@ namespace CYFramework.Core.UI
         /// <returns>层级 Transform</returns>
         public Transform CreateLayer(string layerName, int sortOrder = 0)
         {
+            // 已存在的层级容器
             if (_customLayers.TryGetValue(layerName, out var existing))
             {
                 CYLog.Warning($"[UIManager] 层级已存在: {layerName}");
                 return existing;
             }
             
+            // 层级根对象
             var layerGo = new GameObject(layerName);
             layerGo.layer = LayerMask.NameToLayer("UI");
             
+            // 层级 RectTransform
             var rectTransform = layerGo.AddComponent<RectTransform>();
             rectTransform.SetParent(_rootCanvas.transform, false);
             rectTransform.anchorMin = Vector2.zero;
@@ -1011,6 +1134,7 @@ namespace CYFramework.Core.UI
             rectTransform.offsetMax = Vector2.zero;
             
             // 设置排序顺序
+            // 层级 Canvas
             var canvas = layerGo.AddComponent<Canvas>();
             canvas.overrideSorting = true;
             canvas.sortingOrder = sortOrder;
@@ -1026,6 +1150,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public void CreateLayers(params (string name, int sortOrder)[] layers)
         {
+            // 批量创建配置项
             foreach (var (name, sortOrder) in layers)
             {
                 CreateLayer(name, sortOrder);
@@ -1037,6 +1162,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public Transform GetLayerContainer(string layerName)
         {
+            // 已存在的自定义层级容器
             if (_customLayers.TryGetValue(layerName, out var container))
             {
                 return container;
@@ -1051,6 +1177,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public Transform GetLayerContainer(UILayer layer)
         {
+            // 预设层级容器
             return _layerContainers.TryGetValue(layer, out var container) ? container : null;
         }
         
@@ -1067,6 +1194,7 @@ namespace CYFramework.Core.UI
         /// </summary>
         public string[] GetAllCustomLayerNames()
         {
+            // 层级名称数组
             var names = new string[_customLayers.Count];
             _customLayers.Keys.CopyTo(names, 0);
             return names;
@@ -1090,6 +1218,7 @@ namespace CYFramework.Core.UI
             }
 
             // 创建独立的 UI 回收池根节点，不再依赖通用的 [ObjectPools]
+            // UI 回收池根对象
             var poolGo = new GameObject("[UIPools]");
             UnityEngine.Object.DontDestroyOnLoad(poolGo);
             poolGo.SetActive(false);
@@ -1111,6 +1240,7 @@ namespace CYFramework.Core.UI
                 return;
             }
 
+            // 缓存的兄弟索引
             if (_panelSiblingIndex.TryGetValue(panel, out var index))
             {
                 panel.transform.SetSiblingIndex(index);
@@ -1124,6 +1254,7 @@ namespace CYFramework.Core.UI
         private void CreateUIRoot()
         {
             // 先尝试查找场景中已存在的 UIRoot
+            // 场景中已有的 UIRoot
             var existingRoot = GameObject.Find("UIRoot");
             if (existingRoot != null)
             {
@@ -1132,6 +1263,7 @@ namespace CYFramework.Core.UI
                 // DontDestroyOnLoad 只能作用于根节点（root GameObject）。
                 // 如果 UIRoot 不是根节点（例如作为某个场景物体的子物体），直接调用会报 Unity 警告且不会生效。
                 // 这里统一对其根节点执行，确保跨场景常驻。
+                // UIRoot 对应的根对象
                 var rootObject = existingRoot.transform.root != null ? existingRoot.transform.root.gameObject : existingRoot;
                 UnityEngine.Object.DontDestroyOnLoad(rootObject);
                 
@@ -1142,8 +1274,10 @@ namespace CYFramework.Core.UI
                 // 查找层级容器
                 if (_rootCanvas != null)
                 {
+                    // 遍历预设层级，尝试查找/创建容器
                     foreach (UILayer layer in Enum.GetValues(typeof(UILayer)))
                     {
+                        // 该层级的 Transform
                         var layerTransform = _rootCanvas.transform.Find(layer.ToString());
                         if (layerTransform != null)
                         {
@@ -1162,11 +1296,13 @@ namespace CYFramework.Core.UI
             }
             
             // 创建根对象
+            // UI 根对象
             var rootGo = new GameObject("UIRoot");
             UnityEngine.Object.DontDestroyOnLoad(rootGo);
             _uiRoot = rootGo.transform;
             
             // 创建 UI 相机
+            // UI 相机对象
             var cameraGo = new GameObject("UICamera");
             cameraGo.transform.SetParent(_uiRoot);
             _uiCamera = cameraGo.AddComponent<Camera>();
@@ -1176,6 +1312,7 @@ namespace CYFramework.Core.UI
             _uiCamera.depth = 100;
             
             // 创建根 Canvas
+            // 根 Canvas 对象
             var canvasGo = new GameObject("Canvas");
             canvasGo.transform.SetParent(_uiRoot);
             canvasGo.layer = LayerMask.NameToLayer("UI");
@@ -1185,6 +1322,7 @@ namespace CYFramework.Core.UI
             _rootCanvas.worldCamera = _uiCamera;
             _rootCanvas.sortingOrder = 0;
             
+            // Canvas 缩放器
             var scaler = canvasGo.AddComponent<UnityEngine.UI.CanvasScaler>();
             scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
@@ -1193,6 +1331,7 @@ namespace CYFramework.Core.UI
             canvasGo.AddComponent<UnityEngine.UI.GraphicRaycaster>();
             
             // 创建层级容器
+            // 遍历预设层级，创建容器
             foreach (UILayer layer in Enum.GetValues(typeof(UILayer)))
             {
                 _layerContainers[layer] = CreateLayerContainer(layer);
@@ -1206,9 +1345,11 @@ namespace CYFramework.Core.UI
         /// </summary>
         private Transform CreateLayerContainer(UILayer layer)
         {
+            // 层级对象
             var layerGo = new GameObject(layer.ToString());
             layerGo.layer = LayerMask.NameToLayer("UI");
             
+            // 层级 RectTransform
             var rectTransform = layerGo.AddComponent<RectTransform>();
             rectTransform.SetParent(_rootCanvas.transform, false);
             rectTransform.anchorMin = Vector2.zero;
@@ -1224,16 +1365,20 @@ namespace CYFramework.Core.UI
         /// </summary>
         private T GetOrCreatePanel<T>() where T : UIPanel
         {
+            // 面板类型
             var panelType = typeof(T);
             
             // 尝试从对象池获取
+            // 对应类型的对象池
             if (_config.EnablePool && _panelPool.TryGetValue(panelType, out var pool) && pool.Count > 0)
             {
                 return pool.Dequeue() as T;
             }
             
             // 加载预制体
+            // 预制体路径
             var path = GetPrefabPath(panelType);
+            // 预制体缓存
             GameObject prefab;
             
             if (!_prefabCache.TryGetValue(path, out prefab))
@@ -1248,7 +1393,9 @@ namespace CYFramework.Core.UI
             }
             
             // 实例化
+            // 预制体实例
             var go = UnityEngine.Object.Instantiate(prefab);
+            // 面板组件
             var panel = go.GetComponent<T>();
             
             if (panel == null)
@@ -1266,9 +1413,11 @@ namespace CYFramework.Core.UI
         /// </summary>
         private void ClosePanel(UIPanel panel, bool isShutdown = false)
         {
+            // 面板类型
             var panelType = panel.GetType();
 
             // 只有关闭的是“当前栈顶”时，才需要在关闭后 Resume 新栈顶（返回到上一个面板）
+            // 是否需要恢复新栈顶
             bool shouldResume = false;
             if (panel.IsStackable)
             {
@@ -1298,10 +1447,12 @@ namespace CYFramework.Core.UI
             {
                 panel.InternalRecycle();
                 // 回收到 UI 池根节点，层级上与“隐藏”区分，便于调试
+                // 回收用的父节点
                 var poolParent = _uiPoolRoot != null ? _uiPoolRoot : GetOrCreateUIPoolRoot();
                 panel.transform.SetParent(poolParent, false);
                 panel.gameObject.SetActive(false);
                 
+                // 对应面板类型的对象池
                 if (!_panelPool.TryGetValue(panelType, out var pool))
                 {
                     pool = new Queue<UIPanel>();
@@ -1330,6 +1481,7 @@ namespace CYFramework.Core.UI
                 CleanupStackTop();
                 if (_panelStack.Count > 0)
                 {
+                    // 新的栈顶面板
                     var topPanel = _panelStack.Peek();
                     if (topPanel != null && topPanel.IsOpened)
                     {
@@ -1347,6 +1499,7 @@ namespace CYFramework.Core.UI
         private string GetPrefabPath(Type panelType)
         {
             // 检查是否有 UIPrefab 特性
+            // UIPrefab 特性实例
             var attr = Attribute.GetCustomAttribute(panelType, typeof(UIPrefabAttribute)) as UIPrefabAttribute;
             if (attr != null && !string.IsNullOrEmpty(attr.Path))
             {
@@ -1365,6 +1518,7 @@ namespace CYFramework.Core.UI
         {
             while (_panelStack.Count > 0)
             {
+                // 当前栈顶面板
                 var top = _panelStack.Peek();
                 if (top == null || !top.IsOpened)
                 {
@@ -1393,6 +1547,7 @@ namespace CYFramework.Core.UI
 
             while (_panelStack.Count > 0)
             {
+                // 取出栈顶面板
                 var p = _panelStack.Pop();
                 if (p == null || !p.IsOpened)
                 {
@@ -1411,6 +1566,7 @@ namespace CYFramework.Core.UI
             }
 
             // 逆序 push 回去，恢复原来的栈顺序
+            // 逆序索引
             for (int i = _stackBuffer.Count - 1; i >= 0; i--)
             {
                 _panelStack.Push(_stackBuffer[i]);

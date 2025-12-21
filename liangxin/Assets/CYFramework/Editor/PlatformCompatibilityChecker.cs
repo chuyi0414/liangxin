@@ -20,6 +20,9 @@ namespace CYFramework.Editor
     public class PlatformCompatibilityChecker : EditorWindow
     {
         // 不兼容的 API 列表（来自文档 §6.1）
+        /// <summary>
+        /// 不兼容 API 规则表
+        /// </summary>
         private static readonly List<IncompatibleAPI> _incompatibleAPIs = new()
         {
             // System.IO
@@ -150,19 +153,41 @@ namespace CYFramework.Editor
         };
         
         // 检查结果
+        /// <summary>
+        /// 兼容性问题列表
+        /// </summary>
         private List<CompatibilityIssue> _issues = new();
+        /// <summary>
+        /// 滚动区域位置
+        /// </summary>
         private Vector2 _scrollPosition;
+        /// <summary>
+        /// 是否显示错误项
+        /// </summary>
         private bool _showErrors = true;
+        /// <summary>
+        /// 是否显示警告项
+        /// </summary>
         private bool _showWarnings = true;
+        /// <summary>
+        /// 扫描路径
+        /// </summary>
         private string _searchPath = "Assets/CYFramework/Runtime";
         
         [MenuItem("CYFramework/平台兼容性检查器")]
+        /// <summary>
+        /// 打开平台兼容性检查器窗口
+        /// </summary>
         public static void ShowWindow()
         {
+            // 窗口实例
             var window = GetWindow<PlatformCompatibilityChecker>("平台兼容性检查");
             window.minSize = new Vector2(600, 400);
         }
         
+        /// <summary>
+        /// 窗口绘制
+        /// </summary>
         private void OnGUI()
         {
             EditorGUILayout.Space(10);
@@ -177,6 +202,7 @@ namespace CYFramework.Editor
             _searchPath = EditorGUILayout.TextField(_searchPath);
             if (GUILayout.Button("选择", GUILayout.Width(50)))
             {
+                // 选择的目录路径
                 string path = EditorUtility.OpenFolderPanel("选择扫描目录", "Assets", "");
                 if (!string.IsNullOrEmpty(path))
                 {
@@ -206,7 +232,7 @@ namespace CYFramework.Editor
             // 结果列表
             _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
             
-            foreach (var issue in _issues)
+            foreach (var issue in _issues) // issue 为问题项
             {
                 if (issue.Severity == Severity.Error && !_showErrors) continue;
                 if (issue.Severity == Severity.Warning && !_showWarnings) continue;
@@ -222,8 +248,12 @@ namespace CYFramework.Editor
             EditorGUILayout.EndScrollView();
         }
         
+        /// <summary>
+        /// 绘制单条问题
+        /// </summary>
         private void DrawIssue(CompatibilityIssue issue)
         {
+            // 背景色
             var bgColor = issue.Severity == Severity.Error 
                 ? new Color(1f, 0.3f, 0.3f, 0.2f) 
                 : new Color(1f, 0.8f, 0.3f, 0.2f);
@@ -232,12 +262,14 @@ namespace CYFramework.Editor
             
             // 标题行
             EditorGUILayout.BeginHorizontal();
-            var icon = issue.Severity == Severity.Error ? "❌" : "⚠️";
+            // 图标文本
+            var icon = issue.Severity == Severity.Error ? "❌" : "⚠️"; // 图标文本
             EditorGUILayout.LabelField($"{icon} [{issue.APIName}]", EditorStyles.boldLabel, GUILayout.Width(200));
             
             // 跳转按钮
             if (GUILayout.Button("定位", GUILayout.Width(50)))
             {
+                // 脚本资源
                 var asset = AssetDatabase.LoadAssetAtPath<MonoScript>(issue.FilePath);
                 if (asset != null)
                 {
@@ -265,6 +297,9 @@ namespace CYFramework.Editor
             EditorGUILayout.Space(5);
         }
         
+        /// <summary>
+        /// 执行全量检查
+        /// </summary>
         private void RunCheck()
         {
             _issues.Clear();
@@ -275,13 +310,16 @@ namespace CYFramework.Editor
                 return;
             }
             
+            // C# 文件列表
             var csFiles = Directory.GetFiles(_searchPath, "*.cs", SearchOption.AllDirectories);
+            // 文件总数
             int totalFiles = csFiles.Length;
+            // 已处理文件数
             int processedFiles = 0;
             
             try
             {
-                foreach (var filePath in csFiles)
+                foreach (var filePath in csFiles) // filePath 为文件路径
                 {
                     processedFiles++;
                     EditorUtility.DisplayProgressBar("扫描中...", filePath, (float)processedFiles / totalFiles);
@@ -298,7 +336,9 @@ namespace CYFramework.Editor
             _issues = _issues.OrderByDescending(i => i.Severity).ThenBy(i => i.FilePath).ToList();
             
             // 显示结果
+            // 错误数量
             int errors = _issues.Count(i => i.Severity == Severity.Error);
+            // 警告数量
             int warnings = _issues.Count(i => i.Severity == Severity.Warning);
             
             if (errors > 0 || warnings > 0)
@@ -311,25 +351,34 @@ namespace CYFramework.Editor
             }
         }
         
+        /// <summary>
+        /// 检查单个文件
+        /// </summary>
         private void CheckFile(string filePath)
         {
             // 跳过 Editor 目录
             if (filePath.Contains("/Editor/") || filePath.Contains("\\Editor\\")) return;
             
+            // 文件内容
             string content = File.ReadAllText(filePath);
+            // 行数组
             string[] lines = content.Split('\n');
             
             // 检查是否已有平台条件编译
+            // 是否包含平台条件编译
             bool hasWebGLGuard = content.Contains("#if !UNITY_WEBGL") || 
                                  content.Contains("#if UNITY_WEBGL") ||
                                  content.Contains("#if CY_WECHAT");
             
             for (int i = 0; i < lines.Length; i++)
             {
+                // 当前行文本
                 string line = lines[i];
+                // 当前行号
                 int lineNumber = i + 1;
                 
                 // 跳过注释行
+                // 去除首尾空白
                 string trimmedLine = line.Trim();
                 if (trimmedLine.StartsWith("//") || trimmedLine.StartsWith("/*") || trimmedLine.StartsWith("*"))
                     continue;
@@ -338,7 +387,7 @@ namespace CYFramework.Editor
                 if (IsInsidePlatformGuard(lines, i))
                     continue;
                 
-                foreach (var api in _incompatibleAPIs)
+                foreach (var api in _incompatibleAPIs) // api 为不兼容规则
                 {
                     if (Regex.IsMatch(line, api.Pattern))
                     {
@@ -362,11 +411,14 @@ namespace CYFramework.Editor
         /// </summary>
         private bool IsInsidePlatformGuard(string[] lines, int currentLine)
         {
+            // 条件编译嵌套深度
             int depth = 0;
+            // 是否位于目标平台保护块内
             bool inWebGLBlock = false;
             
             for (int i = 0; i <= currentLine; i++)
             {
+                // 当前行文本
                 string line = lines[i].Trim();
                 
                 if (line.StartsWith("#if"))
@@ -394,29 +446,80 @@ namespace CYFramework.Editor
         }
     }
     
+    /// <summary>
+    /// 兼容性问题严重等级
+    /// </summary>
     public enum Severity
     {
+        /// <summary>
+        /// 警告
+        /// </summary>
         Warning,
+        /// <summary>
+        /// 错误
+        /// </summary>
         Error
     }
     
+    /// <summary>
+    /// 不兼容 API 规则
+    /// </summary>
     public class IncompatibleAPI
     {
+        /// <summary>
+        /// 正则匹配模式
+        /// </summary>
         public string Pattern;
+        /// <summary>
+        /// API 名称
+        /// </summary>
         public string Name;
+        /// <summary>
+        /// 问题描述
+        /// </summary>
         public string Description;
+        /// <summary>
+        /// 解决方案
+        /// </summary>
         public string Solution;
+        /// <summary>
+        /// 严重等级
+        /// </summary>
         public Severity Severity;
     }
     
+    /// <summary>
+    /// 兼容性问题信息
+    /// </summary>
     public class CompatibilityIssue
     {
+        /// <summary>
+        /// 文件路径
+        /// </summary>
         public string FilePath;
+        /// <summary>
+        /// 行号
+        /// </summary>
         public int LineNumber;
+        /// <summary>
+        /// API 名称
+        /// </summary>
         public string APIName;
+        /// <summary>
+        /// 问题描述
+        /// </summary>
         public string Description;
+        /// <summary>
+        /// 解决方案
+        /// </summary>
         public string Solution;
+        /// <summary>
+        /// 代码片段
+        /// </summary>
         public string CodeSnippet;
+        /// <summary>
+        /// 严重等级
+        /// </summary>
         public Severity Severity;
     }
 }

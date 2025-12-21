@@ -15,10 +15,25 @@ namespace CYFramework.Infrastructure
     {
         // ==================== 优先级（可重写） ====================
         
+        /// <summary>
+        /// 初始化优先级
+        /// </summary>
         public virtual int InitOrder => 0;
+        /// <summary>
+        /// Tick 优先级
+        /// </summary>
         public virtual int TickOrder => 0;
+        /// <summary>
+        /// Update 优先级
+        /// </summary>
         public virtual int UpdateOrder => 0;
+        /// <summary>
+        /// LateUpdate 优先级
+        /// </summary>
         public virtual int LateUpdateOrder => 0;
+        /// <summary>
+        /// 销毁优先级
+        /// </summary>
         public virtual int DisposeOrder => 0;
         
         // ==================== 生命周期（选择性重写） ====================
@@ -77,12 +92,30 @@ namespace CYFramework.Infrastructure
     /// </summary>
     public abstract class MonoServiceBase : UnityEngine.MonoBehaviour, IInitializable, IUpdateable, IPausable
     {
+        /// <summary>
+        /// 初始化优先级
+        /// </summary>
         public virtual int InitOrder => 0;
+        /// <summary>
+        /// Update 优先级
+        /// </summary>
         public virtual int UpdateOrder => 0;
         
+        /// <summary>
+        /// 初始化
+        /// </summary>
         public virtual void Initialize() { }
+        /// <summary>
+        /// 每帧更新
+        /// </summary>
         public virtual void OnUpdate(float deltaTime) { }
+        /// <summary>
+        /// 暂停回调
+        /// </summary>
         public virtual void OnPause() { }
+        /// <summary>
+        /// 恢复回调
+        /// </summary>
         public virtual void OnResume(float pauseDuration) { }
     }
 }

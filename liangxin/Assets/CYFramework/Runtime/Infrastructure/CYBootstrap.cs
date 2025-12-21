@@ -36,44 +36,107 @@ namespace CYFramework.Infrastructure
     public class CYBootstrap : MonoBehaviour
     {
         [Header("配置来源")]
+        /// <summary>
+        /// 如果场景中有 CYConfigurator，将自动使用其配置
+        /// </summary>
         [Tooltip("如果场景中有 CYConfigurator，将自动使用其配置")]
+        /// <summary>
+        /// 是否使用场景中的 CYConfigurator
+        /// </summary>
         [SerializeField] private bool _useConfigurator = true;
         
         [Header("备用配置 (无 CYConfigurator 时使用)")]
+        /// <summary>
+        /// 备用日志级别
+        /// </summary>
         [SerializeField] private LogLevel _logLevel = LogLevel.Debug;
+        /// <summary>
+        /// 固定逻辑帧率
+        /// </summary>
         [SerializeField] private int _fixedTickRate = 30;
+        /// <summary>
+        /// 最大暂停容忍时长
+        /// </summary>
         [SerializeField] private float _maxPauseTolerance = 5f;
         
         // 配置器引用
+        /// <summary>
+        /// 配置器引用
+        /// </summary>
         private CYConfigurator _configurator;
         
         // 单例
+        /// <summary>
+        /// 启动器单例
+        /// </summary>
         public static CYBootstrap Instance { get; private set; }
         
         // 生命周期列表
+        /// <summary>
+        /// Tick 生命周期列表
+        /// </summary>
         private readonly List<ITickable> _tickables = new();
+        /// <summary>
+        /// Update 生命周期列表
+        /// </summary>
         private readonly List<IUpdateable> _updateables = new();
+        /// <summary>
+        /// LateUpdate 生命周期列表
+        /// </summary>
         private readonly List<ILateUpdateable> _lateUpdateables = new();
+        /// <summary>
+        /// 可暂停对象列表
+        /// </summary>
         private readonly List<IPausable> _pausables = new();
         
         // 暂停状态
+        /// <summary>
+        /// 暂停开始时间戳
+        /// </summary>
         private float _pauseTimestamp;
+        /// <summary>
+        /// 当前是否暂停
+        /// </summary>
         private bool _isPaused;
 
 #if UNITY_EDITOR && !(CY_WECHAT || UNITY_WEBGL)
+        /// <summary>
+        /// 编辑器震动适配器（Stub）
+        /// </summary>
         private class EditorVibrationAdapter : IVibrationAdapter
         {
+            /// <summary>
+            /// 平台类型
+            /// </summary>
             public PlatformType Platform => PlatformType.PC;
+            /// <summary>
+            /// 是否支持震动
+            /// </summary>
             public bool IsSupported => false;
+            /// <summary>
+            /// 初始化
+            /// </summary>
             public void Initialize() { }
+            /// <summary>
+            /// 短震动
+            /// </summary>
             public void VibrateShort() { CYLog.Debug("[EditorVibrationAdapter] VibrateShort"); }
+            /// <summary>
+            /// 长震动
+            /// </summary>
             public void VibrateLong() { CYLog.Debug("[EditorVibrationAdapter] VibrateLong"); }
+            /// <summary>
+            /// 自定义震动
+            /// </summary>
             public void Vibrate(int milliseconds) { CYLog.Debug($"[EditorVibrationAdapter] Vibrate: {milliseconds}ms"); }
         }
 #endif
         
         #region Unity 生命周期
         
+        /// <summary>
+        /// Unity Awake
+        /// </summary>
         private void Awake()
         {
             if (Instance != null)
@@ -89,50 +152,68 @@ namespace CYFramework.Infrastructure
             InitializeFramework();
         }
         
+        /// <summary>
+        /// Unity FixedUpdate
+        /// </summary>
         private void FixedUpdate()
         {
             if (_isPaused) return;
             
+            // 固定时间步长
             float dt = Time.fixedDeltaTime;
             
             // 按优先级执行 Tick
-            for (int i = 0; i < _tickables.Count; i++)
+            for (int i = 0; i < _tickables.Count; i++) // i 为索引
             {
                 _tickables[i].Tick(dt);
             }
         }
         
+        /// <summary>
+        /// Unity Update
+        /// </summary>
         private void Update()
         {
             if (_isPaused) return;
             
+            // 帧时间步长
             float dt = Time.deltaTime;
             
             // 按优先级执行 Update（Timer/Procedure 已通过 IUpdateable 注册）
-            for (int i = 0; i < _updateables.Count; i++)
+            for (int i = 0; i < _updateables.Count; i++) // i 为索引
             {
                 _updateables[i].OnUpdate(dt);
             }
         }
         
+        /// <summary>
+        /// Unity LateUpdate
+        /// </summary>
         private void LateUpdate()
         {
             if (_isPaused) return;
             
+            // 帧时间步长
             float dt = Time.deltaTime;
             
             // 按优先级执行 LateUpdate
-            for (int i = 0; i < _lateUpdateables.Count; i++)
+            for (int i = 0; i < _lateUpdateables.Count; i++) // i 为索引
             {
                 _lateUpdateables[i].OnLateUpdate(dt);
             }
         }
         
+        /// <summary>
+        /// Unity OnApplicationPause
+        /// </summary>
         private void OnApplicationPause(bool isPaused)
         {
             HandlePause(isPaused);
         }
         
+        /// <summary>
+        /// Unity OnApplicationFocus
+        /// </summary>
         private void OnApplicationFocus(bool hasFocus)
         {
             // WebGL/微信需要同时处理 Focus 事件
@@ -141,6 +222,9 @@ namespace CYFramework.Infrastructure
             #endif
         }
         
+        /// <summary>
+        /// Unity OnDestroy
+        /// </summary>
         private void OnDestroy()
         {
             if (Instance == this)
@@ -170,15 +254,24 @@ namespace CYFramework.Infrastructure
             }
             
             // 读取配置
+            // 启动器配置
             var bootstrapConfig = _configurator?.GetConfig<BootstrapConfig>();
+            // 日志服务配置
             var logConfig = _configurator?.GetConfig<LogServiceConfig>();
             
+            // 生效的日志级别
             var logLevel = logConfig?.Level ?? _logLevel;
+            // 生效的固定逻辑帧率
             var fixedTickRate = bootstrapConfig?.FixedTickRate ?? _fixedTickRate;
+            // 生效的目标帧率
             var targetFrameRate = bootstrapConfig?.TargetFrameRate ?? 60;
+            // 生效的垂直同步开关
             var vSync = bootstrapConfig?.VSync ?? false;
+            // 生效的后台运行开关
             var runInBackground = bootstrapConfig?.RunInBackground ?? true;
+            // 生效的屏幕常亮开关
             var screenNeverSleep = bootstrapConfig?.ScreenNeverSleep ?? true;
+            // 生效的暂停容忍时长
             var maxPauseTolerance = bootstrapConfig?.MaxPauseTolerance ?? _maxPauseTolerance;
             _maxPauseTolerance = maxPauseTolerance;
             
@@ -215,6 +308,7 @@ namespace CYFramework.Infrastructure
             RegisterExceptionHandler();
             
             // 7. 启动入口流程
+            // 流程管理器
             var procedureManager = ServiceLocator.Get<ProcedureManager>();
             procedureManager?.StartEntry();
             
@@ -347,25 +441,25 @@ namespace CYFramework.Infrastructure
         /// </summary>
         public void RegisterLifecycle(object obj)
         {
-            if (obj is ITickable tickable)
+            if (obj is ITickable tickable) // tickable 为 Tick 生命周期对象
             {
                 _tickables.Add(tickable);
                 _tickables.Sort((a, b) => a.TickOrder.CompareTo(b.TickOrder));
             }
             
-            if (obj is IUpdateable updateable)
+            if (obj is IUpdateable updateable) // updateable 为 Update 生命周期对象
             {
                 _updateables.Add(updateable);
                 _updateables.Sort((a, b) => a.UpdateOrder.CompareTo(b.UpdateOrder));
             }
             
-            if (obj is ILateUpdateable lateUpdateable)
+            if (obj is ILateUpdateable lateUpdateable) // lateUpdateable 为 LateUpdate 生命周期对象
             {
                 _lateUpdateables.Add(lateUpdateable);
                 _lateUpdateables.Sort((a, b) => a.LateUpdateOrder.CompareTo(b.LateUpdateOrder));
             }
             
-            if (obj is IPausable pausable)
+            if (obj is IPausable pausable) // pausable 为可暂停对象
             {
                 _pausables.Add(pausable);
             }
@@ -376,16 +470,16 @@ namespace CYFramework.Infrastructure
         /// </summary>
         public void UnregisterLifecycle(object obj)
         {
-            if (obj is ITickable tickable)
+            if (obj is ITickable tickable) // tickable 为 Tick 生命周期对象
                 _tickables.Remove(tickable);
             
-            if (obj is IUpdateable updateable)
+            if (obj is IUpdateable updateable) // updateable 为 Update 生命周期对象
                 _updateables.Remove(updateable);
             
-            if (obj is ILateUpdateable lateUpdateable)
+            if (obj is ILateUpdateable lateUpdateable) // lateUpdateable 为 LateUpdate 生命周期对象
                 _lateUpdateables.Remove(lateUpdateable);
             
-            if (obj is IPausable pausable)
+            if (obj is IPausable pausable) // pausable 为可暂停对象
                 _pausables.Remove(pausable);
         }
         
@@ -412,7 +506,7 @@ namespace CYFramework.Infrastructure
                 CYLog.Debug("[CYBootstrap] 游戏暂停");
                 
                 // 通知所有 IPausable
-                foreach (var pausable in _pausables)
+                foreach (var pausable in _pausables) // pausable 为可暂停对象
                 {
                     pausable.OnPause();
                 }
@@ -423,11 +517,12 @@ namespace CYFramework.Infrastructure
                 AudioListener.pause = false;
                 Time.timeScale = 1f;
                 
+                // 暂停持续时长
                 float pauseDuration = Time.realtimeSinceStartup - _pauseTimestamp;
                 CYLog.Debug($"[CYBootstrap] 游戏恢复，暂停时长: {pauseDuration:F2}s");
                 
                 // 通知所有 IPausable
-                foreach (var pausable in _pausables)
+                foreach (var pausable in _pausables) // pausable 为可暂停对象
                 {
                     pausable.OnResume(pauseDuration);
                 }
@@ -461,6 +556,7 @@ namespace CYFramework.Infrastructure
         /// </summary>
         private void OnUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
         {
+            // 未处理异常对象
             var ex = e.ExceptionObject as System.Exception;
             CYLog.Fatal($"[Unhandled Exception] {ex?.Message}\n{ex?.StackTrace}");
             // TODO: 保存现场快照，上报到服务器

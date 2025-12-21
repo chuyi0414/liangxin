@@ -13,8 +13,19 @@ namespace CYFramework.Core.UI.MVVM
         /// </summary>
         public struct ChangedEventArgs
         {
+            /// <summary>
+            /// 属性名
+            /// </summary>
             public string PropertyName;
+
+            /// <summary>
+            /// 旧值
+            /// </summary>
             public T OldValue;
+
+            /// <summary>
+            /// 新值
+            /// </summary>
             public T NewValue;
         }
 
@@ -23,7 +34,14 @@ namespace CYFramework.Core.UI.MVVM
         /// </summary>
         public delegate void ChangedHandler(ref ChangedEventArgs args);
 
+        /// <summary>
+        /// 变更监听列表
+        /// </summary>
         private readonly List<ChangedHandler> _handlers = new();
+
+        /// <summary>
+        /// 当前值
+        /// </summary>
         private T _value;
 
         /// <summary>
@@ -61,7 +79,7 @@ namespace CYFramework.Core.UI.MVVM
                 return;
             }
 
-            var args = new ChangedEventArgs
+            var args = new ChangedEventArgs // 变更参数
             {
                 PropertyName = PropertyName,
                 OldValue = _value,
@@ -70,7 +88,7 @@ namespace CYFramework.Core.UI.MVVM
 
             _value = value;
 
-            for (int i = 0; i < _handlers.Count; i++)
+            for (int i = 0; i < _handlers.Count; i++) // i 为索引
             {
                 _handlers[i](ref args);
             }

@@ -5,5 +5,9 @@ using UnityEngine;
 
 public class CompanyEntity : EntityBase
 {
-    
+    protected override void OnEntityShow(object userData)
+    {
+        base.OnEntityShow(userData);
+
+    }
 }

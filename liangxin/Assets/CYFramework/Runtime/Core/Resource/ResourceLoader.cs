@@ -63,10 +63,22 @@ namespace CYFramework.Core.Resource
     {
         #region 内部类型定义
         
+        /// <summary>
+        /// 缓存条目
+        /// </summary>
         private class CacheEntry
         {
+            /// <summary>
+            /// 资源对象
+            /// </summary>
             public Object Asset;
+            /// <summary>
+            /// 资源占用字节数
+            /// </summary>
             public long SizeBytes;
+            /// <summary>
+            /// LRU 链表节点
+            /// </summary>
             public LinkedListNode<string> LruNode;
         }
         
@@ -74,17 +86,47 @@ namespace CYFramework.Core.Resource
 
         #region 字段
         
+        /// <summary>
+        /// 资源缓存表
+        /// </summary>
         private readonly Dictionary<string, CacheEntry> _cache = new Dictionary<string, CacheEntry>();
+        /// <summary>
+        /// 引用计数表
+        /// </summary>
         private readonly Dictionary<string, int> _refCounts = new Dictionary<string, int>();
+        /// <summary>
+        /// 加载中回调表
+        /// </summary>
         private readonly Dictionary<string, List<Action<Object>>> _loadingCallbacks = new Dictionary<string, List<Action<Object>>>();
+        /// <summary>
+        /// LRU 列表
+        /// </summary>
         private readonly LinkedList<string> _lruList = new LinkedList<string>();
         
+        /// <summary>
+        /// 异步加载优先级
+        /// </summary>
         private int _asyncLoadPriority = 0;
+        /// <summary>
+        /// 缓存容量（MB）
+        /// </summary>
         private int _cacheSizeMB = 100; // 默认 100MB 缓存
+        /// <summary>
+        /// 当前缓存字节数
+        /// </summary>
         private long _cacheBytes = 0;
+        /// <summary>
+        /// 是否启用引用计数
+        /// </summary>
         private bool _enableRefCount = true;
+        /// <summary>
+        /// 是否存在待卸载标记
+        /// </summary>
         private bool _hasPendingUnload = false;
         
+        /// <summary>
+        /// 最大缓存字节数
+        /// </summary>
         private long MaxCacheBytes => _cacheSizeMB * 1024L * 1024L;
 
         #endregion
@@ -110,6 +152,7 @@ namespace CYFramework.Core.Resource
         public T Load<T>(string path) where T : Object
         {
             // 检查缓存
+            // 缓存条目
             if (_cache.TryGetValue(path, out var cachedEntry))
             {
                 TouchEntry(path, cachedEntry);
@@ -118,6 +161,7 @@ namespace CYFramework.Core.Resource
             }
             
             // 从 Resources 加载
+            // 加载到的资源对象
             var asset = Resources.Load<T>(path);
             
             if (asset != null)
@@ -148,6 +192,7 @@ namespace CYFramework.Core.Resource
         /// </summary>
         public bool TryGetCached<T>(string path, out T asset) where T : Object
         {
+            // 缓存条目
             if (!string.IsNullOrEmpty(path) && _cache.TryGetValue(path, out var entry))
             {
                 asset = entry.Asset as T;
@@ -174,6 +219,7 @@ namespace CYFramework.Core.Resource
         {
             if (!_enableRefCount) return 0;
             if (string.IsNullOrEmpty(path)) return 0;
+            // 当前引用计数
             return _refCounts.TryGetValue(path, out var count) ? count : 0;
         }
 
@@ -203,6 +249,7 @@ namespace CYFramework.Core.Resource
         public void LoadAsync<T>(string path, Action<T> callback) where T : Object
         {
             // 检查缓存
+            // 缓存条目
             if (_cache.TryGetValue(path, out var cachedEntry))
             {
                 TouchEntry(path, cachedEntry);
@@ -212,6 +259,7 @@ namespace CYFramework.Core.Resource
             }
             
             // 检查是否正在加载
+            // 回调列表
             if (_loadingCallbacks.TryGetValue(path, out var callbacks))
             {
                 callbacks.Add(obj => callback?.Invoke(obj as T));
@@ -224,10 +272,12 @@ namespace CYFramework.Core.Resource
             // 重要：这里统一用非泛型 Resources.LoadAsync(path)。
             // 原因：如果首次请求用错了 T（例如先 LoadAsync<Component> 再 LoadAsync<GameObject>），
             // 泛型版本会导致 request.asset 直接为 null，从而让后续正确类型也拿不到资源。
+            // 异步请求
             var request = Resources.LoadAsync(path);
             request.priority = _asyncLoadPriority;
             request.completed += _ =>
             {
+                // 加载到的资源
                 var asset = request.asset;
                 
                 if (asset != null)
@@ -239,8 +289,10 @@ namespace CYFramework.Core.Resource
                 // 执行所有回调
                 if (_loadingCallbacks.TryGetValue(path, out var cbs))
                 {
+                    // 回调列表
                     foreach (var cb in cbs)
                     {
+                        // 当前回调
                         cb?.Invoke(asset);
                     }
                     _loadingCallbacks.Remove(path);
@@ -254,6 +306,7 @@ namespace CYFramework.Core.Resource
         public async Task<T> LoadAsync<T>(string path) where T : Object
         {
             // 检查缓存
+            // 缓存条目
             if (_cache.TryGetValue(path, out var cachedEntry))
             {
                 TouchEntry(path, cachedEntry);
@@ -262,6 +315,7 @@ namespace CYFramework.Core.Resource
             }
             
             // 同回调版：统一走非泛型 LoadAsync，避免首次错误类型导致资源永远为 null。
+            // 异步请求
             var request = Resources.LoadAsync(path);
             request.priority = _asyncLoadPriority;
             
@@ -270,6 +324,7 @@ namespace CYFramework.Core.Resource
                 await Task.Yield();
             }
 
+            // 原始资源对象
             var raw = request.asset;
             if (raw != null)
             {
@@ -289,6 +344,7 @@ namespace CYFramework.Core.Resource
         /// </summary>
         public void Unload(string path)
         {
+            // 缓存条目
             if (!_cache.TryGetValue(path, out var entry))
             {
                 return;
@@ -297,6 +353,7 @@ namespace CYFramework.Core.Resource
             if (_enableRefCount)
             {
                 Release(path);
+                // 当前引用计数
                 if (_refCounts.TryGetValue(path, out var count) && count > 0)
                 {
                     CYLog.Debug($"[ResourceLoader] 引用计数未归零，跳过卸载: {path}, ref={count}");
@@ -355,6 +412,7 @@ namespace CYFramework.Core.Resource
         /// </summary>
         public void LoadScene(string sceneName, LoadSceneMode mode = LoadSceneMode.Single, Action onComplete = null)
         {
+            // 场景加载操作
             var operation = SceneManager.LoadSceneAsync(sceneName, mode);
             
             if (operation != null)
@@ -387,6 +445,7 @@ namespace CYFramework.Core.Resource
         /// </summary>
         public GameObject Instantiate(string path, Transform parent = null)
         {
+            // 预制体资源
             var prefab = Load<GameObject>(path);
             if (prefab == null)
             {
@@ -394,6 +453,7 @@ namespace CYFramework.Core.Resource
                 return null;
             }
             
+            // 实例化对象
             var go = Object.Instantiate(prefab, parent);
             return go;
         }
@@ -412,6 +472,7 @@ namespace CYFramework.Core.Resource
                     return;
                 }
                 
+                // 实例化对象
                 var go = Object.Instantiate(prefab, parent);
                 callback?.Invoke(go);
             });
@@ -444,11 +505,14 @@ namespace CYFramework.Core.Resource
                 return;
             }
             
+            // 总数量
             int total = paths.Length;
+            // 已完成数量
             int loaded = 0;
             
             foreach (var path in paths)
             {
+                // 当前资源路径
                 LoadAsync<Object>(path, _ =>
                 {
                     loaded++;
@@ -471,16 +535,24 @@ namespace CYFramework.Core.Resource
 
         #region 内部辅助
         
+        /// <summary>
+        /// 增加引用计数
+        /// </summary>
         private void Retain(string path)
         {
             if (!_enableRefCount) return;
+            // 当前引用计数
             _refCounts.TryGetValue(path, out var count);
             _refCounts[path] = count + 1;
         }
 
+        /// <summary>
+        /// 减少引用计数
+        /// </summary>
         private void Release(string path)
         {
             if (!_enableRefCount) return;
+            // 当前引用计数
             if (!_refCounts.TryGetValue(path, out var count)) return;
 
             count--;
@@ -494,16 +566,21 @@ namespace CYFramework.Core.Resource
             }
         }
 
+        /// <summary>
+        /// 加入缓存
+        /// </summary>
         private void AddToCache(string path, Object asset)
         {
             if (string.IsNullOrEmpty(path) || asset == null) return;
 
+            // 已存在的缓存条目
             if (_cache.TryGetValue(path, out var existing))
             {
                 TouchEntry(path, existing);
                 return;
             }
 
+            // 新缓存条目
             var entry = new CacheEntry
             {
                 Asset = asset,
@@ -516,6 +593,9 @@ namespace CYFramework.Core.Resource
             EvictIfNeeded();
         }
 
+        /// <summary>
+        /// 更新缓存条目活跃时间
+        /// </summary>
         private void TouchEntry(string path, CacheEntry entry)
         {
             if (entry == null || entry.LruNode == null) return;
@@ -523,6 +603,9 @@ namespace CYFramework.Core.Resource
             entry.LruNode = _lruList.AddFirst(path);
         }
 
+        /// <summary>
+        /// 从缓存移除
+        /// </summary>
         private void RemoveFromCache(string path, CacheEntry entry)
         {
             if (entry == null) return;
@@ -538,24 +621,33 @@ namespace CYFramework.Core.Resource
             _hasPendingUnload = true;
         }
 
+        /// <summary>
+        /// 按策略驱逐缓存
+        /// </summary>
         private void EvictIfNeeded()
         {
             if (_cacheSizeMB <= 0) return;
+            // 最大缓存字节数
             var maxBytes = MaxCacheBytes;
             if (maxBytes <= 0) return;
             if (_cacheBytes <= maxBytes) return;
 
+            // 是否发生淘汰
             bool evictedAny = false;
+            // 保护计数（避免死循环）
             int guard = _cache.Count;
             while (_cacheBytes > maxBytes && _lruList.Last != null && guard-- > 0)
             {
+                // 最久未使用的 key
                 string key = _lruList.Last.Value;
+                // 缓存条目
                 if (!_cache.TryGetValue(key, out var entry))
                 {
                     _lruList.RemoveLast();
                     continue;
                 }
 
+                // 引用计数
                 if (_enableRefCount && _refCounts.TryGetValue(key, out var refCount) && refCount > 0)
                 {
                     // 引用计数 > 0 的不淘汰，移到队首
@@ -574,6 +666,9 @@ namespace CYFramework.Core.Resource
             }
         }
 
+        /// <summary>
+        /// 获取资源大小（字节）
+        /// </summary>
         private static long GetAssetSizeBytes(Object asset)
         {
             if (asset == null) return 0;

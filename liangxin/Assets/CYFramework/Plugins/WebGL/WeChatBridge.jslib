@@ -7,25 +7,27 @@ mergeInto(LibraryManager.library, {
     
     // ==================== 存储 API ====================
     
+    // 获取存储字符串
     WX_GetStorage: function(keyPtr) {
-        var key = UTF8ToString(keyPtr);
+        var key = UTF8ToString(keyPtr); // 键名
         try {
-            var value = wx.getStorageSync(key) || "";
-            var bufferSize = lengthBytesUTF8(value) + 1;
-            var buffer = _malloc(bufferSize);
+            var value = wx.getStorageSync(key) || ""; // 存储值
+            var bufferSize = lengthBytesUTF8(value) + 1; // 缓冲区大小
+            var buffer = _malloc(bufferSize); // 缓冲区指针
             stringToUTF8(value, buffer, bufferSize);
             return buffer;
         } catch (e) {
             console.error("[WeChatBridge] WX_GetStorage error:", e);
-            var empty = _malloc(1);
+            var empty = _malloc(1); // 空字符串指针
             HEAP8[empty] = 0;
             return empty;
         }
     },
     
+    // 设置存储字符串
     WX_SetStorage: function(keyPtr, valuePtr) {
-        var key = UTF8ToString(keyPtr);
-        var value = UTF8ToString(valuePtr);
+        var key = UTF8ToString(keyPtr); // 键名
+        var value = UTF8ToString(valuePtr); // 值
         try {
             wx.setStorageSync(key, value);
         } catch (e) {
@@ -33,8 +35,9 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 删除存储键
     WX_RemoveStorage: function(keyPtr) {
-        var key = UTF8ToString(keyPtr);
+        var key = UTF8ToString(keyPtr); // 键名
         try {
             wx.removeStorageSync(key);
         } catch (e) {
@@ -42,6 +45,7 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 清空存储
     WX_ClearStorage: function() {
         try {
             wx.clearStorageSync();
@@ -50,9 +54,10 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 获取已用存储字节数
     WX_GetStorageInfoUsed: function() {
         try {
-            var info = wx.getStorageInfoSync();
+            var info = wx.getStorageInfoSync(); // 存储信息
             return info.currentSize * 1024; // KB -> Bytes
         } catch (e) {
             console.error("[WeChatBridge] WX_GetStorageInfoUsed error:", e);
@@ -60,10 +65,11 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 检查存储键是否存在
     WX_HasStorageKey: function(keyPtr) {
-        var key = UTF8ToString(keyPtr);
+        var key = UTF8ToString(keyPtr); // 键名
         try {
-            var value = wx.getStorageSync(key);
+            var value = wx.getStorageSync(key); // 存储值
             return value !== undefined && value !== null && value !== "";
         } catch (e) {
             return false;
@@ -72,10 +78,11 @@ mergeInto(LibraryManager.library, {
     
     // ==================== 文件系统 API ====================
     
+    // 检查文件是否存在
     WX_FileExists: function(pathPtr) {
-        var path = UTF8ToString(pathPtr);
+        var path = UTF8ToString(pathPtr); // 文件路径
         try {
-            var fs = wx.getFileSystemManager();
+            var fs = wx.getFileSystemManager(); // 文件系统管理器
             fs.accessSync(path);
             return true;
         } catch (e) {
@@ -83,30 +90,32 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 读取文本文件
     WX_ReadFile: function(pathPtr) {
-        var path = UTF8ToString(pathPtr);
+        var path = UTF8ToString(pathPtr); // 文件路径
         try {
-            var fs = wx.getFileSystemManager();
-            var content = fs.readFileSync(path, 'utf8');
-            var bufferSize = lengthBytesUTF8(content) + 1;
-            var buffer = _malloc(bufferSize);
+            var fs = wx.getFileSystemManager(); // 文件系统管理器
+            var content = fs.readFileSync(path, 'utf8'); // 文件内容
+            var bufferSize = lengthBytesUTF8(content) + 1; // 缓冲区大小
+            var buffer = _malloc(bufferSize); // 缓冲区指针
             stringToUTF8(content, buffer, bufferSize);
             return buffer;
         } catch (e) {
             console.error("[WeChatBridge] WX_ReadFile error:", e);
-            var empty = _malloc(1);
+            var empty = _malloc(1); // 空字符串指针
             HEAP8[empty] = 0;
             return empty;
         }
     },
     
+    // 写入文本文件
     WX_WriteFile: function(pathPtr, contentPtr) {
-        var path = UTF8ToString(pathPtr);
-        var content = UTF8ToString(contentPtr);
+        var path = UTF8ToString(pathPtr); // 文件路径
+        var content = UTF8ToString(contentPtr); // 文件内容
         try {
-            var fs = wx.getFileSystemManager();
+            var fs = wx.getFileSystemManager(); // 文件系统管理器
             // 确保目录存在
-            var dir = path.substring(0, path.lastIndexOf('/'));
+            var dir = path.substring(0, path.lastIndexOf('/')); // 目录路径
             if (dir) {
                 try { fs.mkdirSync(dir, true); } catch (e) {}
             }
@@ -118,10 +127,11 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 删除文件
     WX_DeleteFile: function(pathPtr) {
-        var path = UTF8ToString(pathPtr);
+        var path = UTF8ToString(pathPtr); // 文件路径
         try {
-            var fs = wx.getFileSystemManager();
+            var fs = wx.getFileSystemManager(); // 文件系统管理器
             fs.unlinkSync(path);
             return true;
         } catch (e) {
@@ -132,11 +142,12 @@ mergeInto(LibraryManager.library, {
     
     // ==================== 网络 API ====================
     
+    // HTTP 请求
     WX_HttpRequest: function(urlPtr, methodPtr, dataPtr, headersPtr, callbackId) {
-        var url = UTF8ToString(urlPtr);
-        var method = UTF8ToString(methodPtr);
-        var data = UTF8ToString(dataPtr);
-        var headers = JSON.parse(UTF8ToString(headersPtr) || '{}');
+        var url = UTF8ToString(urlPtr); // 请求地址
+        var method = UTF8ToString(methodPtr); // 请求方法
+        var data = UTF8ToString(dataPtr); // 请求体
+        var headers = JSON.parse(UTF8ToString(headersPtr) || '{}'); // 请求头
         
         try {
             wx.request({
@@ -145,7 +156,7 @@ mergeInto(LibraryManager.library, {
                 data: data,
                 header: headers,
                 success: function(res) {
-                    var result = JSON.stringify(res.data);
+                    var result = JSON.stringify(res.data); // 返回数据
                     // 调用 C# 回调
                     SendMessage('WeChatBridge', 'OnHttpResponse', callbackId + '|' + result);
                 },
@@ -158,11 +169,12 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 连接 WebSocket
     WX_ConnectSocket: function(urlPtr, callbackId) {
-        var url = UTF8ToString(urlPtr);
+        var url = UTF8ToString(urlPtr); // 连接地址
         
         try {
-            var socket = wx.connectSocket({
+            var socket = wx.connectSocket({ // WebSocket 实例
                 url: url,
                 success: function() {
                     SendMessage('WeChatBridge', 'OnSocketOpen', callbackId.toString());
@@ -190,8 +202,9 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 发送 WebSocket 消息
     WX_SendSocketMessage: function(messagePtr) {
-        var message = UTF8ToString(messagePtr);
+        var message = UTF8ToString(messagePtr); // 发送内容
         try {
             if (window._wxSocket) {
                 window._wxSocket.send({ data: message });
@@ -201,6 +214,7 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 关闭 WebSocket
     WX_CloseSocket: function() {
         try {
             if (window._wxSocket) {
@@ -212,22 +226,23 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 获取网络类型
     WX_GetNetworkType: function() {
         try {
-            var networkType = 'unknown';
+            var networkType = 'unknown'; // 网络类型
             wx.getNetworkType({
                 success: function(res) {
                     networkType = res.networkType;
                 }
             });
-            var bufferSize = lengthBytesUTF8(networkType) + 1;
-            var buffer = _malloc(bufferSize);
+            var bufferSize = lengthBytesUTF8(networkType) + 1; // 缓冲区大小
+            var buffer = _malloc(bufferSize); // 缓冲区指针
             stringToUTF8(networkType, buffer, bufferSize);
             return buffer;
         } catch (e) {
-            var unknown = 'unknown';
-            var bufferSize = lengthBytesUTF8(unknown) + 1;
-            var buffer = _malloc(bufferSize);
+            var unknown = 'unknown'; // 默认值
+            var bufferSize = lengthBytesUTF8(unknown) + 1; // 缓冲区大小
+            var buffer = _malloc(bufferSize); // 缓冲区指针
             stringToUTF8(unknown, buffer, bufferSize);
             return buffer;
         }
@@ -235,15 +250,17 @@ mergeInto(LibraryManager.library, {
     
     // ==================== 系统 API ====================
     
+    // 短震动
     WX_VibrateShort: function(typePtr) {
         try {
-            var vibrateType = typePtr ? UTF8ToString(typePtr) : 'medium';
+            var vibrateType = typePtr ? UTF8ToString(typePtr) : 'medium'; // 震动类型
             wx.vibrateShort({ type: vibrateType });
         } catch (e) {
             console.error('[WeChatBridge] WX_VibrateShort error:', e);
         }
     },
     
+    // 长震动
     WX_VibrateLong: function() {
         try {
             wx.vibrateLong();
@@ -252,16 +269,17 @@ mergeInto(LibraryManager.library, {
         }
     },
     
+    // 获取系统信息
     WX_GetSystemInfo: function() {
         try {
-            var info = wx.getSystemInfoSync();
-            var json = JSON.stringify(info);
-            var bufferSize = lengthBytesUTF8(json) + 1;
-            var buffer = _malloc(bufferSize);
+            var info = wx.getSystemInfoSync(); // 系统信息
+            var json = JSON.stringify(info); // JSON 文本
+            var bufferSize = lengthBytesUTF8(json) + 1; // 缓冲区大小
+            var buffer = _malloc(bufferSize); // 缓冲区指针
             stringToUTF8(json, buffer, bufferSize);
             return buffer;
         } catch (e) {
-            var empty = _malloc(1);
+            var empty = _malloc(1); // 空字符串指针
             HEAP8[empty] = 0;
             return empty;
         }

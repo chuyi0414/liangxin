@@ -15,7 +15,13 @@ namespace CYFramework.Gameplay.Abstraction
     /// </summary>
     public class InputBuffer
     {
+        /// <summary>
+        /// 输入命令队列
+        /// </summary>
         private readonly Queue<InputCommand> _buffer;
+        /// <summary>
+        /// 最大容量
+        /// </summary>
         private readonly int _maxCapacity;
         
         /// <summary>

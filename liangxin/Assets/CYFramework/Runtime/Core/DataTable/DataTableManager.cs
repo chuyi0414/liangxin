@@ -17,7 +17,14 @@ namespace CYFramework.Core.DataTable
     /// </summary>
     public interface IDataRow
     {
+        /// <summary>
+        /// 行唯一标识
+        /// </summary>
         int Id { get; }
+
+        /// <summary>
+        /// 解析一行数据
+        /// </summary>
         void ParseRow(string[] values);
     }
     
@@ -26,9 +33,24 @@ namespace CYFramework.Core.DataTable
     /// </summary>
     public interface IDataTable
     {
+        /// <summary>
+        /// 表名
+        /// </summary>
         string Name { get; }
+
+        /// <summary>
+        /// 行类型
+        /// </summary>
         Type RowType { get; }
+
+        /// <summary>
+        /// 行数量
+        /// </summary>
         int Count { get; }
+
+        /// <summary>
+        /// 清空表内容
+        /// </summary>
         void Clear();
     }
     
@@ -37,13 +59,30 @@ namespace CYFramework.Core.DataTable
     /// </summary>
     public class DataTable<T> : IDataTable where T : class, IDataRow, new()
     {
+        /// <summary>
+        /// 表名
+        /// </summary>
         public string Name { get; }
+
+        /// <summary>
+        /// 行类型
+        /// </summary>
         public Type RowType => typeof(T);
+
+        /// <summary>
+        /// 行数量
+        /// </summary>
         public int Count => _dataRows.Count;
-        
+
+        // 行字典：Id -> 行实例
         private readonly Dictionary<int, T> _dataRows = new();
+
+        // 行列表：保持插入顺序，便于遍历
         private readonly List<T> _dataRowList = new();
-        
+
+        /// <summary>
+        /// 构造数据表
+        /// </summary>
         public DataTable(string name)
         {
             Name = name;
@@ -69,6 +108,7 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public T GetRow(int id)
         {
+            // row 为命中的行数据
             return _dataRows.TryGetValue(id, out var row) ? row : null;
         }
         
@@ -77,6 +117,7 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public T GetRow(Predicate<T> predicate)
         {
+            // 遍历行，返回第一个满足条件的行
             foreach (var row in _dataRowList)
             {
                 if (predicate(row))
@@ -101,7 +142,8 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public List<T> GetRows(Predicate<T> predicate)
         {
-            var result = new List<T>();
+            var result = new List<T>(); // 结果列表（会产生 GC）
+            // 遍历行，收集满足条件的行
             foreach (var row in _dataRowList)
             {
                 if (predicate(row))
@@ -117,7 +159,9 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public void GetRowsNonAlloc(Predicate<T> predicate, List<T> result)
         {
+            // result 为复用的结果列表（零 GC）
             result.Clear();
+            // 遍历行，收集满足条件的行
             foreach (var row in _dataRowList)
             {
                 if (predicate(row))
@@ -140,6 +184,7 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public bool HasRow(Predicate<T> predicate)
         {
+            // 遍历行，判断是否存在满足条件的行
             foreach (var row in _dataRowList)
             {
                 if (predicate(row))
@@ -165,8 +210,12 @@ namespace CYFramework.Core.DataTable
     /// </summary>
     public class DataTableManager : IDisposableEx
     {
+        /// <summary>
+        /// 释放顺序（与框架其它服务保持一致）
+        /// </summary>
         public int DisposeOrder => 0;
-        
+
+        // 表字典：表名 -> 表实例
         private readonly Dictionary<string, IDataTable> _dataTables = new();
         
         /// <summary>
@@ -174,6 +223,7 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public DataTable<T> CreateDataTable<T>(string name = null) where T : class, IDataRow, new()
         {
+            // 空表名时默认使用类型名
             name ??= typeof(T).Name;
             
             if (_dataTables.ContainsKey(name))
@@ -182,7 +232,7 @@ namespace CYFramework.Core.DataTable
                 return GetDataTable<T>(name);
             }
             
-            var dataTable = new DataTable<T>(name);
+            var dataTable = new DataTable<T>(name); // 新建表实例
             _dataTables[name] = dataTable;
             
             CYLog.Debug($"[DataTableManager] 创建数据表: {name}");
@@ -194,8 +244,10 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public DataTable<T> GetDataTable<T>(string name = null) where T : class, IDataRow, new()
         {
+            // 空表名时默认使用类型名
             name ??= typeof(T).Name;
             
+            // dataTable 为命中的表实例
             if (_dataTables.TryGetValue(name, out var dataTable))
             {
                 return dataTable as DataTable<T>;
@@ -217,24 +269,25 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public DataTable<T> LoadFromCsv<T>(string csvText, string name = null, char separator = ',') where T : class, IDataRow, new()
         {
-            var dataTable = CreateDataTable<T>(name);
+            var dataTable = CreateDataTable<T>(name); // 目标数据表
             
-            var lines = csvText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var lines = csvText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries); // 分割后的行
             
             // 跳过表头（第一行）
+            // i 为行索引（从 1 开始）
             for (int i = 1; i < lines.Length; i++)
             {
-                var line = lines[i].Trim();
+                var line = lines[i].Trim(); // 当前行文本
                 if (string.IsNullOrEmpty(line) || line.StartsWith("#"))
                 {
                     continue; // 跳过空行和注释
                 }
                 
-                var values = ParseCsvLine(line, separator);
+                var values = ParseCsvLine(line, separator); // CSV 列值数组
                 
                 try
                 {
-                    var row = new T();
+                    var row = new T(); // 目标行实例
                     row.ParseRow(values);
                     dataTable.AddRow(row);
                 }
@@ -257,7 +310,7 @@ namespace CYFramework.Core.DataTable
         /// </remarks>
         public DataTable<T> LoadFromJson<T>(string jsonText, string name = null) where T : class, IDataRow, new()
         {
-            var dataTable = CreateDataTable<T>(name);
+            var dataTable = CreateDataTable<T>(name); // 目标数据表
 
             if (string.IsNullOrEmpty(jsonText))
             {
@@ -265,7 +318,7 @@ namespace CYFramework.Core.DataTable
                 return dataTable;
             }
 
-            JsonTableWrapper<T> wrapper;
+            JsonTableWrapper<T> wrapper; // JSON 包装体（rows/Rows）
             try
             {
                 wrapper = JsonUtility.FromJson<JsonTableWrapper<T>>(jsonText);
@@ -276,16 +329,17 @@ namespace CYFramework.Core.DataTable
                 return dataTable;
             }
 
-            var rows = wrapper?.rows ?? wrapper?.Rows;
+            var rows = wrapper?.rows ?? wrapper?.Rows; // 行列表
             if (rows == null || rows.Count == 0)
             {
                 CYLog.Warning($"[DataTableManager] JSON rows 为空: {name ?? typeof(T).Name}");
                 return dataTable;
             }
 
+            // i 为行索引
             for (int i = 0; i < rows.Count; i++)
             {
-                var row = rows[i];
+                var row = rows[i]; // 当前行
                 if (row == null)
                 {
                     continue;
@@ -317,7 +371,7 @@ namespace CYFramework.Core.DataTable
         /// </remarks>
         public DataTable<T> LoadFromJsonObject<T>(string jsonText, string name, bool autoFixIdIfZero) where T : class, IDataRow, new()
         {
-            var dataTable = CreateDataTable<T>(name);
+            var dataTable = CreateDataTable<T>(name); // 目标数据表
 
             if (string.IsNullOrEmpty(jsonText))
             {
@@ -325,7 +379,7 @@ namespace CYFramework.Core.DataTable
                 return dataTable;
             }
 
-            T row;
+            T row; // 单对象行实例
             try
             {
                 row = JsonUtility.FromJson<T>(jsonText);
@@ -342,6 +396,7 @@ namespace CYFramework.Core.DataTable
                 return dataTable;
             }
 
+            // Id 为 0 时提示或尝试自动补齐
             if (row.Id == 0)
             {
                 if (autoFixIdIfZero)
@@ -369,8 +424,9 @@ namespace CYFramework.Core.DataTable
             where T : class, IDataRow, new()
             where TSO : ScriptableObject
         {
-            var dataTable = CreateDataTable<T>(name);
+            var dataTable = CreateDataTable<T>(name); // 目标数据表
             
+            // row 为 ScriptableObject 中的行实例
             foreach (var row in rowsGetter(so))
             {
                 dataTable.AddRow(row);
@@ -385,6 +441,7 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public void UnloadDataTable(string name)
         {
+            // dataTable 为命中的表实例
             if (_dataTables.TryGetValue(name, out var dataTable))
             {
                 dataTable.Clear();
@@ -398,6 +455,7 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         public void UnloadAllDataTables()
         {
+            // dataTable 为当前遍历到的表实例
             foreach (var dataTable in _dataTables.Values)
             {
                 dataTable.Clear();
@@ -405,14 +463,23 @@ namespace CYFramework.Core.DataTable
             _dataTables.Clear();
             CYLog.Debug("[DataTableManager] 卸载所有数据表");
         }
-        
+
+        // CSV 解析缓冲，减少 GC
         private readonly StringBuilder _csvParseBuffer = new StringBuilder(256);
+
+        // CSV 解析结果缓存，减少 GC
         private readonly List<string> _csvParseResult = new List<string>(32);
 
         [Serializable]
+        /// <summary>
+        /// JSON 行包装体（兼容 rows/Rows）
+        /// </summary>
         private class JsonTableWrapper<T>
         {
+            // 小写 rows 兼容
             public List<T> rows;
+
+            // 大写 Rows 兼容
             public List<T> Rows;
         }
 
@@ -421,17 +488,17 @@ namespace CYFramework.Core.DataTable
         /// </summary>
         private static bool TrySetRowId<T>(T row, int id) where T : class
         {
-            var type = row.GetType();
-            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var type = row.GetType(); // 行类型
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic; // 反射标记
 
-            var field = type.GetField("Id", flags) ?? type.GetField("id", flags);
+            var field = type.GetField("Id", flags) ?? type.GetField("id", flags); // Id 字段
             if (field != null && field.FieldType == typeof(int))
             {
                 field.SetValue(row, id);
                 return true;
             }
 
-            var prop = type.GetProperty("Id", flags) ?? type.GetProperty("id", flags);
+            var prop = type.GetProperty("Id", flags) ?? type.GetProperty("id", flags); // Id 属性
             if (prop != null && prop.PropertyType == typeof(int) && prop.CanWrite)
             {
                 prop.SetValue(row, id);
@@ -439,7 +506,7 @@ namespace CYFramework.Core.DataTable
             }
 
             // 兼容自动属性的后备字段
-            field = type.GetField("<Id>k__BackingField", flags) ?? type.GetField("<id>k__BackingField", flags);
+            field = type.GetField("<Id>k__BackingField", flags) ?? type.GetField("<id>k__BackingField", flags); // 自动属性后备字段
             if (field != null && field.FieldType == typeof(int))
             {
                 field.SetValue(row, id);
@@ -456,11 +523,12 @@ namespace CYFramework.Core.DataTable
         {
             _csvParseResult.Clear();
             _csvParseBuffer.Clear();
-            var inQuotes = false;
+            var inQuotes = false; // 是否在引号内
             
+            // i 为字符索引
             for (int i = 0; i < line.Length; i++)
             {
-                char c = line[i];
+                char c = line[i]; // 当前字符
                 
                 if (c == '"')
                 {
@@ -482,6 +550,9 @@ namespace CYFramework.Core.DataTable
         }
         
         // IDisposableEx
+        /// <summary>
+        /// 释放并清空所有数据表
+        /// </summary>
         public void Dispose()
         {
             UnloadAllDataTables();

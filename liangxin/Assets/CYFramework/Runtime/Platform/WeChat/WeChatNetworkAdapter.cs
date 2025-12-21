@@ -19,34 +19,67 @@ namespace CYFramework.Platform.WeChat
     /// </summary>
     public class WeChatNetworkAdapter : INetworkAdapter
     {
+        /// <summary>
+        /// 当前是否联网
+        /// </summary>
         private bool _isConnected = true;
+        /// <summary>
+        /// 当前网络类型文本
+        /// </summary>
         private string _networkType = "unknown";
         
+        /// <summary>
+        /// 平台类型
+        /// </summary>
         public PlatformType Platform => PlatformType.WeChat;
+        /// <summary>
+        /// 是否联网
+        /// </summary>
         public bool IsConnected => _isConnected;
+        /// <summary>
+        /// 网络类型
+        /// </summary>
         public string NetworkType => _networkType;
         
         #region JS 桥接
         
 #if UNITY_WEBGL && !UNITY_EDITOR
         [DllImport("__Internal")]
+        /// <summary>
+        /// HTTP 请求
+        /// </summary>
         private static extern void WX_HttpRequest(string url, string method, string data, string headers, int callbackId);
         
         [DllImport("__Internal")]
+        /// <summary>
+        /// 连接 WebSocket
+        /// </summary>
         private static extern void WX_ConnectSocket(string url, int callbackId);
         
         [DllImport("__Internal")]
+        /// <summary>
+        /// 发送 WebSocket 消息
+        /// </summary>
         private static extern void WX_SendSocketMessage(string message);
         
         [DllImport("__Internal")]
+        /// <summary>
+        /// 关闭 WebSocket
+        /// </summary>
         private static extern void WX_CloseSocket();
         
         [DllImport("__Internal")]
+        /// <summary>
+        /// 获取网络类型
+        /// </summary>
         private static extern string WX_GetNetworkType();
 #endif
         
         #endregion
         
+        /// <summary>
+        /// 初始化
+        /// </summary>
         public void Initialize()
         {
             UpdateNetworkType();
@@ -87,13 +120,17 @@ namespace CYFramework.Platform.WeChat
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             // 使用 JS 桥接调用 wx.request
+            // 任务完成源
             var tcs = new TaskCompletionSource<string>();
+            // 回调 ID
             int callbackId = WeChatCallbackManager.Register(result => tcs.TrySetResult(result));
             
             WX_HttpRequest(url, method, body ?? "", "{}", callbackId);
             
             // 超时处理
+            // 超时任务
             var timeoutTask = Task.Delay(timeout * 1000);
+            // 完成任务
             var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
             
             if (completedTask == timeoutTask)
@@ -105,11 +142,13 @@ namespace CYFramework.Platform.WeChat
             return await tcs.Task;
 #else
             // Editor 模式：使用 UnityWebRequest 模拟
+            // 请求对象
             using var request = method == "GET" 
                 ? UnityEngine.Networking.UnityWebRequest.Get(url)
                 : BuildJsonPost(url, body, contentType);
             
             request.timeout = timeout;
+            // 请求操作
             var operation = request.SendWebRequest();
             
             while (!operation.isDone)
@@ -127,9 +166,14 @@ namespace CYFramework.Platform.WeChat
         }
 
 #if !UNITY_WEBGL || UNITY_EDITOR
+        /// <summary>
+        /// 构建 JSON POST 请求
+        /// </summary>
         private static UnityEngine.Networking.UnityWebRequest BuildJsonPost(string url, string body, string contentType)
         {
+            // 请求对象
             var request = new UnityEngine.Networking.UnityWebRequest(url, "POST");
+            // 请求体字节
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(body ?? "");
             request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
@@ -163,28 +207,60 @@ namespace CYFramework.Platform.WeChat
     /// </summary>
     public class WeChatWebSocket : IWebSocket
     {
+        /// <summary>
+        /// 连接地址
+        /// </summary>
         private readonly string _url;
+        /// <summary>
+        /// 当前连接状态
+        /// </summary>
         private WebSocketState _state = WebSocketState.Closed;
         
+        /// <summary>
+        /// WebSocket 状态
+        /// </summary>
         public WebSocketState State => _state;
         
+        /// <summary>
+        /// 文本消息事件
+        /// </summary>
         public event Action<string> OnMessage;
+        /// <summary>
+        /// 二进制消息事件
+        /// </summary>
         public event Action<byte[]> OnBinaryMessage;
+        /// <summary>
+        /// 连接打开事件
+        /// </summary>
         public event Action OnOpen;
+        /// <summary>
+        /// 连接关闭事件
+        /// </summary>
         public event Action<string> OnClose;
+        /// <summary>
+        /// 错误事件
+        /// </summary>
         public event Action<string> OnError;
         
+        /// <summary>
+        /// 构造函数
+        /// </summary>
         public WeChatWebSocket(string url)
         {
             _url = url;
         }
         
+        /// <summary>
+        /// 连接服务器
+        /// </summary>
         public async Task Connect()
         {
             _state = WebSocketState.Connecting;
             
 #if UNITY_WEBGL && !UNITY_EDITOR
+            // 任务完成源
             var tcs = new TaskCompletionSource<bool>();
+            // 回调 ID
             int callbackId = WeChatCallbackManager.Register(result => {
                 if (result == "open")
                 {
@@ -210,6 +286,9 @@ namespace CYFramework.Platform.WeChat
 #endif
         }
         
+        /// <summary>
+        /// 发送文本消息
+        /// </summary>
         public void Send(string message)
         {
             if (_state != WebSocketState.Open)
@@ -225,6 +304,9 @@ namespace CYFramework.Platform.WeChat
 #endif
         }
         
+        /// <summary>
+        /// 发送二进制消息
+        /// </summary>
         public void Send(byte[] data)
         {
             // 微信 WebSocket 发送二进制需要特殊处理：这里使用 base64 发送，JS 侧需解码
@@ -235,6 +317,7 @@ namespace CYFramework.Platform.WeChat
             }
             
 #if UNITY_WEBGL && !UNITY_EDITOR
+            // base64 文本
             string base64 = Convert.ToBase64String(data);
             WX_SendSocketMessage(base64);
 #else
@@ -242,6 +325,9 @@ namespace CYFramework.Platform.WeChat
 #endif
         }
         
+        /// <summary>
+        /// 关闭连接
+        /// </summary>
         public void Close()
         {
             _state = WebSocketState.Closing;
@@ -277,16 +363,29 @@ namespace CYFramework.Platform.WeChat
     /// </summary>
     public static class WeChatCallbackManager
     {
+        /// <summary>
+        /// 回调表
+        /// </summary>
         private static readonly System.Collections.Generic.Dictionary<int, Action<string>> _callbacks = new();
+        /// <summary>
+        /// 回调自增 ID
+        /// </summary>
         private static int _nextId = 1;
         
+        /// <summary>
+        /// 注册回调
+        /// </summary>
         public static int Register(Action<string> callback)
         {
+            // 回调 ID
             int id = _nextId++;
             _callbacks[id] = callback;
             return id;
         }
         
+        /// <summary>
+        /// 注销回调
+        /// </summary>
         public static void Unregister(int id)
         {
             _callbacks.Remove(id);
@@ -297,7 +396,7 @@ namespace CYFramework.Platform.WeChat
         /// </summary>
         public static void Invoke(int id, string result)
         {
-            if (_callbacks.TryGetValue(id, out var callback))
+            if (_callbacks.TryGetValue(id, out var callback)) // callback 为回调函数
             {
                 callback?.Invoke(result);
                 _callbacks.Remove(id);

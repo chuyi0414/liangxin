@@ -20,19 +20,41 @@ namespace CYFramework.Editor.Baking
     /// </summary>
     public class ConfigBaker : EditorWindow
     {
+        /// <summary>
+        /// 源配置目录
+        /// </summary>
         private string _sourceFolder = "Assets/Resources/Config";
+        /// <summary>
+        /// 输出目录
+        /// </summary>
         private string _outputFolder = "Assets/StreamingAssets/BakedConfig";
+        /// <summary>
+        /// 是否压缩数据
+        /// </summary>
         private bool _compressData = true;
+        /// <summary>
+        /// 滚动位置
+        /// </summary>
         private Vector2 _scrollPos;
+        /// <summary>
+        /// 烘焙结果列表
+        /// </summary>
         private List<BakeResult> _results = new();
         
         [MenuItem("CYFramework/配置烘焙工具")]
+        /// <summary>
+        /// 打开配置烘焙窗口
+        /// </summary>
         public static void ShowWindow()
         {
+            // 窗口实例
             var window = GetWindow<ConfigBaker>("配置烘焙");
             window.minSize = new Vector2(500, 400);
         }
         
+        /// <summary>
+        /// 窗口绘制
+        /// </summary>
         private void OnGUI()
         {
             EditorGUILayout.Space(10);
@@ -53,6 +75,7 @@ namespace CYFramework.Editor.Baking
             _sourceFolder = EditorGUILayout.TextField(_sourceFolder);
             if (GUILayout.Button("选择", GUILayout.Width(50)))
             {
+                // 选择的目录路径
                 string path = EditorUtility.OpenFolderPanel("选择配置目录", "Assets", "");
                 if (!string.IsNullOrEmpty(path))
                 {
@@ -66,6 +89,7 @@ namespace CYFramework.Editor.Baking
             _outputFolder = EditorGUILayout.TextField(_outputFolder);
             if (GUILayout.Button("选择", GUILayout.Width(50)))
             {
+                // 选择的目录路径
                 string path = EditorUtility.OpenFolderPanel("选择输出目录", "Assets", "");
                 if (!string.IsNullOrEmpty(path))
                 {
@@ -100,10 +124,11 @@ namespace CYFramework.Editor.Baking
             
             _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
             
-            foreach (var result in _results)
+            foreach (var result in _results) // result 为烘焙结果
             {
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
                 
+                // 状态图标
                 var icon = result.Success ? "✅" : "❌";
                 EditorGUILayout.LabelField(icon, GUILayout.Width(20));
                 EditorGUILayout.LabelField(result.SourcePath, GUILayout.Width(250));
@@ -135,15 +160,19 @@ namespace CYFramework.Editor.Baking
             }
             
             // 查找所有 ScriptableObject
+            // 资源 GUID 列表
             var guids = AssetDatabase.FindAssets("t:ScriptableObject", new[] { _sourceFolder });
+            // 总数量
             int total = guids.Length;
+            // 已处理数量
             int processed = 0;
             
             try
             {
-                foreach (var guid in guids)
+                foreach (var guid in guids) // guid 为资源 GUID
                 {
                     processed++;
+                    // 资源路径
                     string assetPath = AssetDatabase.GUIDToAssetPath(guid);
                     
                     EditorUtility.DisplayProgressBar("烘焙配置...", assetPath, (float)processed / total);
@@ -158,6 +187,7 @@ namespace CYFramework.Editor.Baking
             
             AssetDatabase.Refresh();
             
+            // 成功数量
             int successCount = _results.FindAll(r => r.Success).Count;
             UnityEngine.Debug.Log($"[ConfigBaker] 烘焙完成: {successCount}/{total}");
         }
@@ -165,12 +195,15 @@ namespace CYFramework.Editor.Baking
         /// <summary>
         /// 烘焙单个配置
         /// </summary>
+        /// <param name="assetPath">配置资源路径</param>
         private void BakeConfig(string assetPath)
         {
+            // 单条结果
             var result = new BakeResult { SourcePath = assetPath };
             
             try
             {
+                // 配置资源
                 var asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(assetPath);
                 if (asset == null)
                 {
@@ -180,7 +213,9 @@ namespace CYFramework.Editor.Baking
                 }
                 
                 // 序列化为 JSON
+                // JSON 文本
                 string json = JsonUtility.ToJson(asset, true);
+                // UTF8 字节
                 byte[] data = System.Text.Encoding.UTF8.GetBytes(json);
                 result.OriginalSize = data.Length;
                 
@@ -192,11 +227,14 @@ namespace CYFramework.Editor.Baking
                 result.BakedSize = data.Length;
                 
                 // 输出路径
+                // 相对路径
                 string relativePath = assetPath.Replace(_sourceFolder, "").TrimStart('/');
+                // 输出路径
                 string outputPath = Path.Combine(_outputFolder, relativePath);
                 outputPath = Path.ChangeExtension(outputPath, ".bytes");
                 
                 // 确保目录存在
+                // 输出目录
                 string dir = Path.GetDirectoryName(outputPath);
                 if (!Directory.Exists(dir))
                 {
@@ -210,6 +248,7 @@ namespace CYFramework.Editor.Baking
             }
             catch (Exception ex)
             {
+                // ex 为烘焙异常
                 UnityEngine.Debug.LogError($"[ConfigBaker] 烘焙失败: {assetPath}\n{ex}");
                 result.Success = false;
             }
@@ -220,10 +259,14 @@ namespace CYFramework.Editor.Baking
         /// <summary>
         /// 压缩数据（简单实现）
         /// </summary>
+        /// <param name="data">原始数据</param>
+        /// <returns>压缩后的数据</returns>
         private byte[] CompressData(byte[] data)
         {
             // 使用 GZip 压缩
+            // 输出流
             using var output = new MemoryStream();
+            // 压缩流
             using (var gzip = new System.IO.Compression.GZipStream(output, System.IO.Compression.CompressionLevel.Optimal))
             {
                 gzip.Write(data, 0, data.Length);
@@ -249,11 +292,26 @@ namespace CYFramework.Editor.Baking
             }
         }
         
+        /// <summary>
+        /// 单条烘焙结果
+        /// </summary>
         private class BakeResult
         {
+            /// <summary>
+            /// 源资源路径
+            /// </summary>
             public string SourcePath;
+            /// <summary>
+            /// 是否成功
+            /// </summary>
             public bool Success;
+            /// <summary>
+            /// 原始大小（字节）
+            /// </summary>
             public int OriginalSize;
+            /// <summary>
+            /// 烘焙后大小（字节）
+            /// </summary>
             public int BakedSize;
         }
     }

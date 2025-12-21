@@ -18,6 +18,9 @@ namespace CYFramework.Platform.Unity
     /// </summary>
     public class UnityFileSystem : IFileSystem
     {
+        /// <summary>
+        /// 平台类型
+        /// </summary>
         public PlatformType Platform
         {
             get
@@ -32,21 +35,35 @@ namespace CYFramework.Platform.Unity
             }
         }
         
+        /// <summary>
+        /// 持久化数据路径
+        /// </summary>
         public string PersistentDataPath => Application.persistentDataPath;
         
+        /// <summary>
+        /// 初始化
+        /// </summary>
         public void Initialize()
         {
             CYLog.Debug($"[UnityFileSystem] 初始化完成，数据路径: {PersistentDataPath}");
         }
         
+        /// <summary>
+        /// 检查文件是否存在
+        /// </summary>
         public bool FileExists(string path)
         {
+            // 完整路径
             string fullPath = GetFullPath(path);
             return File.Exists(fullPath);
         }
         
+        /// <summary>
+        /// 读取文本文件
+        /// </summary>
         public string ReadText(string path)
         {
+            // 完整路径
             string fullPath = GetFullPath(path);
             
             if (!File.Exists(fullPath))
@@ -58,15 +75,23 @@ namespace CYFramework.Platform.Unity
             return File.ReadAllText(fullPath);
         }
         
+        /// <summary>
+        /// 写入文本文件
+        /// </summary>
         public void WriteText(string path, string content)
         {
+            // 完整路径
             string fullPath = GetFullPath(path);
             EnsureDirectory(fullPath);
             File.WriteAllText(fullPath, content);
         }
         
+        /// <summary>
+        /// 读取二进制文件
+        /// </summary>
         public byte[] ReadBytes(string path)
         {
+            // 完整路径
             string fullPath = GetFullPath(path);
             
             if (!File.Exists(fullPath))
@@ -78,15 +103,23 @@ namespace CYFramework.Platform.Unity
             return File.ReadAllBytes(fullPath);
         }
         
+        /// <summary>
+        /// 写入二进制文件
+        /// </summary>
         public void WriteBytes(string path, byte[] data)
         {
+            // 完整路径
             string fullPath = GetFullPath(path);
             EnsureDirectory(fullPath);
             File.WriteAllBytes(fullPath, data);
         }
         
+        /// <summary>
+        /// 删除文件
+        /// </summary>
         public void DeleteFile(string path)
         {
+            // 完整路径
             string fullPath = GetFullPath(path);
             
             if (File.Exists(fullPath))
@@ -95,8 +128,12 @@ namespace CYFramework.Platform.Unity
             }
         }
         
+        /// <summary>
+        /// 异步读取二进制文件
+        /// </summary>
         public async Task<byte[]> ReadBytesAsync(string path)
         {
+            // 完整路径
             string fullPath = GetFullPath(path);
             
             if (!File.Exists(fullPath))
@@ -105,20 +142,27 @@ namespace CYFramework.Platform.Unity
             }
             
             // 此文件不在 WebGL 上编译，可以使用真异步
+            // 文件流
             using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true))
             {
+                // 读取缓冲区
                 byte[] buffer = new byte[stream.Length];
                 await stream.ReadAsync(buffer, 0, buffer.Length);
                 return buffer;
             }
         }
         
+        /// <summary>
+        /// 异步写入二进制文件
+        /// </summary>
         public async Task WriteBytesAsync(string path, byte[] data)
         {
+            // 完整路径
             string fullPath = GetFullPath(path);
             EnsureDirectory(fullPath);
             
             // 此文件不在 WebGL 上编译，可以使用真异步
+            // 文件流
             using (var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true))
             {
                 await stream.WriteAsync(data, 0, data.Length);
@@ -142,6 +186,7 @@ namespace CYFramework.Platform.Unity
         /// </summary>
         private void EnsureDirectory(string filePath)
         {
+            // 目录路径
             string dir = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {

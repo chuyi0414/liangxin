@@ -28,8 +28,17 @@ namespace CYFramework.Core.Scene
     /// </summary>
     public struct SceneLoadProgress
     {
+        /// <summary>
+        /// 场景名称
+        /// </summary>
         public string SceneName;
+        /// <summary>
+        /// 进度（0~1）
+        /// </summary>
         public float Progress;
+        /// <summary>
+        /// 是否完成
+        /// </summary>
         public bool IsDone;
     }
     
@@ -38,11 +47,26 @@ namespace CYFramework.Core.Scene
     /// </summary>
     public class SceneLoader : IInitializable, IDisposableEx
     {
+        /// <summary>
+        /// 已加载场景表
+        /// </summary>
         private readonly Dictionary<string, UnityEngine.SceneManagement.Scene> _loadedScenes = new();
+        /// <summary>
+        /// 当前场景名称
+        /// </summary>
         private string _currentSceneName;
+        /// <summary>
+        /// 是否正在加载
+        /// </summary>
         private bool _isLoading;
         
+        /// <summary>
+        /// 初始化顺序
+        /// </summary>
         public int InitOrder => 20;
+        /// <summary>
+        /// 释放顺序
+        /// </summary>
         public int DisposeOrder => 20;
         
         /// <summary>当前场景名称</summary>
@@ -57,6 +81,9 @@ namespace CYFramework.Core.Scene
         /// <summary>场景卸载完成事件</summary>
         public event Action<string> OnSceneUnloaded;
         
+        /// <summary>
+        /// 初始化场景加载器
+        /// </summary>
         public void Initialize()
         {
             _currentSceneName = SceneManager.GetActiveScene().name;
@@ -65,6 +92,9 @@ namespace CYFramework.Core.Scene
             CYLog.Debug($"[SceneLoader] 初始化完成，当前场景: {_currentSceneName}");
         }
         
+        /// <summary>
+        /// 释放场景加载器
+        /// </summary>
         public void Dispose()
         {
             SceneManager.sceneLoaded -= HandleSceneLoaded;
@@ -82,10 +112,12 @@ namespace CYFramework.Core.Scene
         /// <param name="mode">加载模式</param>
         public void LoadScene(string sceneName, SceneLoadMode mode = SceneLoadMode.Single)
         {
+            // Unity 场景加载模式
             var loadMode = mode == SceneLoadMode.Single 
                 ? LoadSceneMode.Single 
                 : LoadSceneMode.Additive;
             
+            // 异步加载操作
             SceneManager.LoadScene(sceneName, loadMode);
             
             if (mode == SceneLoadMode.Single)
@@ -100,7 +132,13 @@ namespace CYFramework.Core.Scene
         
         #region 异步加载
         
+        /// <summary>
+        /// 当前加载协程
+        /// </summary>
         private Coroutine _currentLoadCoroutine;
+        /// <summary>
+        /// 是否请求取消加载
+        /// </summary>
         private bool _cancelRequested;
         
         /// <summary>
@@ -146,16 +184,22 @@ namespace CYFramework.Core.Scene
             }
         }
         
-        private IEnumerator LoadSceneCoroutine(string sceneName, Action<float> onProgress, 
+        /// <summary>
+        /// 场景加载协程
+        /// </summary>
+        private IEnumerator LoadSceneCoroutine(string sceneName, Action<float> onProgress,
             Action onComplete, SceneLoadMode mode, Action<string> onError = null)
         {
             _isLoading = true;
+            // 是否被取消
             bool canceled = false;
             
+            // Unity 场景加载模式
             var loadMode = mode == SceneLoadMode.Single 
                 ? LoadSceneMode.Single 
                 : LoadSceneMode.Additive;
             
+            // 异步加载操作
             AsyncOperation asyncOp = null;
             
             try
@@ -195,6 +239,7 @@ namespace CYFramework.Core.Scene
                 // 取消后不再回调业务进度，避免 UI/流程误触发；但必须允许激活，避免卡在 0.9。
                 if (!canceled)
                 {
+                    // 归一化进度
                     float progress = Mathf.Clamp01(asyncOp.progress / 0.9f);
                     onProgress?.Invoke(progress);
 
@@ -225,6 +270,7 @@ namespace CYFramework.Core.Scene
                 // Additive 模式下尝试卸载，尽量回收资源；Single 模式无法回滚，只能提示。
                 if (mode == SceneLoadMode.Additive)
                 {
+                    // 卸载操作
                     var unloadOp = SceneManager.UnloadSceneAsync(sceneName);
                     if (unloadOp != null)
                     {
@@ -252,6 +298,7 @@ namespace CYFramework.Core.Scene
             where TLoadingUI : UI.UIPanel
         {
             // 显示 Loading 界面
+            // Loading 面板实例
             var loadingUI = CY.UI?.Open<TLoadingUI>();
             
             LoadSceneAsync(sceneName, progress =>
@@ -259,6 +306,7 @@ namespace CYFramework.Core.Scene
                 // 更新 Loading 进度（如果 Loading UI 有进度接口）
                 if (loadingUI is ILoadingProgress loadingProgress)
                 {
+                    // Loading 进度接口
                     loadingProgress.SetProgress(progress);
                 }
             }, () =>
@@ -281,8 +329,12 @@ namespace CYFramework.Core.Scene
             CYBootstrap.Instance?.StartCoroutine(UnloadSceneCoroutine(sceneName, onComplete));
         }
         
+        /// <summary>
+        /// 场景卸载协程
+        /// </summary>
         private IEnumerator UnloadSceneCoroutine(string sceneName, Action onComplete)
         {
+            // 卸载操作
             var asyncOp = SceneManager.UnloadSceneAsync(sceneName);
             
             if (asyncOp == null)
@@ -315,6 +367,7 @@ namespace CYFramework.Core.Scene
         /// </summary>
         public bool IsSceneLoaded(string sceneName)
         {
+            // i 为索引
             for (int i = 0; i < SceneManager.sceneCount; i++)
             {
                 if (SceneManager.GetSceneAt(i).name == sceneName)
@@ -335,6 +388,7 @@ namespace CYFramework.Core.Scene
         /// </summary>
         public void SetActiveScene(string sceneName)
         {
+            // 目标场景
             var scene = SceneManager.GetSceneByName(sceneName);
             if (scene.isLoaded)
             {
@@ -347,12 +401,18 @@ namespace CYFramework.Core.Scene
         
         #region 事件处理
         
+        /// <summary>
+        /// 场景加载完成回调
+        /// </summary>
         private void HandleSceneLoaded(UnityEngine.SceneManagement.Scene scene, LoadSceneMode mode)
         {
             _loadedScenes[scene.name] = scene;
             OnSceneLoaded?.Invoke(scene.name);
         }
         
+        /// <summary>
+        /// 场景卸载完成回调
+        /// </summary>
         private void HandleSceneUnloaded(UnityEngine.SceneManagement.Scene scene)
         {
             _loadedScenes.Remove(scene.name);

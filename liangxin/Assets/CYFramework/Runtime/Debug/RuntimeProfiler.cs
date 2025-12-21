@@ -22,49 +22,130 @@ namespace CYFramework.Debug
     public class RuntimeProfiler : MonoBehaviour
     {
         [Header("显示设置")]
+        /// <summary>
+        /// 启动时是否显示
+        /// </summary>
         [SerializeField] private bool _showOnStart = true;
+        /// <summary>
+        /// 显示切换按键
+        /// </summary>
         [SerializeField] private KeyCode _toggleKey = KeyCode.F1;
+        /// <summary>
+        /// 目标帧率
+        /// </summary>
         [SerializeField] private int _targetFPS = 60;
 
         // 配置开关（来自 CYFrameworkConfig.Debug）
+        /// <summary>
+        /// 是否显示 FPS
+        /// </summary>
         private bool _showFPS = true;
+        /// <summary>
+        /// 是否显示内存信息
+        /// </summary>
         private bool _showMemory = true;
+        /// <summary>
+        /// 是否启用面板
+        /// </summary>
         private bool _enableProfiler = true;
         
         // 是否显示
+        /// <summary>
+        /// 当前是否可见
+        /// </summary>
         private bool _isVisible;
         
         // FPS 计算
+        /// <summary>
+        /// 当前 FPS
+        /// </summary>
         private float _fps;
+        /// <summary>
+        /// 当前帧耗时（ms）
+        /// </summary>
         private float _frameTime;
+        /// <summary>
+        /// FPS 更新计时
+        /// </summary>
         private float _fpsUpdateTimer;
+        /// <summary>
+        /// 帧计数
+        /// </summary>
         private int _frameCount;
+        /// <summary>
+        /// FPS 历史曲线
+        /// </summary>
         private readonly float[] _fpsHistory = new float[60];
+        /// <summary>
+        /// FPS 历史索引
+        /// </summary>
         private int _fpsHistoryIndex;
         
         // 内存
+        /// <summary>
+        /// Mono 已用内存
+        /// </summary>
         private long _monoUsed;
+        /// <summary>
+        /// Mono 总内存
+        /// </summary>
         private long _monoTotal;
+        /// <summary>
+        /// 原生已用内存
+        /// </summary>
         private long _nativeUsed;
+        /// <summary>
+        /// 纹理内存
+        /// </summary>
         private long _textureMemory;
         
         // 渲染
+        /// <summary>
+        /// DrawCall 数量
+        /// </summary>
         private int _drawCalls;
+        /// <summary>
+        /// Batch 数量
+        /// </summary>
         private int _batches;
+        /// <summary>
+        /// 三角形数量
+        /// </summary>
         private int _triangles;
         
         // 对象池
+        /// <summary>
+        /// 对象池管理器
+        /// </summary>
         private PoolManager _poolManager;
         
         // 网络
+        /// <summary>
+        /// 网络服务
+        /// </summary>
         private NetworkService _networkService;
         
         // UI
+        /// <summary>
+        /// 面板样式
+        /// </summary>
         private GUIStyle _boxStyle;
+        /// <summary>
+        /// 文本样式
+        /// </summary>
         private GUIStyle _labelStyle;
+        /// <summary>
+        /// 标题样式
+        /// </summary>
         private GUIStyle _headerStyle;
+        /// <summary>
+        /// 文本拼接缓冲
+        /// </summary>
         private readonly StringBuilder _sb = new(512);
         
+        /// <summary>
+        /// Unity Awake
+        /// </summary>
         private void Awake()
         {
 #if !DEVELOPMENT_BUILD && !UNITY_EDITOR
@@ -74,9 +155,11 @@ namespace CYFramework.Debug
 #endif
 
             // 从 CYConfigurator 读取 Debug 配置
+            // 配置中心
             var configurator = CYConfigurator.Instance;
             if (configurator != null)
             {
+                // 调试配置
                 var config = configurator.GetConfig<DebugToolsConfig>();
                 if (config != null)
                 {
@@ -95,6 +178,9 @@ namespace CYFramework.Debug
             _isVisible = _showOnStart;
         }
         
+        /// <summary>
+        /// Unity Start
+        /// </summary>
         private void Start()
         {
             Application.targetFrameRate = _targetFPS;
@@ -104,6 +190,9 @@ namespace CYFramework.Debug
             ServiceLocator.TryGet<NetworkService>(out _networkService);
         }
         
+        /// <summary>
+        /// Unity Update
+        /// </summary>
         private void Update()
         {
             // 切换显示
@@ -127,6 +216,9 @@ namespace CYFramework.Debug
             }
         }
         
+        /// <summary>
+        /// Unity OnGUI
+        /// </summary>
         private void OnGUI()
         {
             if (!_isVisible) return;
@@ -134,8 +226,11 @@ namespace CYFramework.Debug
             InitStyles();
             
             // 主面板
+            // 面板宽度
             float panelWidth = 280;
+            // 面板高度
             float panelHeight = 320;
+            // 面板矩形
             Rect panelRect = new Rect(10, 10, panelWidth, panelHeight);
             
             GUI.Box(panelRect, "", _boxStyle);
@@ -178,9 +273,13 @@ namespace CYFramework.Debug
         
         #region 更新数据
         
+        /// <summary>
+        /// 更新 FPS 统计
+        /// </summary>
         private void UpdateFPS()
         {
             _frameCount++;
+            // 帧间隔
             float elapsed = Time.unscaledDeltaTime;
             _frameTime = elapsed * 1000f;
             
@@ -197,6 +296,9 @@ namespace CYFramework.Debug
             _fps = 1f / Mathf.Max(elapsed, 0.001f);
         }
         
+        /// <summary>
+        /// 更新内存统计
+        /// </summary>
         private void UpdateMemory()
         {
             _monoUsed = Profiler.GetMonoUsedSizeLong();
@@ -207,6 +309,9 @@ namespace CYFramework.Debug
             _textureMemory = Profiler.GetAllocatedMemoryForGraphicsDriver();
         }
         
+        /// <summary>
+        /// 更新渲染统计
+        /// </summary>
         private void UpdateRendering()
         {
 #if UNITY_EDITOR
@@ -226,6 +331,9 @@ namespace CYFramework.Debug
         
         #region 绘制 UI
         
+        /// <summary>
+        /// 初始化 UI 样式
+        /// </summary>
         private void InitStyles()
         {
             if (_boxStyle != null) return;
@@ -242,6 +350,9 @@ namespace CYFramework.Debug
             _headerStyle.fontStyle = FontStyle.Bold;
         }
         
+        /// <summary>
+        /// 绘制 FPS 区域
+        /// </summary>
         private void DrawFPSSection()
         {
             // FPS 颜色
@@ -259,6 +370,9 @@ namespace CYFramework.Debug
             GUILayout.Label(_sb.ToString(), _labelStyle);
         }
         
+        /// <summary>
+        /// 绘制内存区域
+        /// </summary>
         private void DrawMemorySection()
         {
             GUILayout.Space(5);
@@ -282,6 +396,9 @@ namespace CYFramework.Debug
             GUILayout.Label(_sb.ToString(), _labelStyle);
         }
         
+        /// <summary>
+        /// 绘制渲染区域
+        /// </summary>
         private void DrawRenderingSection()
         {
             GUILayout.Space(5);
@@ -295,6 +412,9 @@ namespace CYFramework.Debug
             GUILayout.Label(_sb.ToString(), _labelStyle);
         }
         
+        /// <summary>
+        /// 绘制对象池区域
+        /// </summary>
         private void DrawPoolSection()
         {
             if (_poolManager == null) return;
@@ -304,6 +424,9 @@ namespace CYFramework.Debug
             GUILayout.Label("  (详情见 PoolManager)", _labelStyle);
         }
         
+        /// <summary>
+        /// 绘制网络区域
+        /// </summary>
         private void DrawNetworkSection()
         {
             if (_networkService == null) return;
@@ -311,26 +434,39 @@ namespace CYFramework.Debug
             GUILayout.Space(5);
             GUILayout.Label("🌐 网络", _labelStyle);
             
+            // 状态文本
             string stateText = _networkService.IsConnected ? "<color=#00FF00>已连接</color>" : "<color=#FF0000>断开</color>";
             GUILayout.Label($"  状态: {stateText}", _labelStyle);
         }
         
+        /// <summary>
+        /// 绘制 FPS 曲线图
+        /// </summary>
         private void DrawFPSGraph(Rect rect)
         {
             GUI.Box(rect, "", _boxStyle);
             
+            // 曲线宽度
             float graphWidth = rect.width - 10;
+            // 曲线高度
             float graphHeight = rect.height - 10;
+            // 柱状条宽度
             float barWidth = graphWidth / _fpsHistory.Length;
             
+            // i 为索引
             for (int i = 0; i < _fpsHistory.Length; i++)
             {
+                // 历史索引
                 int idx = (_fpsHistoryIndex + i) % _fpsHistory.Length;
+                // 当前 FPS
                 float fps = _fpsHistory[idx];
+                // 归一化 FPS
                 float normalizedFps = Mathf.Clamp01(fps / _targetFPS);
                 
+                // 柱状颜色
                 Color barColor = fps >= 55 ? Color.green : fps >= 30 ? Color.yellow : Color.red;
                 
+                // 柱状矩形
                 Rect barRect = new Rect(
                     rect.x + 5 + i * barWidth,
                     rect.y + 5 + graphHeight * (1 - normalizedFps),
@@ -346,6 +482,9 @@ namespace CYFramework.Debug
         
         #region 工具方法
         
+        /// <summary>
+        /// 格式化字节数
+        /// </summary>
         private string FormatBytes(long bytes)
         {
             if (bytes < 1024) return $"{bytes} B";
@@ -354,21 +493,31 @@ namespace CYFramework.Debug
             return $"{bytes / (1024f * 1024f * 1024f):F2} GB";
         }
         
+        /// <summary>
+        /// 纹理缓存
+        /// </summary>
         private static readonly Dictionary<Color, Texture2D> _textureCache = new();
         
+        /// <summary>
+        /// 生成纯色纹理（带缓存）
+        /// </summary>
         private Texture2D MakeTexture(int width, int height, Color color)
         {
+            // 缓存纹理
             if (_textureCache.TryGetValue(color, out var cached))
             {
                 return cached;
             }
             
+            // 像素数组
             Color[] pixels = new Color[width * height];
+            // i 为索引
             for (int i = 0; i < pixels.Length; i++)
             {
                 pixels[i] = color;
             }
             
+            // 新建纹理
             Texture2D texture = new Texture2D(width, height);
             texture.SetPixels(pixels);
             texture.Apply();

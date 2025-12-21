@@ -33,12 +33,33 @@ namespace CYFramework.Core.HotUpdate
     [Serializable]
     public class VersionInfo
     {
+        /// <summary>
+        /// 版本号
+        /// </summary>
         public string version;
+        /// <summary>
+        /// 最低兼容版本
+        /// </summary>
         public string minVersion;
+        /// <summary>
+        /// CDN 地址
+        /// </summary>
         public string cdnUrl;
+        /// <summary>
+        /// 资源包列表
+        /// </summary>
         public List<AssetBundle> bundles;
+        /// <summary>
+        /// 总大小
+        /// </summary>
         public long totalSize;
+        /// <summary>
+        /// 更新说明
+        /// </summary>
         public string updateNote;
+        /// <summary>
+        /// 是否强制更新
+        /// </summary>
         public bool forceUpdate;
     }
     
@@ -48,9 +69,21 @@ namespace CYFramework.Core.HotUpdate
     [Serializable]
     public class AssetBundle
     {
+        /// <summary>
+        /// 资源包名称
+        /// </summary>
         public string name;
+        /// <summary>
+        /// 资源包哈希
+        /// </summary>
         public string hash;
+        /// <summary>
+        /// 资源包大小
+        /// </summary>
         public long size;
+        /// <summary>
+        /// 下载优先级
+        /// </summary>
         public int priority;
     }
     
@@ -96,12 +129,33 @@ namespace CYFramework.Core.HotUpdate
     /// </summary>
     public struct UpdateProgress
     {
+        /// <summary>
+        /// 当前更新状态
+        /// </summary>
         public UpdateState State;
+        /// <summary>
+        /// 总体进度（0~1）
+        /// </summary>
         public float Progress;
+        /// <summary>
+        /// 已下载字节数
+        /// </summary>
         public long DownloadedBytes;
+        /// <summary>
+        /// 总字节数
+        /// </summary>
         public long TotalBytes;
+        /// <summary>
+        /// 当前下载文件名
+        /// </summary>
         public string CurrentFile;
+        /// <summary>
+        /// 已下载文件数
+        /// </summary>
         public int DownloadedCount;
+        /// <summary>
+        /// 总文件数
+        /// </summary>
         public int TotalCount;
     }
     
@@ -110,15 +164,39 @@ namespace CYFramework.Core.HotUpdate
     /// </summary>
     public interface IHotUpdateService
     {
+        /// <summary>
+        /// 当前更新状态
+        /// </summary>
         UpdateState State { get; }
+        /// <summary>
+        /// 当前更新进度
+        /// </summary>
         UpdateProgress Progress { get; }
         
+        /// <summary>
+        /// 检查是否需要更新
+        /// </summary>
         Task<bool> CheckUpdate();
+        /// <summary>
+        /// 下载更新资源
+        /// </summary>
         Task<bool> DownloadUpdate(Action<UpdateProgress> onProgress = null);
+        /// <summary>
+        /// 应用更新
+        /// </summary>
         void ApplyUpdate();
         
+        /// <summary>
+        /// 发现新版本事件
+        /// </summary>
         event Action<VersionInfo> OnNewVersionFound;
+        /// <summary>
+        /// 进度变化事件
+        /// </summary>
         event Action<UpdateProgress> OnProgressChanged;
+        /// <summary>
+        /// 错误事件
+        /// </summary>
         event Action<string> OnError;
     }
     
@@ -133,25 +211,67 @@ namespace CYFramework.Core.HotUpdate
     /// </summary>
     public class HotUpdateService : IHotUpdateService, IInitializable, IDisposableEx
     {
+        /// <summary>
+        /// 热更新配置
+        /// </summary>
         private HotUpdateConfig _config;
+        /// <summary>
+        /// 网络服务
+        /// </summary>
         private NetworkService _network;
         
+        /// <summary>
+        /// 当前更新状态
+        /// </summary>
         private UpdateState _state = UpdateState.Idle;
+        /// <summary>
+        /// 当前更新进度
+        /// </summary>
         private UpdateProgress _progress;
+        /// <summary>
+        /// 远端版本信息
+        /// </summary>
         private VersionInfo _remoteVersion;
+        /// <summary>
+        /// 本地版本号
+        /// </summary>
         private string _localVersion;
         
         // 待下载列表
+        /// <summary>
+        /// 待下载资源列表
+        /// </summary>
         private readonly List<AssetBundle> _pendingDownloads = new();
         
+        /// <summary>
+        /// 当前更新状态
+        /// </summary>
         public UpdateState State => _state;
+        /// <summary>
+        /// 当前更新进度
+        /// </summary>
         public UpdateProgress Progress => _progress;
         
+        /// <summary>
+        /// 发现新版本事件
+        /// </summary>
         public event Action<VersionInfo> OnNewVersionFound;
+        /// <summary>
+        /// 进度变化事件
+        /// </summary>
         public event Action<UpdateProgress> OnProgressChanged;
+        /// <summary>
+        /// 错误事件
+        /// </summary>
         public event Action<string> OnError;
         
+        /// <summary>
+        /// 初始化顺序
+        /// </summary>
         public int InitOrder => 40;
+        /// <summary>
+        /// 释放顺序
+        /// </summary>
         public int DisposeOrder => 40;
         
         /// <summary>
@@ -159,6 +279,9 @@ namespace CYFramework.Core.HotUpdate
         /// </summary>
         public HotUpdateService() : this(null) { }
         
+        /// <summary>
+        /// 构造热更新服务
+        /// </summary>
         public HotUpdateService(HotUpdateConfig config)
         {
             _config = config ?? new HotUpdateConfig();
@@ -166,12 +289,17 @@ namespace CYFramework.Core.HotUpdate
         
         #region 生命周期
         
+        /// <summary>
+        /// 初始化热更新服务
+        /// </summary>
         public void Initialize()
         {
             // 从 CYConfigurator 读取配置
+            // 配置中心
             var configurator = CYConfigurator.Instance;
             if (configurator != null)
             {
+                // 外部配置
                 var externalConfig = configurator.GetConfig<HotUpdateServiceConfig>();
                 if (externalConfig != null)
                 {
@@ -185,6 +313,7 @@ namespace CYFramework.Core.HotUpdate
                 }
             }
             
+            // 网络服务实例
             if (ServiceLocator.TryGet<NetworkService>(out var network))
             {
                 _network = network;
@@ -196,6 +325,9 @@ namespace CYFramework.Core.HotUpdate
             CYLog.Debug($"[HotUpdateService] 初始化完成，本地版本: {_localVersion}");
         }
         
+        /// <summary>
+        /// 释放热更新服务
+        /// </summary>
         public void Dispose()
         {
             _pendingDownloads.Clear();
@@ -255,9 +387,11 @@ namespace CYFramework.Core.HotUpdate
             
             try
             {
+                // 总下载字节数
                 long totalBytes = 0;
                 foreach (var bundle in _pendingDownloads)
                 {
+                    // 当前资源包
                     totalBytes += bundle.size;
                 }
                 
@@ -270,6 +404,7 @@ namespace CYFramework.Core.HotUpdate
                 _pendingDownloads.Sort((a, b) => b.priority.CompareTo(a.priority));
 
                 // 并发下载（WebGL/微信依旧是单线程 async 交错执行，不依赖多线程）
+                // 是否全部下载成功
                 bool allSuccess = await DownloadAllConcurrent(_pendingDownloads, onProgress);
                 if (!allSuccess)
                 {
@@ -325,6 +460,7 @@ namespace CYFramework.Core.HotUpdate
                 return false;
             }
             
+            // 版本信息响应
             var response = await _network.Get(_config.VersionUrl);
             
             if (!response.IsSuccess)
@@ -334,6 +470,7 @@ namespace CYFramework.Core.HotUpdate
                 return false;
             }
             
+            // 远端版本数据
             _remoteVersion = JsonUtility.FromJson<VersionInfo>(response.Data);
             
             if (_remoteVersion == null)
@@ -344,6 +481,7 @@ namespace CYFramework.Core.HotUpdate
             }
             
             // 比较版本
+            // 是否存在新版本
             bool hasUpdate = CompareVersion(_localVersion, _remoteVersion.version) < 0;
             
             if (hasUpdate)
@@ -392,6 +530,7 @@ namespace CYFramework.Core.HotUpdate
             
             foreach (var bundle in _remoteVersion.bundles)
             {
+                // 当前资源包
                 // 检查本地是否已有该版本的资源
                 if (!IsLocalBundleValid(bundle))
                 {
@@ -410,16 +549,21 @@ namespace CYFramework.Core.HotUpdate
         {
 #if CY_WECHAT || UNITY_WEBGL
             // WebGL/微信平台：使用 Storage 检查
+            // Storage 适配器
             if (ServiceLocator.TryGet<IStorageAdapter>(out var storage))
             {
+                // 哈希存储键
                 string hashKey = $"CYF_Bundle_{bundle.name}_hash";
+                // 本地哈希值
                 string localHash = storage.GetString(hashKey, null);
                 return !string.IsNullOrEmpty(localHash) && localHash == bundle.hash;
             }
             return false;
 #else
             // Native 平台：使用文件系统
+            // 本地资源路径
             string localPath = System.IO.Path.Combine(Application.persistentDataPath, "Bundles", bundle.name);
+            // 哈希文件路径
             string hashPath = localPath + ".hash";
             
             if (!System.IO.File.Exists(localPath) || !System.IO.File.Exists(hashPath))
@@ -445,12 +589,16 @@ namespace CYFramework.Core.HotUpdate
         /// </summary>
         private async Task<bool> DownloadBundle(AssetBundle bundle)
         {
+            // 下载 URL
             string url = _config.CdnBaseUrl + bundle.name;
             CYLog.Debug($"[HotUpdateService] 下载: {url}");
 
+            // 最大重试次数
             var maxRetry = _config != null ? Mathf.Max(0, _config.MaxDownloadRetry) : 0;
+            // 总尝试次数
             var totalAttempts = 1 + maxRetry;
 
+            // attempt 为重试次数索引
             for (int attempt = 0; attempt < totalAttempts; attempt++)
             {
                 try
@@ -459,6 +607,7 @@ namespace CYFramework.Core.HotUpdate
                     using var request = UnityEngine.Networking.UnityWebRequest.Get(url);
                     request.timeout = _config.DownloadTimeout;
 
+                    // 异步请求操作
                     var operation = request.SendWebRequest();
                     while (!operation.isDone)
                     {
@@ -473,14 +622,18 @@ namespace CYFramework.Core.HotUpdate
                         continue;
                     }
 
+                    // 下载到的二进制数据
                     byte[] data = request.downloadHandler.data;
 
 #if CY_WECHAT || UNITY_WEBGL
                     // WebGL/微信平台：使用 Storage 存储
+                    // Storage 适配器
                     if (ServiceLocator.TryGet<IStorageAdapter>(out var storage))
                     {
                         // 将二进制数据转为 Base64 存储
+                        // 数据键
                         string dataKey = $"CYF_Bundle_{bundle.name}";
+                        // 哈希键
                         string hashKey = $"CYF_Bundle_{bundle.name}_hash";
 
                         storage.SetString(dataKey, Convert.ToBase64String(data));
@@ -497,8 +650,11 @@ namespace CYFramework.Core.HotUpdate
                     }
 #else
                     // Native 平台：使用文件系统
+                    // 本地目录
                     string localDir = System.IO.Path.Combine(Application.persistentDataPath, "Bundles");
+                    // 本地资源路径
                     string localPath = System.IO.Path.Combine(localDir, bundle.name);
+                    // 哈希文件路径
                     string hashPath = localPath + ".hash";
 
                     if (!System.IO.Directory.Exists(localDir))
@@ -531,17 +687,21 @@ namespace CYFramework.Core.HotUpdate
         {
             if (bundles == null || bundles.Count <= 0) return true;
 
+            // 最大并发数
             int maxConcurrent = _config != null ? Mathf.Max(1, _config.MaxConcurrentDownloads) : 1;
             if (maxConcurrent <= 1)
             {
                 // 退化为串行逻辑（保持行为稳定）
+                // i 为索引
                 for (int i = 0; i < bundles.Count; i++)
                 {
+                    // 当前资源包
                     var bundle = bundles[i];
                     _progress.CurrentFile = bundle.name;
                     NotifyProgress();
                     onProgress?.Invoke(_progress);
 
+                    // 当前包下载结果
                     bool success = await DownloadBundle(bundle);
                     if (!success)
                     {
@@ -560,7 +720,9 @@ namespace CYFramework.Core.HotUpdate
             }
 
             // 并发窗口：用 index 作为工作队列指针（不使用 LINQ，减少分配）
+            // 下一个待下载索引
             int nextIndex = 0;
+            // 总资源数
             int total = bundles.Count;
 
             // 共享进度：并发情况下 CurrentFile 只展示“最近完成的文件”
@@ -568,11 +730,13 @@ namespace CYFramework.Core.HotUpdate
             NotifyProgress();
             onProgress?.Invoke(_progress);
 
+            // 并发任务列表
             var tasks = new List<Task<(bool ok, AssetBundle bundle)>>(maxConcurrent);
 
             Task<(bool ok, AssetBundle bundle)> StartOne()
             {
                 if (nextIndex >= total) return null;
+                // 取出当前资源包
                 var bundle = bundles[nextIndex++];
                 return DownloadOne(bundle);
             }
@@ -589,17 +753,21 @@ namespace CYFramework.Core.HotUpdate
             }
 
             // 预热启动
+            // i 为索引
             for (int i = 0; i < maxConcurrent; i++)
             {
+                // 启动一个下载任务
                 var t = StartOne();
                 if (t != null) tasks.Add(t);
             }
 
             while (tasks.Count > 0)
             {
+                // 等待任意任务完成
                 var finished = await Task.WhenAny(tasks);
                 tasks.Remove(finished);
 
+                // 已完成任务结果
                 var result = await finished;
                 if (!result.ok)
                 {
@@ -614,6 +782,7 @@ namespace CYFramework.Core.HotUpdate
                 NotifyProgress();
                 onProgress?.Invoke(_progress);
 
+                // 启动下一个任务
                 var next = StartOne();
                 if (next != null) tasks.Add(next);
             }
@@ -626,14 +795,19 @@ namespace CYFramework.Core.HotUpdate
         /// </summary>
         private int CompareVersion(string v1, string v2)
         {
+            // 版本段数组
             var parts1 = v1.Split('.');
+            // 版本段数组
             var parts2 = v2.Split('.');
             
+            // 最大段数
             int maxLen = Mathf.Max(parts1.Length, parts2.Length);
             
             for (int i = 0; i < maxLen; i++)
             {
+                // v1 当前段数值
                 int n1 = i < parts1.Length && int.TryParse(parts1[i], out int p1) ? p1 : 0;
+                // v2 当前段数值
                 int n2 = i < parts2.Length && int.TryParse(parts2[i], out int p2) ? p2 : 0;
                 
                 if (n1 < n2) return -1;

@@ -16,23 +16,41 @@ namespace CYFramework.Platform.WeChat
     /// </summary>
     public class WeChatVibrationAdapter : IVibrationAdapter
     {
+        /// <summary>
+        /// 是否支持震动
+        /// </summary>
         private bool _isSupported = true;
         
+        /// <summary>
+        /// 平台类型
+        /// </summary>
         public PlatformType Platform => PlatformType.WeChat;
+        /// <summary>
+        /// 是否支持震动
+        /// </summary>
         public bool IsSupported => _isSupported;
         
         #region JS 桥接
         
 #if UNITY_WEBGL && !UNITY_EDITOR
         [DllImport("__Internal")]
+        /// <summary>
+        /// 短震动接口
+        /// </summary>
         private static extern void WX_VibrateShort(string type);
         
         [DllImport("__Internal")]
+        /// <summary>
+        /// 长震动接口
+        /// </summary>
         private static extern void WX_VibrateLong();
 #endif
         
         #endregion
         
+        /// <summary>
+        /// 初始化
+        /// </summary>
         public void Initialize()
         {
             CYLog.Debug("[WeChatVibrationAdapter] 初始化完成");
@@ -51,6 +69,7 @@ namespace CYFramework.Platform.WeChat
             }
             catch (System.Exception ex)
             {
+                // ex 为震动异常
                 CYLog.Warning($"[WeChatVibrationAdapter] 短震动失败: {ex.Message}");
             }
 #else
@@ -70,6 +89,7 @@ namespace CYFramework.Platform.WeChat
             }
             catch (System.Exception ex)
             {
+                // ex 为震动异常
                 CYLog.Warning($"[WeChatVibrationAdapter] 长震动失败: {ex.Message}");
             }
 #else

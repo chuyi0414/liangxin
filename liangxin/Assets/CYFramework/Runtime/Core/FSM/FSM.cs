@@ -13,9 +13,21 @@ namespace CYFramework.Core.FSM
     /// </summary>
     public interface IState<T> where T : Enum
     {
+        /// <summary>
+        /// 状态类型
+        /// </summary>
         T StateType { get; }
+        /// <summary>
+        /// 进入状态
+        /// </summary>
         void OnEnter();
+        /// <summary>
+        /// 状态更新
+        /// </summary>
         void OnUpdate(float deltaTime);
+        /// <summary>
+        /// 退出状态
+        /// </summary>
         void OnExit();
     }
     
@@ -24,13 +36,31 @@ namespace CYFramework.Core.FSM
     /// </summary>
     public abstract class StateBase<T> : IState<T> where T : Enum
     {
+        /// <summary>
+        /// 状态类型
+        /// </summary>
         public abstract T StateType { get; }
+        /// <summary>
+        /// 所属 FSM 引用
+        /// </summary>
         protected FSM<T> FSM { get; private set; }
         
+        /// <summary>
+        /// 注入 FSM 引用（内部调用）
+        /// </summary>
         internal void SetFSM(FSM<T> fsm) => FSM = fsm;
         
+        /// <summary>
+        /// 进入状态（可重写）
+        /// </summary>
         public virtual void OnEnter() { }
+        /// <summary>
+        /// 状态更新（可重写）
+        /// </summary>
         public virtual void OnUpdate(float deltaTime) { }
+        /// <summary>
+        /// 退出状态（可重写）
+        /// </summary>
         public virtual void OnExit() { }
         
         /// <summary>
@@ -44,10 +74,22 @@ namespace CYFramework.Core.FSM
     /// </summary>
     public class FSM<T> where T : Enum
     {
+        /// <summary>
+        /// 状态表
+        /// </summary>
         private readonly Dictionary<T, IState<T>> _states = new Dictionary<T, IState<T>>();
+        /// <summary>
+        /// 当前状态实例
+        /// </summary>
         private IState<T> _currentState;
         
+        /// <summary>
+        /// 当前状态类型
+        /// </summary>
         public T CurrentStateType => _currentState != null ? _currentState.StateType : default;
+        /// <summary>
+        /// 是否处于运行状态
+        /// </summary>
         public bool IsRunning => _currentState != null;
         
         /// <summary>
@@ -55,8 +97,10 @@ namespace CYFramework.Core.FSM
         /// </summary>
         public FSM<T> AddState(IState<T> state)
         {
+            // 兼容 StateBase，注入 FSM 引用
             if (state is StateBase<T> stateBase)
             {
+                // 状态基类实例
                 stateBase.SetFSM(this);
             }
             _states[state.StateType] = state;
@@ -70,6 +114,7 @@ namespace CYFramework.Core.FSM
         {
             foreach (var state in states)
             {
+                // 当前状态实例
                 AddState(state);
             }
             return this;
@@ -80,6 +125,7 @@ namespace CYFramework.Core.FSM
         /// </summary>
         public void Start(T initialState)
         {
+            // 初始状态实例
             if (_states.TryGetValue(initialState, out var state))
             {
                 _currentState = state;
@@ -97,6 +143,7 @@ namespace CYFramework.Core.FSM
         /// </summary>
         public void ChangeState(T newState)
         {
+            // 目标状态实例
             if (!_states.TryGetValue(newState, out var nextState))
             {
                 CYLog.Error($"[FSM] 未找到状态: {newState}");
@@ -108,6 +155,7 @@ namespace CYFramework.Core.FSM
                 return;
             }
             
+            // 当前状态名称
             var oldStateName = _currentState != null ? _currentState.StateType.ToString() : "None";
             _currentState?.OnExit();
             _currentState = nextState;
@@ -139,7 +187,13 @@ namespace CYFramework.Core.FSM
     /// </summary>
     internal interface IFSMWrapper
     {
+        /// <summary>
+        /// 更新 FSM
+        /// </summary>
         void Update(float deltaTime);
+        /// <summary>
+        /// 停止 FSM
+        /// </summary>
         void Stop();
     }
     
@@ -148,12 +202,27 @@ namespace CYFramework.Core.FSM
     /// </summary>
     internal class FSMWrapper<T> : IFSMWrapper where T : Enum
     {
+        /// <summary>
+        /// FSM 实例
+        /// </summary>
         private readonly FSM<T> _fsm;
         
+        /// <summary>
+        /// 包装器构造
+        /// </summary>
         public FSMWrapper(FSM<T> fsm) => _fsm = fsm;
+        /// <summary>
+        /// 公开 FSM 实例
+        /// </summary>
         public FSM<T> FSM => _fsm;
         
+        /// <summary>
+        /// 更新 FSM
+        /// </summary>
         public void Update(float deltaTime) => _fsm.Update(deltaTime);
+        /// <summary>
+        /// 停止 FSM
+        /// </summary>
         public void Stop() => _fsm.Stop();
     }
     
@@ -163,13 +232,31 @@ namespace CYFramework.Core.FSM
     /// </summary>
     public class FSMManager : IInitializable, IUpdateable, IDisposableEx
     {
+        /// <summary>
+        /// FSM 包装器表（名称 -> 包装器）
+        /// </summary>
         private readonly Dictionary<string, IFSMWrapper> _fsmWrappers = new();
+        /// <summary>
+        /// FSM 实例表（名称 -> 实例）
+        /// </summary>
         private readonly Dictionary<string, object> _fsmInstances = new();
         
+        /// <summary>
+        /// 初始化顺序
+        /// </summary>
         public int InitOrder => 10;
+        /// <summary>
+        /// Update 顺序
+        /// </summary>
         public int UpdateOrder => 50;
+        /// <summary>
+        /// 释放顺序
+        /// </summary>
         public int DisposeOrder => 10;
         
+        /// <summary>
+        /// 初始化 FSM 管理器
+        /// </summary>
         public void Initialize()
         {
             CYLog.Debug("[FSMManager] 初始化完成");
@@ -182,10 +269,14 @@ namespace CYFramework.Core.FSM
         {
             foreach (var wrapper in _fsmWrappers.Values)
             {
+                // 当前 FSM 包装器
                 wrapper.Update(deltaTime);
             }
         }
         
+        /// <summary>
+        /// 释放 FSM 管理器
+        /// </summary>
         public void Dispose()
         {
             DestroyAll();
@@ -206,7 +297,9 @@ namespace CYFramework.Core.FSM
                 return (_fsmWrappers[name] as FSMWrapper<T>)?.FSM;
             }
             
+            // 新建 FSM 实例
             var fsm = new FSM<T>();
+            // FSM 包装器
             var wrapper = new FSMWrapper<T>(fsm);
             _fsmWrappers[name] = wrapper;
             _fsmInstances[name] = fsm;
@@ -221,6 +314,7 @@ namespace CYFramework.Core.FSM
         {
             if (_fsmWrappers.TryGetValue(name, out var wrapper))
             {
+                // FSM 包装器
                 return (wrapper as FSMWrapper<T>)?.FSM;
             }
             
@@ -251,6 +345,7 @@ namespace CYFramework.Core.FSM
         {
             if (_fsmWrappers.TryGetValue(name, out var wrapper))
             {
+                // 目标 FSM 包装器
                 wrapper.Stop();
                 _fsmWrappers.Remove(name);
                 _fsmInstances.Remove(name);
@@ -265,6 +360,7 @@ namespace CYFramework.Core.FSM
         {
             foreach (var wrapper in _fsmWrappers.Values)
             {
+                // 当前 FSM 包装器
                 wrapper.Stop();
             }
             _fsmWrappers.Clear();
@@ -276,6 +372,7 @@ namespace CYFramework.Core.FSM
         /// </summary>
         public string[] GetAllNames()
         {
+            // 名称数组
             var names = new string[_fsmInstances.Count];
             _fsmInstances.Keys.CopyTo(names, 0);
             return names;

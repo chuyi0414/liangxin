@@ -14,10 +14,25 @@ namespace CYFramework.Platform
     /// </summary>
     public enum PlatformType
     {
+        /// <summary>
+        /// PC 平台
+        /// </summary>
         PC,
+        /// <summary>
+        /// Android 平台
+        /// </summary>
         Android,
+        /// <summary>
+        /// iOS 平台
+        /// </summary>
         iOS,
+        /// <summary>
+        /// WebGL 平台
+        /// </summary>
         WebGL,
+        /// <summary>
+        /// 微信平台
+        /// </summary>
         WeChat
     }
     
@@ -180,9 +195,21 @@ namespace CYFramework.Platform
     /// </summary>
     public enum WebSocketState
     {
+        /// <summary>
+        /// 连接中
+        /// </summary>
         Connecting,
+        /// <summary>
+        /// 已连接
+        /// </summary>
         Open,
+        /// <summary>
+        /// 关闭中
+        /// </summary>
         Closing,
+        /// <summary>
+        /// 已关闭
+        /// </summary>
         Closed
     }
     

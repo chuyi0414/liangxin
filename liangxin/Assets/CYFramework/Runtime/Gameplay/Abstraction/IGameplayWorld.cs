@@ -17,12 +17,33 @@ namespace CYFramework.Gameplay.Abstraction
     /// </summary>
     public enum InputType
     {
+        /// <summary>
+        /// 无输入
+        /// </summary>
         None,
+        /// <summary>
+        /// 移动
+        /// </summary>
         Move,
+        /// <summary>
+        /// 跳跃
+        /// </summary>
         Jump,
+        /// <summary>
+        /// 攻击
+        /// </summary>
         Attack,
+        /// <summary>
+        /// 技能
+        /// </summary>
         Skill,
+        /// <summary>
+        /// 交互
+        /// </summary>
         Interact,
+        /// <summary>
+        /// 自定义
+        /// </summary>
         Custom
     }
     
@@ -31,10 +52,25 @@ namespace CYFramework.Gameplay.Abstraction
     /// </summary>
     public struct InputCommand
     {
+        /// <summary>
+        /// 输入类型
+        /// </summary>
         public InputType Type;
+        /// <summary>
+        /// 输入方向
+        /// </summary>
         public Vector2 Direction;
+        /// <summary>
+        /// 技能 ID
+        /// </summary>
         public int SkillId;
+        /// <summary>
+        /// 时间戳
+        /// </summary>
         public float Timestamp;
+        /// <summary>
+        /// 自定义 ID
+        /// </summary>
         public int CustomId;
     }
     

@@ -14,8 +14,19 @@ namespace CYFramework.Core.UI.MVVM
     /// </summary>
     public struct PropertyChangedEventArgs
     {
+        /// <summary>
+        /// 属性名
+        /// </summary>
         public string PropertyName;
+
+        /// <summary>
+        /// 旧值
+        /// </summary>
         public object OldValue;
+
+        /// <summary>
+        /// 新值
+        /// </summary>
         public object NewValue;
     }
     
@@ -31,17 +42,29 @@ namespace CYFramework.Core.UI.MVVM
     public abstract class ViewModel : IDisposable
     {
         // 属性变更监听器
+        /// <summary>
+        /// 属性监听器：属性名 -> 处理器列表
+        /// </summary>
         private readonly Dictionary<string, List<PropertyChangedHandler>> _propertyHandlers = new();
         
         // 全局变更监听器
+        /// <summary>
+        /// 全局监听器列表
+        /// </summary>
         private readonly List<PropertyChangedHandler> _globalHandlers = new();
         
         // 属性值缓存
+        /// <summary>
+        /// 属性值缓存（注意装箱）
+        /// </summary>
         private readonly Dictionary<string, object> _propertyValues = new();
         // ⚠️ 性能提示：字典存储 value 为 object，值类型会装箱。
         // 不适合高频刷新场景（如每帧血条），更适合低频 UI 交互/配置数据。
         
         // 是否已销毁
+        /// <summary>
+        /// 是否已释放
+        /// </summary>
         private bool _disposed;
         
         #region 属性变更通知
@@ -56,8 +79,8 @@ namespace CYFramework.Core.UI.MVVM
         protected bool SetProperty<T>(string propertyName, T value)
         {
             // 获取旧值
-            object oldValue = default(T);
-            if (_propertyValues.TryGetValue(propertyName, out var cached))
+            object oldValue = default(T); // 旧值缓存
+            if (_propertyValues.TryGetValue(propertyName, out var cached)) // cached 为已缓存值
             {
                 oldValue = cached;
             }
@@ -82,7 +105,7 @@ namespace CYFramework.Core.UI.MVVM
         /// </summary>
         protected T GetProperty<T>(string propertyName, T defaultValue = default)
         {
-            if (_propertyValues.TryGetValue(propertyName, out var value))
+            if (_propertyValues.TryGetValue(propertyName, out var value)) // value 为缓存值
             {
                 return (T)value;
             }
@@ -94,7 +117,7 @@ namespace CYFramework.Core.UI.MVVM
         /// </summary>
         protected void NotifyPropertyChanged(string propertyName, object oldValue, object newValue)
         {
-            var args = new PropertyChangedEventArgs
+            var args = new PropertyChangedEventArgs // 变更事件参数
             {
                 PropertyName = propertyName,
                 OldValue = oldValue,
@@ -102,10 +125,11 @@ namespace CYFramework.Core.UI.MVVM
             };
             
             // 调用特定属性监听器
-            if (_propertyHandlers.TryGetValue(propertyName, out var handlers))
+            if (_propertyHandlers.TryGetValue(propertyName, out var handlers)) // handlers 为属性监听列表
             {
                 foreach (var handler in handlers)
                 {
+                    // handler 为当前监听器
                     try
                     {
                         handler(ref args);
@@ -120,6 +144,7 @@ namespace CYFramework.Core.UI.MVVM
             // 调用全局监听器
             foreach (var handler in _globalHandlers)
             {
+                // handler 为当前监听器
                 try
                 {
                     handler(ref args);
@@ -142,7 +167,7 @@ namespace CYFramework.Core.UI.MVVM
         /// <param name="handler">处理器</param>
         public void Subscribe(string propertyName, PropertyChangedHandler handler)
         {
-            if (!_propertyHandlers.TryGetValue(propertyName, out var handlers))
+            if (!_propertyHandlers.TryGetValue(propertyName, out var handlers)) // handlers 为属性监听列表
             {
                 handlers = new List<PropertyChangedHandler>();
                 _propertyHandlers[propertyName] = handlers;
@@ -159,7 +184,7 @@ namespace CYFramework.Core.UI.MVVM
         /// </summary>
         public void Unsubscribe(string propertyName, PropertyChangedHandler handler)
         {
-            if (_propertyHandlers.TryGetValue(propertyName, out var handlers))
+            if (_propertyHandlers.TryGetValue(propertyName, out var handlers)) // handlers 为属性监听列表
             {
                 handlers.Remove(handler);
             }

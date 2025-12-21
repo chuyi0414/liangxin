@@ -59,6 +59,7 @@ namespace CYFramework.Core.UI.MVVM
         /// <summary>
         /// 属性变更回调
         /// </summary>
+        /// <param name="args">属性变更参数</param>
         private void OnPropertyChanged(ref PropertyChangedEventArgs args)
         {
             OnViewModelPropertyChanged(args.PropertyName, args.OldValue, args.NewValue);

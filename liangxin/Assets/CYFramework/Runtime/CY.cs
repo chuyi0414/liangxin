@@ -27,33 +27,114 @@ namespace CYFramework
     /// </summary>
     public static partial class CY
     {
+        /// <summary>
+        /// 事件总线缓存
+        /// </summary>
         private static EventBus _event;
+        /// <summary>
+        /// 计时器管理器缓存
+        /// </summary>
         private static TimerManager _timer;
+        /// <summary>
+        /// 流程管理器缓存
+        /// </summary>
         private static ProcedureManager _procedure;
+        /// <summary>
+        /// 实体管理器缓存
+        /// </summary>
         private static EntityManager _entity;
+        /// <summary>
+        /// UI 管理器缓存
+        /// </summary>
         private static UIManager _ui;
+        /// <summary>
+        /// 数据表管理器缓存
+        /// </summary>
         private static DataTableManager _data;
+        /// <summary>
+        /// 音频服务缓存
+        /// </summary>
         private static IAudioService _audio;
+        /// <summary>
+        /// 网络服务缓存
+        /// </summary>
         private static NetworkService _network;
+        /// <summary>
+        /// 存档服务缓存
+        /// </summary>
         private static SaveService _save;
+        /// <summary>
+        /// 对象池管理器缓存
+        /// </summary>
         private static PoolManager _pool;
+        /// <summary>
+        /// 资源加载器缓存
+        /// </summary>
         private static IResourceLoader _resource;
+        /// <summary>
+        /// 场景加载器缓存
+        /// </summary>
         private static SceneLoader _scene;
+        /// <summary>
+        /// 状态机管理器缓存
+        /// </summary>
         private static FSMManager _fsm;
 
+        /// <summary>
+        /// 事件总线入口
+        /// </summary>
         public static EventBus Event => _event ??= ServiceLocator.Get<EventBus>();
+        /// <summary>
+        /// 计时器入口
+        /// </summary>
         public static TimerManager Timer => _timer ??= GetOrCreateTimerManager();
+        /// <summary>
+        /// 流程入口
+        /// </summary>
         public static ProcedureManager Procedure => _procedure ??= GetOrCreateProcedureManager();
+        /// <summary>
+        /// 实体入口
+        /// </summary>
         public static EntityManager Entity => _entity ??= GetOrCreateEntityManager();
+        /// <summary>
+        /// UI 入口
+        /// </summary>
         public static UIManager UI => _ui ??= GetOrCreateUIManager();
+        /// <summary>
+        /// 数据表入口
+        /// </summary>
         public static DataTableManager Data => _data ??= GetOrCreateDataTableManager();
+        /// <summary>
+        /// 音频入口
+        /// </summary>
         public static IAudioService Audio => _audio ??= ServiceLocator.Get<IAudioService>();
+        /// <summary>
+        /// 存档入口
+        /// </summary>
         public static SaveService Save => _save ??= ServiceLocator.Get<SaveService>();
+        /// <summary>
+        /// 对象池入口
+        /// </summary>
         public static PoolManager Pool => _pool ??= ServiceLocator.Get<PoolManager>();
+        /// <summary>
+        /// 资源入口
+        /// </summary>
         public static IResourceLoader Resource => _resource ??= ServiceLocator.Get<IResourceLoader>();
+        /// <summary>
+        /// 场景入口
+        /// </summary>
         public static SceneLoader Scene => _scene ??= ServiceLocator.Get<SceneLoader>();
+        /// <summary>
+        /// 网络入口
+        /// </summary>
         public static NetworkService Network => _network ??= ServiceLocator.Get<NetworkService>();
+        /// <summary>
+        /// FSM 入口
+        /// </summary>
         public static FSMManager FSM => _fsm ??= ServiceLocator.Get<FSMManager>();
+        /// <summary>
+        /// 游戏入口实例
+        /// </summary>
         public static Core.GameEntryBase Game => Core.GameEntryBase.Instance;
 
         /// <summary>
@@ -122,8 +203,12 @@ namespace CYFramework
         /// </summary>
         public static void DeleteSave() => Save.Delete();
 
+        /// <summary>
+        /// 获取或创建计时器管理器
+        /// </summary>
         private static TimerManager GetOrCreateTimerManager()
         {
+            // 计时器实例
             if (!ServiceLocator.TryGet<TimerManager>(out var manager))
             {
                 manager = new TimerManager();
@@ -134,8 +219,12 @@ namespace CYFramework
             return manager;
         }
 
+        /// <summary>
+        /// 获取或创建流程管理器
+        /// </summary>
         private static ProcedureManager GetOrCreateProcedureManager()
         {
+            // 流程管理器实例
             if (!ServiceLocator.TryGet<ProcedureManager>(out var manager))
             {
                 manager = new ProcedureManager();
@@ -146,8 +235,12 @@ namespace CYFramework
             return manager;
         }
 
+        /// <summary>
+        /// 获取或创建实体管理器
+        /// </summary>
         private static EntityManager GetOrCreateEntityManager()
         {
+            // 实体管理器实例
             if (!ServiceLocator.TryGet<EntityManager>(out var manager))
             {
                 manager = new EntityManager();
@@ -158,8 +251,12 @@ namespace CYFramework
             return manager;
         }
 
+        /// <summary>
+        /// 获取或创建 UI 管理器
+        /// </summary>
         private static UIManager GetOrCreateUIManager()
         {
+            // UI 管理器实例
             if (!ServiceLocator.TryGet<UIManager>(out var manager))
             {
                 manager = new UIManager();
@@ -170,8 +267,12 @@ namespace CYFramework
             return manager;
         }
 
+        /// <summary>
+        /// 获取或创建数据表管理器
+        /// </summary>
         private static DataTableManager GetOrCreateDataTableManager()
         {
+            // 数据表管理器实例
             if (!ServiceLocator.TryGet<DataTableManager>(out var manager))
             {
                 manager = new DataTableManager();

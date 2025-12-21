@@ -85,9 +85,21 @@ namespace CYFramework.Core.Network
     /// </summary>
     public class HttpResponse
     {
+        /// <summary>
+        /// 是否成功
+        /// </summary>
         public bool IsSuccess;
+        /// <summary>
+        /// HTTP 状态码
+        /// </summary>
         public int StatusCode;
+        /// <summary>
+        /// 响应内容
+        /// </summary>
         public string Data;
+        /// <summary>
+        /// 错误信息
+        /// </summary>
         public string Error;
     }
     
@@ -99,26 +111,65 @@ namespace CYFramework.Core.Network
         // WebSocket 断线期间最大缓存条数，避免无限堆积导致内存不可控。
         private const int MaxPendingWsMessages = 64;
 
+        /// <summary>
+        /// 网络配置
+        /// </summary>
         private NetworkConfig _config;
+        /// <summary>
+        /// 平台网络适配器
+        /// </summary>
         private INetworkAdapter _adapter;
         
         // WebSocket 相关
+        /// <summary>
+        /// WebSocket 实例
+        /// </summary>
         private IWebSocket _webSocket;
+        /// <summary>
+        /// WebSocket 地址
+        /// </summary>
         private string _wsUrl;
+        /// <summary>
+        /// WebSocket 当前状态
+        /// </summary>
         private NetworkState _wsState = NetworkState.Disconnected;
+        /// <summary>
+        /// 已尝试重连次数
+        /// </summary>
         private int _reconnectAttempts;
+        /// <summary>
+        /// 重连计时器
+        /// </summary>
         private float _reconnectTimer;
         
         // 心跳相关
+        /// <summary>
+        /// 心跳计时器
+        /// </summary>
         private float _heartbeatTimer;
+        /// <summary>
+        /// 未收到心跳次数
+        /// </summary>
         private int _missedHeartbeats;
         
         // 熔断器
+        /// <summary>
+        /// 连续失败次数
+        /// </summary>
         private int _consecutiveFailures;
+        /// <summary>
+        /// 熔断器是否打开
+        /// </summary>
         private bool _isCircuitOpen;
+        /// <summary>
+        /// 熔断器打开时长
+        /// </summary>
         private float _circuitOpenTime;
         
         // 请求队列（断线重发）
+        /// <summary>
+        /// 待发送请求队列
+        /// </summary>
         private readonly Queue<(string url, string body, Action<HttpResponse> callback)> _pendingRequests = new();
 
         // WebSocket 待发送消息队列：断线/重连期间缓存，连接成功后自动冲刷。
@@ -126,17 +177,44 @@ namespace CYFramework.Core.Network
         private readonly Queue<string> _pendingWsMessages = new();
         
         // 事件
+        /// <summary>
+        /// 连接状态变化事件
+        /// </summary>
         public event Action<NetworkState> OnStateChanged;
+        /// <summary>
+        /// 文本消息事件
+        /// </summary>
         public event Action<string> OnMessage;
+        /// <summary>
+        /// 二进制消息事件
+        /// </summary>
         public event Action<byte[]> OnBinaryMessage;
         
+        /// <summary>
+        /// 当前连接状态
+        /// </summary>
         public NetworkState State => _wsState;
+        /// <summary>
+        /// 是否已连接
+        /// </summary>
         public bool IsConnected => _wsState == NetworkState.Connected;
         
+        /// <summary>
+        /// 初始化顺序
+        /// </summary>
         public int InitOrder => 10;
+        /// <summary>
+        /// Tick 顺序
+        /// </summary>
         public int TickOrder => 10;
+        /// <summary>
+        /// 释放顺序
+        /// </summary>
         public int DisposeOrder => 10;
         
+        /// <summary>
+        /// 构造网络服务
+        /// </summary>
         public NetworkService(NetworkConfig config = null)
         {
             _config = config ?? new NetworkConfig();
@@ -144,12 +222,17 @@ namespace CYFramework.Core.Network
         
         #region 生命周期
         
+        /// <summary>
+        /// 初始化网络服务
+        /// </summary>
         public void Initialize()
         {
             // 从 CYConfigurator 读取配置
+            // 配置中心
             var configurator = CYConfigurator.Instance;
             if (configurator != null)
             {
+                // 外部配置
                 var externalConfig = configurator.GetConfig<NetworkServiceConfig>();
                 if (externalConfig != null)
                 {
@@ -161,6 +244,7 @@ namespace CYFramework.Core.Network
                     // HeartbeatTimeout（秒）换算为 HeartbeatTimeoutCount：至少为 1
                     // 例如 interval=30s, timeout=10s -> ceil(10/30)=1（下一次心跳未回包即判定超时）
                     // interval=5s, timeout=10s -> ceil(10/5)=2（连续 2 次心跳未回包判定超时）
+                    // 心跳超时次数
                     var timeoutCount = Mathf.CeilToInt(externalConfig.HeartbeatTimeout / Mathf.Max(0.001f, externalConfig.HeartbeatInterval));
                     _config.HeartbeatTimeoutCount = Mathf.Max(1, timeoutCount);
                     _config.CircuitBreakerThreshold = externalConfig.CircuitBreakerThreshold;
@@ -170,6 +254,7 @@ namespace CYFramework.Core.Network
             }
             
             // 获取平台网络适配器
+            // 网络适配器实例
             if (ServiceLocator.TryGet<INetworkAdapter>(out var adapter))
             {
                 _adapter = adapter;
@@ -178,6 +263,9 @@ namespace CYFramework.Core.Network
             CYLog.Debug($"[NetworkService] 初始化完成，适配器: {_adapter?.GetType().Name ?? "无"}");
         }
         
+        /// <summary>
+        /// Tick 驱动（心跳/重连/熔断）
+        /// </summary>
         public void Tick(float deltaTime)
         {
             // 更新心跳
@@ -190,6 +278,9 @@ namespace CYFramework.Core.Network
             UpdateCircuitBreaker(deltaTime);
         }
         
+        /// <summary>
+        /// 释放网络服务
+        /// </summary>
         public void Dispose()
         {
             OnStateChanged = null;
@@ -216,13 +307,17 @@ namespace CYFramework.Core.Network
                 return new HttpResponse { IsSuccess = false, Error = "Circuit breaker is open" };
             }
             
+            // 最大重试次数
             var maxRetry = _config != null ? Mathf.Max(0, _config.HttpMaxRetry) : 0;
+            // 总尝试次数
             var totalAttempts = 1 + maxRetry;
 
+            // attempt 为重试次数索引
             for (int attempt = 0; attempt < totalAttempts; attempt++)
             {
                 try
                 {
+                    // 响应数据
                     string data;
 
                     // 优先使用平台适配器（确保微信/WebGL 路径一致）
@@ -236,6 +331,7 @@ namespace CYFramework.Core.Network
                         data = await HttpGetFallback(url);
                     }
 
+                    // HTTP 响应对象
                     var response = new HttpResponse
                     {
                         StatusCode = 200,
@@ -276,13 +372,17 @@ namespace CYFramework.Core.Network
                 return new HttpResponse { IsSuccess = false, Error = "Circuit breaker is open" };
             }
             
+            // 最大重试次数
             var maxRetry = _config != null ? Mathf.Max(0, _config.HttpMaxRetry) : 0;
+            // 总尝试次数
             var totalAttempts = 1 + maxRetry;
 
+            // attempt 为重试次数索引
             for (int attempt = 0; attempt < totalAttempts; attempt++)
             {
                 try
                 {
+                    // 响应数据
                     string data;
 
                     // 优先使用平台适配器（确保微信/WebGL 路径一致）
@@ -296,6 +396,7 @@ namespace CYFramework.Core.Network
                         data = await HttpPostFallback(url, body, contentType);
                     }
 
+                    // HTTP 响应对象
                     var response = new HttpResponse
                     {
                         StatusCode = 200,
@@ -332,6 +433,7 @@ namespace CYFramework.Core.Network
         /// </remarks>
         public async Task<T> GetJson<T>(string url) where T : class
         {
+            // HTTP 响应
             var response = await Get(url);
             if (!response.IsSuccess || string.IsNullOrEmpty(response.Data))
             {
@@ -355,6 +457,7 @@ namespace CYFramework.Core.Network
         public async Task<TResponse> PostJson<TBody, TResponse>(string url, TBody body)
             where TResponse : class
         {
+            // JSON 字符串
             string json;
             try
             {
@@ -366,6 +469,7 @@ namespace CYFramework.Core.Network
                 return null;
             }
 
+            // HTTP 响应
             var response = await Post(url, json, "application/json");
             if (!response.IsSuccess || string.IsNullOrEmpty(response.Data))
             {
@@ -388,9 +492,11 @@ namespace CYFramework.Core.Network
         /// </summary>
         private async Task<string> HttpGetFallback(string url)
         {
+            // UnityWebRequest 请求
             using var request = UnityWebRequest.Get(url);
             request.timeout = _config.HttpTimeout;
             
+            // 异步请求操作
             var operation = request.SendWebRequest();
             while (!operation.isDone)
             {
@@ -410,13 +516,16 @@ namespace CYFramework.Core.Network
         /// </summary>
         private async Task<string> HttpPostFallback(string url, string body, string contentType)
         {
+            // UnityWebRequest 请求
             using var request = new UnityWebRequest(url, "POST");
+            // 请求体字节
             byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
             request.uploadHandler = new UploadHandlerRaw(bodyBytes);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", contentType);
             request.timeout = _config.HttpTimeout;
             
+            // 异步请求操作
             var operation = request.SendWebRequest();
             while (!operation.isDone)
             {
@@ -486,6 +595,9 @@ namespace CYFramework.Core.Network
             }
         }
         
+        /// <summary>
+        /// WebSocket 连接成功回调
+        /// </summary>
         private void OnWebSocketOpen()
         {
             _wsState = NetworkState.Connected;
@@ -498,6 +610,9 @@ namespace CYFramework.Core.Network
             FlushPendingWsMessages();
         }
         
+        /// <summary>
+        /// WebSocket 文本消息回调
+        /// </summary>
         private void OnWebSocketMessage(string message)
         {
             // 处理心跳响应
@@ -510,11 +625,17 @@ namespace CYFramework.Core.Network
             OnMessage?.Invoke(message);
         }
         
+        /// <summary>
+        /// WebSocket 二进制消息回调
+        /// </summary>
         private void OnWebSocketBinaryMessage(byte[] data)
         {
             OnBinaryMessage?.Invoke(data);
         }
         
+        /// <summary>
+        /// WebSocket 关闭回调
+        /// </summary>
         private void OnWebSocketClose(string reason)
         {
             CYLog.Warning($"[NetworkService] WebSocket 关闭: {reason}");
@@ -528,6 +649,9 @@ namespace CYFramework.Core.Network
             }
         }
         
+        /// <summary>
+        /// WebSocket 错误回调
+        /// </summary>
         private void OnWebSocketError(string error)
         {
             CYLog.Error($"[NetworkService] WebSocket 错误: {error}");
@@ -547,9 +671,6 @@ namespace CYFramework.Core.Network
             _webSocket?.Send(message);
         }
         
-        /// <summary>
-        /// 关闭 WebSocket
-        /// </summary>
         /// <summary>
         /// 尝试发送 WebSocket 消息：未连接则返回 false（不会自动缓存）。
         /// </summary>
@@ -571,6 +692,9 @@ namespace CYFramework.Core.Network
             }
         }
 
+        /// <summary>
+        /// 关闭 WebSocket
+        /// </summary>
         public void CloseWebSocket()
         {
             CloseWebSocket(clearPendingMessages: true);
@@ -597,7 +721,7 @@ namespace CYFramework.Core.Network
         #region 私有方法
         
         /// <summary>
-        /// 处理请求结果（熔断器逻辑）
+        /// 缓存待发送的 WebSocket 消息
         /// </summary>
         private void EnqueuePendingWsMessage(string message)
         {
@@ -612,6 +736,9 @@ namespace CYFramework.Core.Network
             _pendingWsMessages.Enqueue(message);
         }
 
+        /// <summary>
+        /// 冲刷待发送的 WebSocket 消息
+        /// </summary>
         private void FlushPendingWsMessages()
         {
             if (_wsState != NetworkState.Connected || _webSocket == null) return;
@@ -622,6 +749,9 @@ namespace CYFramework.Core.Network
             }
         }
 
+        /// <summary>
+        /// 处理请求结果（熔断器逻辑）
+        /// </summary>
         private void HandleRequestResult(bool success)
         {
             if (success)
@@ -683,6 +813,7 @@ namespace CYFramework.Core.Network
             OnStateChanged?.Invoke(_wsState);
             
             // 指数退避计算重连间隔
+            // 计算后的重连间隔
             float interval = Mathf.Min(
                 _config.ReconnectBaseInterval * Mathf.Pow(2, _reconnectAttempts),
                 _config.ReconnectMaxInterval

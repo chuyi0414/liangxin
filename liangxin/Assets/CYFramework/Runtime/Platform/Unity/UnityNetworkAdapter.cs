@@ -21,9 +21,18 @@ namespace CYFramework.Platform.Unity
     /// </summary>
     public class UnityNetworkAdapter : INetworkAdapter
     {
+        /// <summary>
+        /// 当前是否联网
+        /// </summary>
         private bool _isConnected = true;
+        /// <summary>
+        /// 当前网络类型文本
+        /// </summary>
         private string _networkType = "unknown";
         
+        /// <summary>
+        /// 平台类型
+        /// </summary>
         public PlatformType Platform
         {
             get
@@ -38,9 +47,18 @@ namespace CYFramework.Platform.Unity
             }
         }
         
+        /// <summary>
+        /// 是否联网
+        /// </summary>
         public bool IsConnected => _isConnected;
+        /// <summary>
+        /// 网络类型
+        /// </summary>
         public string NetworkType => _networkType;
         
+        /// <summary>
+        /// 初始化
+        /// </summary>
         public void Initialize()
         {
             UpdateNetworkType();
@@ -52,9 +70,11 @@ namespace CYFramework.Platform.Unity
         /// </summary>
         public async Task<string> HttpGet(string url, int timeout = 10)
         {
+            // 请求对象
             using var request = UnityWebRequest.Get(url);
             request.timeout = timeout;
             
+            // 请求操作
             var operation = request.SendWebRequest();
             while (!operation.isDone)
             {
@@ -74,13 +94,16 @@ namespace CYFramework.Platform.Unity
         /// </summary>
         public async Task<string> HttpPost(string url, string body, string contentType = "application/json", int timeout = 10)
         {
+            // 请求对象
             using var request = new UnityWebRequest(url, "POST");
+            // 请求体字节
             byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
             request.uploadHandler = new UploadHandlerRaw(bodyBytes);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", contentType);
             request.timeout = timeout;
             
+            // 请求操作
             var operation = request.SendWebRequest();
             while (!operation.isDone)
             {
@@ -124,20 +147,56 @@ namespace CYFramework.Platform.Unity
     /// </summary>
     public class UnityWebSocket : IWebSocket
     {
+        /// <summary>
+        /// 连接地址
+        /// </summary>
         private readonly string _url;
+        /// <summary>
+        /// WebSocket 客户端
+        /// </summary>
         private System.Net.WebSockets.ClientWebSocket _webSocket;
+        /// <summary>
+        /// 当前连接状态
+        /// </summary>
         private WebSocketState _state = WebSocketState.Closed;
+        /// <summary>
+        /// 取消令牌源
+        /// </summary>
         private System.Threading.CancellationTokenSource _cts;
+        /// <summary>
+        /// 接收缓冲区
+        /// </summary>
         private readonly byte[] _receiveBuffer = new byte[8192];
         
+        /// <summary>
+        /// WebSocket 状态
+        /// </summary>
         public WebSocketState State => _state;
         
+        /// <summary>
+        /// 文本消息事件
+        /// </summary>
         public event Action<string> OnMessage;
+        /// <summary>
+        /// 二进制消息事件
+        /// </summary>
         public event Action<byte[]> OnBinaryMessage;
+        /// <summary>
+        /// 连接打开事件
+        /// </summary>
         public event Action OnOpen;
+        /// <summary>
+        /// 连接关闭事件
+        /// </summary>
         public event Action<string> OnClose;
+        /// <summary>
+        /// 错误事件
+        /// </summary>
         public event Action<string> OnError;
         
+        /// <summary>
+        /// 构造函数
+        /// </summary>
         public UnityWebSocket(string url)
         {
             _url = url;
@@ -170,6 +229,7 @@ namespace CYFramework.Platform.Unity
             }
             catch (Exception ex)
             {
+                // ex 为连接异常
                 _state = WebSocketState.Closed;
                 OnError?.Invoke(ex.Message);
                 CYLog.Error($"[UnityWebSocket] 连接失败: {ex.Message}");
@@ -189,12 +249,15 @@ namespace CYFramework.Platform.Unity
             
             try
             {
+                // 文本字节
                 var bytes = Encoding.UTF8.GetBytes(message);
+                // 发送分段
                 var segment = new ArraySegment<byte>(bytes);
                 _ = _webSocket.SendAsync(segment, System.Net.WebSockets.WebSocketMessageType.Text, true, _cts.Token);
             }
             catch (Exception ex)
             {
+                // ex 为发送异常
                 OnError?.Invoke(ex.Message);
             }
         }
@@ -212,11 +275,13 @@ namespace CYFramework.Platform.Unity
             
             try
             {
+                // 发送分段
                 var segment = new ArraySegment<byte>(data);
                 _ = _webSocket.SendAsync(segment, System.Net.WebSockets.WebSocketMessageType.Binary, true, _cts.Token);
             }
             catch (Exception ex)
             {
+                // ex 为发送异常
                 OnError?.Invoke(ex.Message);
             }
         }
@@ -247,6 +312,7 @@ namespace CYFramework.Platform.Unity
             }
             catch (Exception ex)
             {
+                // ex 为关闭异常
                 CYLog.Warning($"[UnityWebSocket] 关闭异常: {ex.Message}");
             }
             finally
@@ -266,12 +332,14 @@ namespace CYFramework.Platform.Unity
         /// </summary>
         private async Task ReceiveLoop()
         {
+            // 接收缓冲区分段
             var buffer = new ArraySegment<byte>(_receiveBuffer);
             
             try
             {
                 while (_webSocket?.State == System.Net.WebSockets.WebSocketState.Open && !_cts.Token.IsCancellationRequested)
                 {
+                    // 接收结果
                     var result = await _webSocket.ReceiveAsync(buffer, _cts.Token);
                     
                     if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
@@ -283,11 +351,13 @@ namespace CYFramework.Platform.Unity
                     
                     if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
                     {
+                        // 文本消息
                         var message = Encoding.UTF8.GetString(_receiveBuffer, 0, result.Count);
                         OnMessage?.Invoke(message);
                     }
                     else if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Binary)
                     {
+                        // 二进制消息
                         var data = new byte[result.Count];
                         Array.Copy(_receiveBuffer, 0, data, 0, result.Count);
                         OnBinaryMessage?.Invoke(data);
@@ -300,6 +370,7 @@ namespace CYFramework.Platform.Unity
             }
             catch (Exception ex)
             {
+                // ex 为接收异常
                 if (_state != WebSocketState.Closed)
                 {
                     OnError?.Invoke(ex.Message);

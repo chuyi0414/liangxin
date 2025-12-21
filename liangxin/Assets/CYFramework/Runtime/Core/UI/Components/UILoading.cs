@@ -15,8 +15,19 @@ namespace CYFramework.Core.UI.Components
     /// </summary>
     public class LoadingConfig
     {
+        /// <summary>
+        /// 提示文本
+        /// </summary>
         public string Tips = "加载中...";
+
+        /// <summary>
+        /// 是否显示进度条
+        /// </summary>
         public bool ShowProgress = true;
+
+        /// <summary>
+        /// 最小显示时间（防止闪烁）
+        /// </summary>
         public float MinDisplayTime = 0.5f;  // 最小显示时间，防止闪烁
     }
     
@@ -27,37 +38,95 @@ namespace CYFramework.Core.UI.Components
     public class UILoading : UIPanel
     {
         [Header("UI 引用")]
+        /// <summary>
+        /// 提示文本
+        /// </summary>
         [SerializeField] private Text _tipsText;
+        /// <summary>
+        /// 进度条
+        /// </summary>
         [SerializeField] private Image _progressBar;
+        /// <summary>
+        /// 进度文本
+        /// </summary>
         [SerializeField] private Text _progressText;
+        /// <summary>
+        /// 进度容器
+        /// </summary>
         [SerializeField] private GameObject _progressContainer;
+        /// <summary>
+        /// 加载图标
+        /// </summary>
         [SerializeField] private Image _loadingIcon;
+        /// <summary>
+        /// 旋转速度
+        /// </summary>
         [SerializeField] private float _rotateSpeed = 360f;
         
         // 配置
+        /// <summary>
+        /// 当前配置
+        /// </summary>
         private LoadingConfig _config;
         
         // 状态
+        /// <summary>
+        /// 当前进度
+        /// </summary>
         private float _currentProgress;
+        /// <summary>
+        /// 目标进度
+        /// </summary>
         private float _targetProgress;
+        /// <summary>
+        /// 显示时长
+        /// </summary>
         private float _showTime;
+        /// <summary>
+        /// 是否处于完成中
+        /// </summary>
         private bool _isCompleting;
+        /// <summary>
+        /// 完成回调
+        /// </summary>
         private Action _onComplete;
         
         // 属性重写
+        /// <summary>
+        /// 所属 UI 层级
+        /// </summary>
         public override UILayer Layer => UILayer.Loading;
+
+        /// <summary>
+        /// 是否可入栈
+        /// </summary>
         public override bool IsStackable => false;
+
+        /// <summary>
+        /// 是否可池化
+        /// </summary>
         public override bool IsPoolable => true;
+
+        /// <summary>
+        /// 是否启用面板动画
+        /// </summary>
         public override bool EnableAnimation => false;
         
         // 单例引用
+        /// <summary>
+        /// 单例实例
+        /// </summary>
         private static UILoading _instance;
         
         #region 生命周期
         
+        /// <summary>
+        /// 打开加载界面
+        /// </summary>
         protected override void OnOpen(object userData)
         {
             _instance = this;
+            // userData 为配置
             _config = userData as LoadingConfig ?? new LoadingConfig();
             
             // 初始化状态
@@ -75,12 +144,18 @@ namespace CYFramework.Core.UI.Components
             UpdateProgressUI();
         }
         
+        /// <summary>
+        /// 隐藏加载界面
+        /// </summary>
         protected override void OnHide()
         {
             _instance = null;
             _config = null;
         }
         
+        /// <summary>
+        /// Unity Update
+        /// </summary>
         private void Update()
         {
             // 累计显示时间
@@ -103,7 +178,7 @@ namespace CYFramework.Core.UI.Components
             if (_isCompleting && _currentProgress >= 1f)
             {
                 // 确保最小显示时间
-                float remainTime = _config.MinDisplayTime - _showTime;
+                float remainTime = _config.MinDisplayTime - _showTime; // 剩余等待时长
                 if (remainTime > 0)
                 {
                     StartCoroutine(DelayComplete(remainTime));
@@ -151,6 +226,9 @@ namespace CYFramework.Core.UI.Components
         
         #region 私有方法
         
+        /// <summary>
+        /// 刷新进度显示
+        /// </summary>
         private void UpdateProgressUI()
         {
             if (_progressBar != null)
@@ -164,12 +242,18 @@ namespace CYFramework.Core.UI.Components
             }
         }
         
+        /// <summary>
+        /// 延迟完成协程
+        /// </summary>
         private IEnumerator DelayComplete(float delay)
         {
             yield return new WaitForSecondsRealtime(delay);
             DoComplete();
         }
         
+        /// <summary>
+        /// 完成加载
+        /// </summary>
         private void DoComplete()
         {
             _onComplete?.Invoke();
@@ -185,7 +269,7 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static UILoading Show(string tips = "加载中...", bool showProgress = true)
         {
-            var manager = CYFramework.Infrastructure.ServiceLocator.Get<UIManager>();
+            var manager = CYFramework.Infrastructure.ServiceLocator.Get<UIManager>(); // UI 管理器
             return manager?.Open<UILoading>(new LoadingConfig
             {
                 Tips = tips,

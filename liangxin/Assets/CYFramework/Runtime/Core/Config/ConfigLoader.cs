@@ -55,25 +55,44 @@ namespace CYFramework.Core.Config
     /// </summary>
     public class ConfigLoader : IConfigLoader, IInitializable, IDisposableEx
     {
-        // 配置缓存
+        /// <summary>
+        /// 配置缓存
+        /// </summary>
         private readonly Dictionary<string, ScriptableObject> _cache = new();
         
         // 配置根路径
         // 配置根路径（由 ResourceLoaderConfig.ConfigPath 驱动）
         // - Editor: 用于 AssetDatabase.LoadAssetAtPath 的前缀路径（必须是 Assets/...）
         // - Runtime: 用于 Resources.Load 的前缀路径（相对于 Resources）
+        /// <summary>
+        /// Editor 下的资源路径前缀
+        /// </summary>
         private string _assetPathPrefix = "Assets/Resources/Config/";
+        /// <summary>
+        /// Runtime 下的 Resources 路径前缀
+        /// </summary>
         private string _resourcesPathPrefix = "Config/";
         
+        /// <summary>
+        /// 初始化优先级
+        /// </summary>
         public int InitOrder => -50;
+        /// <summary>
+        /// 销毁优先级
+        /// </summary>
         public int DisposeOrder => 50;
         
+        /// <summary>
+        /// 初始化
+        /// </summary>
         public void Initialize()
         {
             // 从 CYConfigurator 读取配置路径前缀（保持与 ResourceLoaderConfig 一致）
+            // 配置器实例
             var configurator = CYConfigurator.Instance;
             if (configurator != null)
             {
+                // 资源加载配置
                 var resourceConfig = configurator.GetConfig<ResourceLoaderConfig>();
                 if (resourceConfig != null && !string.IsNullOrEmpty(resourceConfig.ConfigPath))
                 {
@@ -85,6 +104,9 @@ namespace CYFramework.Core.Config
             CYLog.Debug("[ConfigLoader] 初始化完成");
         }
         
+        /// <summary>
+        /// 销毁
+        /// </summary>
         public void Dispose()
         {
             ClearCache();
@@ -98,15 +120,17 @@ namespace CYFramework.Core.Config
         public T Load<T>(string path) where T : ScriptableObject
         {
             // 检查缓存
-            if (_cache.TryGetValue(path, out var cached))
+            if (_cache.TryGetValue(path, out var cached)) // cached 为缓存对象
             {
                 return cached as T;
             }
             
+            // 配置实例
             T config = null;
             
 #if UNITY_EDITOR
             // Editor: 直接读 SO，无需烘焙
+            // 资源完整路径
             string fullPath = path.StartsWith("Assets/") ? path : _assetPathPrefix + path;
             if (!fullPath.EndsWith(".asset"))
             {
@@ -122,6 +146,7 @@ namespace CYFramework.Core.Config
 #else
             // Runtime: 从 Resources 加载（简化版）
             // 生产环境可替换为 Addressables 或 BlobAsset
+            // Resources 路径
             string resourcePath = path.StartsWith(_resourcesPathPrefix) ? path : _resourcesPathPrefix + path;
             resourcePath = resourcePath.Replace(".asset", "");
             
@@ -148,7 +173,7 @@ namespace CYFramework.Core.Config
         public void LoadAsync<T>(string path, Action<T> callback) where T : ScriptableObject
         {
             // 检查缓存
-            if (_cache.TryGetValue(path, out var cached))
+            if (_cache.TryGetValue(path, out var cached)) // cached 为缓存对象
             {
                 callback?.Invoke(cached as T);
                 return;
@@ -156,16 +181,20 @@ namespace CYFramework.Core.Config
             
 #if UNITY_EDITOR
             // Editor 下同步加载
+            // 配置实例
             var config = Load<T>(path);
             callback?.Invoke(config);
 #else
             // Runtime: 使用 Resources.LoadAsync
+            // Resources 路径
             string resourcePath = path.StartsWith(_resourcesPathPrefix) ? path : _resourcesPathPrefix + path;
             resourcePath = resourcePath.Replace(".asset", "");
             
+            // 异步请求
             var request = Resources.LoadAsync<T>(resourcePath);
             request.completed += _ =>
             {
+                // 配置实例
                 var config = request.asset as T;
                 if (config != null)
                 {
@@ -181,7 +210,7 @@ namespace CYFramework.Core.Config
         /// </summary>
         public void Preload(string[] paths)
         {
-            foreach (var path in paths)
+            foreach (var path in paths) // path 为配置路径
             {
                 Load<ScriptableObject>(path);
             }
@@ -194,7 +223,7 @@ namespace CYFramework.Core.Config
         /// </summary>
         public void Unload(string path)
         {
-            if (_cache.TryGetValue(path, out var config))
+            if (_cache.TryGetValue(path, out var config)) // config 为缓存对象
             {
                 _cache.Remove(path);
                 
@@ -218,6 +247,11 @@ namespace CYFramework.Core.Config
             CYLog.Debug("[ConfigLoader] 缓存已清空");
         }
 
+        /// <summary>
+        /// 确保路径以斜杠结尾
+        /// </summary>
+        /// <param name="path">原始路径</param>
+        /// <returns>处理后的路径</returns>
         private static string EnsureEndsWithSlash(string path)
         {
             if (string.IsNullOrEmpty(path)) return "";

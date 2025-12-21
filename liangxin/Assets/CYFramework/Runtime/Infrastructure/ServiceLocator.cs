@@ -14,11 +14,29 @@ namespace CYFramework.Infrastructure
     /// </summary>
     internal class ServiceRegistration
     {
+        /// <summary>
+        /// 服务接口类型
+        /// </summary>
         public Type ServiceType;
+        /// <summary>
+        /// 实现类型
+        /// </summary>
         public Type ImplementationType;
+        /// <summary>
+        /// 生命周期作用域
+        /// </summary>
         public ServiceScope Scope;
+        /// <summary>
+        /// 实例工厂
+        /// </summary>
         public Func<object> Factory;
+        /// <summary>
+        /// 缓存实例
+        /// </summary>
         public object Instance;
+        /// <summary>
+        /// 是否懒加载
+        /// </summary>
         public bool IsLazy;
     }
     
@@ -76,6 +94,7 @@ namespace CYFramework.Infrastructure
         /// <param name="scope">生命周期作用域</param>
         public static void Register<TService>(Func<TService> factory, ServiceScope scope = ServiceScope.Singleton)
         {
+            // 服务类型
             var serviceType = typeof(TService);
             
             if (_registrations.ContainsKey(serviceType))
@@ -109,6 +128,7 @@ namespace CYFramework.Infrastructure
         /// <param name="instance">服务实例</param>
         public static void RegisterInstance<TService>(TService instance)
         {
+            // 服务类型
             var serviceType = typeof(TService);
             if (instance == null)
             {
@@ -140,6 +160,7 @@ namespace CYFramework.Infrastructure
         public static void RegisterLazy<TService, TImplementation>(ServiceScope scope = ServiceScope.Singleton)
             where TImplementation : TService, new()
         {
+            // 服务类型
             var serviceType = typeof(TService);
             
             if (_registrations.ContainsKey(serviceType))
@@ -170,8 +191,9 @@ namespace CYFramework.Infrastructure
         /// </summary>
         public static void Unregister<TService>()
         {
+            // 服务类型
             var type = typeof(TService);
-            if (_registrations.TryGetValue(type, out var reg))
+            if (_registrations.TryGetValue(type, out var reg)) // reg 为服务注册信息
             {
                 if (reg.Instance != null)
                 {
@@ -210,7 +232,7 @@ namespace CYFramework.Infrastructure
         /// <returns>是否获取成功</returns>
         public static bool TryGet<T>(out T service)
         {
-            if (_registrations.TryGetValue(typeof(T), out var reg))
+            if (_registrations.TryGetValue(typeof(T), out var reg)) // reg 为服务注册信息
             {
                 service = (T)ResolveInstance(reg);
                 return true;
@@ -224,7 +246,7 @@ namespace CYFramework.Infrastructure
         /// </summary>
         public static object Get(Type serviceType)
         {
-            if (!_registrations.TryGetValue(serviceType, out var registration))
+            if (!_registrations.TryGetValue(serviceType, out var registration)) // registration 为服务注册信息
             {
                 throw new InvalidOperationException($"[ServiceLocator] 服务未注册: {serviceType.Name}");
             }
@@ -246,8 +268,9 @@ namespace CYFramework.Infrastructure
         /// </summary>
         public static IEnumerable<object> GetAllInstances()
         {
+            // 实例列表
             var instances = new List<object>();
-            foreach (var reg in _registrations.Values)
+            foreach (var reg in _registrations.Values) // reg 为服务注册信息
             {
                 if (reg.Instance != null)
                 {
@@ -277,16 +300,18 @@ namespace CYFramework.Infrastructure
             BuildInitOrder();
             
             // 先创建实例，再按 InitOrder 排序初始化（当前实现不做依赖拓扑排序）
+            // 待初始化列表
             var initializables = new List<(int order, IInitializable instance)>();
             
-            foreach (var type in _initOrder)
+            foreach (var type in _initOrder) // type 为服务类型
             {
-                if (!_registrations.TryGetValue(type, out var reg)) continue;
+                if (!_registrations.TryGetValue(type, out var reg)) continue; // reg 为服务注册信息
                 if (reg.IsLazy) continue; // 跳过懒加载
                 
+                // 服务实例
                 var instance = ResolveInstance(reg);
                 
-                if (instance is IInitializable initializable)
+                if (instance is IInitializable initializable) // initializable 为可初始化实例
                 {
                     initializables.Add((initializable.InitOrder, initializable));
                 }
@@ -295,7 +320,7 @@ namespace CYFramework.Infrastructure
             // 按优先级排序后初始化
             initializables.Sort((a, b) => a.order.CompareTo(b.order));
             
-            foreach (var (_, initializable) in initializables)
+            foreach (var (_, initializable) in initializables) // initializable 为可初始化实例
             {
                 try
                 {
@@ -304,6 +329,7 @@ namespace CYFramework.Infrastructure
                 }
                 catch (Exception ex)
                 {
+                    // ex 为初始化异常
                     CYLog.Error($"[ServiceLocator] 初始化失败: {initializable.GetType().Name}", ex);
                     throw;
                 }
@@ -318,9 +344,9 @@ namespace CYFramework.Infrastructure
         /// </summary>
         public static void ClearScoped()
         {
-            foreach (var type in _scopedServices)
+            foreach (var type in _scopedServices) // type 为服务类型
             {
-                if (_registrations.TryGetValue(type, out var reg))
+                if (_registrations.TryGetValue(type, out var reg)) // reg 为服务注册信息
                 {
                     if (reg.Instance != null)
                     {
@@ -341,13 +367,15 @@ namespace CYFramework.Infrastructure
         public static void DisposeAll()
         {
             // 按销毁优先级排序
+            // 待销毁列表
             var disposables = new List<(int order, IDisposable instance, Type type)>();
             
-            foreach (var kvp in _registrations)
+            foreach (var kvp in _registrations) // kvp 为服务注册表项
             {
-                if (kvp.Value.Instance is IDisposable disposable)
+                if (kvp.Value.Instance is IDisposable disposable) // disposable 为可销毁实例
                 {
-                    int order = (disposable is IDisposableEx disposableEx) ? disposableEx.DisposeOrder : 0;
+                    // 销毁优先级
+                    int order = (disposable is IDisposableEx disposableEx) ? disposableEx.DisposeOrder : 0; // disposableEx 为扩展销毁接口
                     disposables.Add((order, disposable, kvp.Key));
                 }
             }
@@ -355,7 +383,7 @@ namespace CYFramework.Infrastructure
             // 优先级越大越先销毁
             disposables.Sort((a, b) => b.order.CompareTo(a.order));
             
-            foreach (var (_, disposable, type) in disposables)
+            foreach (var (_, disposable, type) in disposables) // disposable/type 为待销毁实例与类型
             {
                 try
                 {
@@ -364,6 +392,7 @@ namespace CYFramework.Infrastructure
                 }
                 catch (Exception ex)
                 {
+                    // ex 为销毁异常
                     CYLog.Error($"[ServiceLocator] 销毁失败: {type.Name}", ex);
                 }
             }
@@ -435,6 +464,7 @@ namespace CYFramework.Infrastructure
                     _resolvingStack.Add(registration.ServiceType);
                     try
                     {
+                        // 新建实例
                         var instance = registration.Factory();
                         // Transient 实例也需要初始化
                         if (_initialized)
@@ -462,7 +492,7 @@ namespace CYFramework.Infrastructure
         /// </summary>
         private static void InitializeInstanceIfNeeded(object instance)
         {
-            if (instance is IInitializable initializable)
+            if (instance is IInitializable initializable) // initializable 为可初始化实例
             {
                 try
                 {
@@ -471,6 +501,7 @@ namespace CYFramework.Infrastructure
                 }
                 catch (Exception ex)
                 {
+                    // ex 为初始化异常
                     CYLog.Error($"[ServiceLocator] 延迟初始化失败: {instance.GetType().Name}", ex);
                     throw;
                 }
@@ -482,7 +513,7 @@ namespace CYFramework.Infrastructure
         /// </summary>
         private static void DisposeInstance(ServiceRegistration registration)
         {
-            if (registration.Instance is IDisposable disposable)
+            if (registration.Instance is IDisposable disposable) // disposable 为可销毁实例
             {
                 try
                 {
@@ -490,6 +521,7 @@ namespace CYFramework.Infrastructure
                 }
                 catch (Exception ex)
                 {
+                    // ex 为销毁异常
                     CYLog.Error($"[ServiceLocator] 销毁实例失败: {registration.ServiceType.Name}", ex);
                 }
             }

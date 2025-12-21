@@ -15,14 +15,26 @@ namespace CYFramework.Gameplay.Abstraction
     /// </summary>
     public class RenderProxy : IUpdateable
     {
+        /// <summary>
+        /// 玩法世界引用
+        /// </summary>
         private readonly IGameplayWorld _world;
         
         // 上一次 FixedUpdate 的时间
+        /// <summary>
+        /// 上一次 FixedUpdate 时间
+        /// </summary>
         private float _lastFixedTime;
         
         // 插值系数 (0~1)
+        /// <summary>
+        /// 插值系数
+        /// </summary>
         private float _alpha;
         
+        /// <summary>
+        /// Update 顺序
+        /// </summary>
         public int UpdateOrder => 0;
         
         /// <summary>
@@ -40,11 +52,17 @@ namespace CYFramework.Gameplay.Abstraction
         /// </summary>
         public float Alpha => _alpha;
         
+        /// <summary>
+        /// 构造渲染代理
+        /// </summary>
         public RenderProxy(IGameplayWorld world)
         {
             _world = world;
         }
         
+        /// <summary>
+        /// 更新插值系数
+        /// </summary>
         public void OnUpdate(float deltaTime)
         {
             // 计算插值系数
@@ -66,13 +84,17 @@ namespace CYFramework.Gameplay.Abstraction
         /// </summary>
         public Vector3 GetInterpolatedPosition(int index)
         {
+            // 当前帧快照
             ref readonly var curr = ref CurrentSnapshot;
+            // 上一帧快照
             ref readonly var prev = ref PrevSnapshot;
             
             if (index < 0 || index >= curr.Count) return Vector3.zero;
             
             // 查找 prev 中对应的索引（通过 ID 匹配）
+            // 当前单位 ID
             int currId = curr.IDs[index];
+            // 上一帧索引
             int prevIndex = FindIndexById(prev, currId);
             
             if (prevIndex >= 0)
@@ -88,12 +110,16 @@ namespace CYFramework.Gameplay.Abstraction
         /// </summary>
         public Quaternion GetInterpolatedRotation(int index)
         {
+            // 当前帧快照
             ref readonly var curr = ref CurrentSnapshot;
+            // 上一帧快照
             ref readonly var prev = ref PrevSnapshot;
             
             if (index < 0 || index >= curr.Count) return Quaternion.identity;
             
+            // 当前单位 ID
             int currId = curr.IDs[index];
+            // 上一帧索引
             int prevIndex = FindIndexById(prev, currId);
             
             if (prevIndex >= 0)
@@ -109,6 +135,7 @@ namespace CYFramework.Gameplay.Abstraction
         /// </summary>
         private int FindIndexById(in RenderSnapshot snapshot, int id)
         {
+            // i 为索引
             for (int i = 0; i < snapshot.Count; i++)
             {
                 if (snapshot.IDs[i] == id)

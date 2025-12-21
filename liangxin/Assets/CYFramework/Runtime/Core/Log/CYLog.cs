@@ -30,10 +30,25 @@ namespace CYFramework.Infrastructure
     /// </summary>
     public struct LogEntry
     {
+        /// <summary>
+        /// 日志级别
+        /// </summary>
         public LogLevel Level;
+        /// <summary>
+        /// 日志标签
+        /// </summary>
         public string Tag;
+        /// <summary>
+        /// 日志内容
+        /// </summary>
         public string Message;
+        /// <summary>
+        /// 堆栈信息
+        /// </summary>
         public string StackTrace;
+        /// <summary>
+        /// 时间戳
+        /// </summary>
         public DateTime Timestamp;
     }
     
@@ -42,6 +57,9 @@ namespace CYFramework.Infrastructure
     /// </summary>
     public interface ILogOutput
     {
+        /// <summary>
+        /// 输出日志条目
+        /// </summary>
         void Write(in LogEntry entry);
     }
     
@@ -52,23 +70,47 @@ namespace CYFramework.Infrastructure
     public static class CYLog
     {
         // 当前日志级别
+        /// <summary>
+        /// 最低输出级别
+        /// </summary>
         private static LogLevel _minLevel = LogLevel.Debug;
 
         // 输出格式开关（由配置驱动）
+        /// <summary>
+        /// 是否显示时间戳
+        /// </summary>
         internal static bool ShowTimestamp = true;
+        /// <summary>
+        /// 是否显示堆栈
+        /// </summary>
         internal static bool ShowStackTrace = false;
         
         // 输出器列表
+        /// <summary>
+        /// 日志输出器列表
+        /// </summary>
         private static readonly List<ILogOutput> _outputs = new();
         
         // 最近日志缓存（用于 Crash 上报）
+        /// <summary>
+        /// 最近日志缓存队列
+        /// </summary>
         private static readonly Queue<LogEntry> _recentLogs = new();
+        /// <summary>
+        /// 最近日志最大缓存数量
+        /// </summary>
         private const int MAX_RECENT_LOGS = 100;
         
         // StringBuilder 复用，避免 GC
+        /// <summary>
+        /// 复用的 StringBuilder 缓冲
+        /// </summary>
         private static readonly StringBuilder _sb = new(256);
         
         // 是否已初始化
+        /// <summary>
+        /// 是否已初始化
+        /// </summary>
         private static bool _initialized;
         
         #region 初始化
@@ -114,6 +156,7 @@ namespace CYFramework.Infrastructure
             }
 #else
             // 移除旧的文件输出器（避免重复添加）
+            // i 为索引
             for (int i = _outputs.Count - 1; i >= 0; i--)
             {
                 if (_outputs[i] is FileLogOutput)
@@ -228,6 +271,7 @@ namespace CYFramework.Infrastructure
             // 级别过滤
             if (level < _minLevel) return;
             
+            // 日志条目
             var entry = new LogEntry
             {
                 Level = level,
@@ -241,6 +285,7 @@ namespace CYFramework.Infrastructure
             CacheRecentLog(entry);
             
             // 输出到所有输出器
+            // i 为索引
             for (int i = 0; i < _outputs.Count; i++)
             {
                 try
@@ -282,6 +327,7 @@ namespace CYFramework.Infrastructure
             // 只处理异常和错误
             if (type == LogType.Exception || type == LogType.Error)
             {
+                // Unity 错误日志条目
                 var entry = new LogEntry
                 {
                     Level = type == LogType.Exception ? LogLevel.Fatal : LogLevel.Error,
@@ -329,8 +375,12 @@ namespace CYFramework.Infrastructure
     /// </summary>
     public class UnityLogOutput : ILogOutput
     {
+        /// <summary>
+        /// 输出日志到 Unity 控制台
+        /// </summary>
         public void Write(in LogEntry entry)
         {
+            // 格式化后的日志内容
             string formatted = CYLog.Format(entry);
             
             switch (entry.Level)
@@ -369,20 +419,34 @@ namespace CYFramework.Infrastructure
     /// </remarks>
     public sealed class FileLogOutput : ILogOutput
     {
+        /// <summary>
+        /// 相对文件路径
+        /// </summary>
         private readonly string _relativePath;
+        /// <summary>
+        /// 最大文件字节数
+        /// </summary>
         private readonly long _maxBytes;
 
+        /// <summary>
+        /// 构造文件输出器
+        /// </summary>
         public FileLogOutput(string relativePath, int maxSizeMB)
         {
             _relativePath = string.IsNullOrEmpty(relativePath) ? "Logs/game.log" : relativePath;
             _maxBytes = Math.Max(1, maxSizeMB) * 1024L * 1024L;
         }
 
+        /// <summary>
+        /// 写入日志到文件
+        /// </summary>
         public void Write(in LogEntry entry)
         {
             try
             {
+                // 完整文件路径
                 var fullPath = Path.Combine(Application.persistentDataPath, _relativePath);
+                // 目录路径
                 var dir = Path.GetDirectoryName(fullPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 {
@@ -391,6 +455,7 @@ namespace CYFramework.Infrastructure
 
                 if (File.Exists(fullPath))
                 {
+                    // 文件信息
                     var info = new FileInfo(fullPath);
                     if (info.Length >= _maxBytes)
                     {
@@ -398,6 +463,7 @@ namespace CYFramework.Infrastructure
                     }
                 }
 
+                // 日志文本行
                 var line = CYLog.Format(entry);
                 if (CYLog.ShowStackTrace && !string.IsNullOrEmpty(entry.StackTrace))
                 {
@@ -420,8 +486,12 @@ namespace CYFramework.Infrastructure
     /// </summary>
     public class WeChatLogOutput : ILogOutput
     {
+        /// <summary>
+        /// 输出日志到微信控制台
+        /// </summary>
         public void Write(in LogEntry entry)
         {
+            // 格式化后的日志内容
             string formatted = CYLog.Format(entry);
             
             // 通过 JS 桥接调用 console

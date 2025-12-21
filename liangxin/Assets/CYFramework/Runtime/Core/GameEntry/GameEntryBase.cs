@@ -31,7 +31,13 @@ namespace CYFramework.Core
 
         // ==================== 单例 ====================
         
+        /// <summary>
+        /// 全局入口实例
+        /// </summary>
         private static GameEntryBase _instance;
+        /// <summary>
+        /// 获取入口实例
+        /// </summary>
         public static GameEntryBase Instance => _instance;
         
         /// <summary>
@@ -41,11 +47,20 @@ namespace CYFramework.Core
         
         // ==================== 服务引用 ====================
         
+        /// <summary>
+        /// 事件总线引用
+        /// </summary>
         protected EventBus EventBus { get; private set; }
+        /// <summary>
+        /// 流程管理器引用
+        /// </summary>
         protected ProcedureManager ProcedureManager { get; private set; }
         
         // ==================== 生命周期 ====================
         
+        /// <summary>
+        /// Unity Awake
+        /// </summary>
         protected virtual void Awake()
         {
             if (_instance != null && _instance != this)
@@ -60,6 +75,9 @@ namespace CYFramework.Core
             }
         }
         
+        /// <summary>
+        /// Unity Start
+        /// </summary>
         protected virtual void Start()
         {
             InitializeFrameworkServices();
@@ -84,6 +102,9 @@ namespace CYFramework.Core
             OnGameStart();
         }
         
+        /// <summary>
+        /// Unity OnDestroy
+        /// </summary>
         protected virtual void OnDestroy()
         {
             if (_instance == this)
@@ -96,9 +117,13 @@ namespace CYFramework.Core
         
         // ==================== 框架服务初始化 ====================
         
+        /// <summary>
+        /// 初始化框架服务引用
+        /// </summary>
         private void InitializeFrameworkServices()
         {
             EventBus = ServiceLocator.Get<EventBus>();
+            // 流程管理器实例
             ServiceLocator.TryGet(out ProcedureManager _procedureManager);
             ProcedureManager = _procedureManager;
             

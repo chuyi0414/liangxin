@@ -56,20 +56,65 @@ namespace CYFramework.Core.Pool
     /// <typeparam name="T">对象类型</typeparam>
     public class ObjectPool<T> where T : class
     {
+        /// <summary>
+        /// 池内对象栈
+        /// </summary>
         private readonly Stack<T> _pool;
+
+        /// <summary>
+        /// 对象工厂
+        /// </summary>
         private readonly Func<T> _factory;
+
+        /// <summary>
+        /// 取出回调
+        /// </summary>
         private readonly Action<T> _onSpawn;
+
+        /// <summary>
+        /// 回收回调
+        /// </summary>
         private readonly Action<T> _onDespawn;
+
+        /// <summary>
+        /// 池配置
+        /// </summary>
         private readonly PoolConfig _config;
         
         // 统计
+        /// <summary>
+        /// 总创建数量
+        /// </summary>
         private int _totalCreated;
+
+        /// <summary>
+        /// 溢出对象数量
+        /// </summary>
         private int _overflowCount;
+
+        /// <summary>
+        /// 溢出对象集合
+        /// </summary>
         private readonly HashSet<T> _overflowObjects = new();
         
+        /// <summary>
+        /// 当前激活数量
+        /// </summary>
         public int ActiveCount => _totalCreated - _pool.Count;
+
+        /// <summary>
+        /// 池内数量
+        /// </summary>
         public int PooledCount => _pool.Count;
+
+        /// <summary>
+        /// 溢出数量
+        /// </summary>
         public int OverflowCount => _overflowCount;
+
+        /// <summary>
+        /// 总创建数量
+        /// </summary>
         public int TotalCreated => _totalCreated;
         
         /// <summary>
@@ -103,9 +148,9 @@ namespace CYFramework.Core.Pool
         /// </summary>
         public void Warmup(int count)
         {
-            for (int i = 0; i < count && _pool.Count < _config.MaxCapacity; i++)
+            for (int i = 0; i < count && _pool.Count < _config.MaxCapacity; i++) // i 为索引
             {
-                var obj = CreateNew();
+                var obj = CreateNew(); // 新对象
                 _pool.Push(obj);
             }
             
@@ -117,7 +162,7 @@ namespace CYFramework.Core.Pool
         /// </summary>
         public T Get()
         {
-            T obj;
+            T obj; // 目标对象
             
             if (_pool.Count > 0)
             {
@@ -190,16 +235,17 @@ namespace CYFramework.Core.Pool
             // 回收所有 Overflow 对象
             foreach (var obj in _overflowObjects)
             {
+                // obj 为溢出对象
                 DestroyObject(obj);
             }
             _overflowObjects.Clear();
             _overflowCount = 0;
             
             // 回收 50% 空闲对象
-            int shrinkCount = _pool.Count / 2;
-            for (int i = 0; i < shrinkCount; i++)
+            int shrinkCount = _pool.Count / 2; // 回收数量
+            for (int i = 0; i < shrinkCount; i++) // i 为索引
             {
-                var obj = _pool.Pop();
+                var obj = _pool.Pop(); // 回收对象
                 DestroyObject(obj);
             }
             
@@ -213,12 +259,13 @@ namespace CYFramework.Core.Pool
         {
             while (_pool.Count > 0)
             {
-                var obj = _pool.Pop();
+                var obj = _pool.Pop(); // 回收对象
                 DestroyObject(obj);
             }
             
             foreach (var obj in _overflowObjects)
             {
+                // obj 为溢出对象
                 DestroyObject(obj);
             }
             _overflowObjects.Clear();
@@ -232,7 +279,7 @@ namespace CYFramework.Core.Pool
         /// </summary>
         private T CreateNew()
         {
-            var obj = _factory();
+            var obj = _factory(); // 创建对象
             _totalCreated++;
             return obj;
         }
@@ -244,6 +291,7 @@ namespace CYFramework.Core.Pool
         {
             if (obj is IDisposable disposable)
             {
+                // disposable 为可释放对象
                 disposable.Dispose();
             }
             _totalCreated--;
@@ -256,21 +304,60 @@ namespace CYFramework.Core.Pool
     /// </summary>
     public class GameObjectPool
     {
+        /// <summary>
+        /// 预制体
+        /// </summary>
         private readonly GameObject _prefab;
+
+        /// <summary>
+        /// 池根节点
+        /// </summary>
         private readonly Transform _poolRoot;
+
+        /// <summary>
+        /// 池内对象栈
+        /// </summary>
         private readonly Stack<GameObject> _pool;
+
+        /// <summary>
+        /// 池配置
+        /// </summary>
         private readonly PoolConfig _config;
         
+        /// <summary>
+        /// 总创建数量
+        /// </summary>
         private int _totalCreated;
+
+        /// <summary>
+        /// 溢出对象数量
+        /// </summary>
         private int _overflowCount;
+
+        /// <summary>
+        /// 溢出对象集合
+        /// </summary>
         private readonly HashSet<GameObject> _overflowObjects = new();
 
         // 最近一次使用时间（unscaled），用于 IdleTimeout 清理
+        /// <summary>
+        /// 最近一次使用时间（unscaled）
+        /// </summary>
         public float LastUsedTime { get; private set; }
         
+        /// <summary>
+        /// IPoolable 缓存
+        /// </summary>
         private readonly Dictionary<GameObject, IPoolable[]> _poolableCache = new();
         
+        /// <summary>
+        /// 当前激活数量
+        /// </summary>
         public int ActiveCount => _totalCreated - _pool.Count;
+
+        /// <summary>
+        /// 池内数量
+        /// </summary>
         public int PooledCount => _pool.Count;
         
         /// <summary>
@@ -287,7 +374,7 @@ namespace CYFramework.Core.Pool
             // 创建池根节点
             if (poolRoot == null)
             {
-                var root = new GameObject($"Pool_{prefab.name}");
+                var root = new GameObject($"Pool_{prefab.name}"); // 根节点
                 root.SetActive(false);
                 _poolRoot = root.transform;
             }
@@ -312,9 +399,9 @@ namespace CYFramework.Core.Pool
         /// </summary>
         public void Warmup(int count)
         {
-            for (int i = 0; i < count && _pool.Count < _config.MaxCapacity; i++)
+            for (int i = 0; i < count && _pool.Count < _config.MaxCapacity; i++) // i 为索引
             {
-                var go = CreateNew();
+                var go = CreateNew(); // 新对象
                 go.SetActive(false);
                 go.transform.SetParent(_poolRoot, false);
                 _pool.Push(go);
@@ -334,7 +421,7 @@ namespace CYFramework.Core.Pool
         /// <returns>已激活的 GameObject 实例</returns>
         public GameObject Get(Vector3 position = default, Quaternion rotation = default, Transform parent = null)
         {
-            GameObject go;
+            GameObject go; // 目标对象
             
             if (_pool.Count > 0)
             {
@@ -360,7 +447,7 @@ namespace CYFramework.Core.Pool
             LastUsedTime = Time.unscaledTime;
             
             // 调用 IPoolable（使用缓存避免 GC）
-            var poolables = GetCachedPoolables(go);
+            var poolables = GetCachedPoolables(go); // 缓存的组件
             if (poolables != null)
             {
                 for (int i = 0; i < poolables.Length; i++)
@@ -380,7 +467,7 @@ namespace CYFramework.Core.Pool
             if (go == null) return;
             
             // 调用 IPoolable（使用缓存避免 GC）
-            var poolables = GetCachedPoolables(go);
+            var poolables = GetCachedPoolables(go); // 缓存的组件
             if (poolables != null)
             {
                 for (int i = 0; i < poolables.Length; i++)
@@ -415,6 +502,7 @@ namespace CYFramework.Core.Pool
             // 销毁 Overflow 对象
             foreach (var go in _overflowObjects)
             {
+                // go 为溢出对象
                 UnityEngine.Object.Destroy(go);
                 _totalCreated--;
             }
@@ -422,10 +510,10 @@ namespace CYFramework.Core.Pool
             _overflowCount = 0;
             
             // 销毁 50% 空闲对象
-            int shrinkCount = _pool.Count / 2;
-            for (int i = 0; i < shrinkCount; i++)
+            int shrinkCount = _pool.Count / 2; // 回收数量
+            for (int i = 0; i < shrinkCount; i++) // i 为索引
             {
-                var go = _pool.Pop();
+                var go = _pool.Pop(); // 回收对象
                 UnityEngine.Object.Destroy(go);
                 _totalCreated--;
             }
@@ -445,12 +533,13 @@ namespace CYFramework.Core.Pool
         {
             while (_pool.Count > 0)
             {
-                var go = _pool.Pop();
+                var go = _pool.Pop(); // 回收对象
                 UnityEngine.Object.Destroy(go);
             }
             
             foreach (var go in _overflowObjects)
             {
+                // go 为溢出对象
                 UnityEngine.Object.Destroy(go);
             }
             _overflowObjects.Clear();
@@ -469,11 +558,11 @@ namespace CYFramework.Core.Pool
         /// </summary>
         private GameObject CreateNew()
         {
-            var go = UnityEngine.Object.Instantiate(_prefab);
+            var go = UnityEngine.Object.Instantiate(_prefab); // 新实例
             _totalCreated++;
             
             // 缓存 IPoolable 组件（避免高频 GetComponents 分配）
-            var poolables = go.GetComponents<IPoolable>();
+            var poolables = go.GetComponents<IPoolable>(); // IPoolable 组件
             if (poolables.Length > 0)
             {
                 _poolableCache[go] = poolables;
@@ -487,7 +576,7 @@ namespace CYFramework.Core.Pool
         /// </summary>
         private IPoolable[] GetCachedPoolables(GameObject go)
         {
-            if (_poolableCache.TryGetValue(go, out var poolables))
+            if (_poolableCache.TryGetValue(go, out var poolables)) // poolables 为缓存数组
             {
                 return poolables;
             }
@@ -508,33 +597,81 @@ namespace CYFramework.Core.Pool
     /// </summary>
     public class PoolManager : IInitializable, IUpdateable, IDisposableEx
     {
+        /// <summary>
+        /// 泛型对象池字典
+        /// </summary>
         private readonly Dictionary<Type, object> _genericPools = new();
+
+        /// <summary>
+        /// GameObject 对象池字典
+        /// </summary>
         private readonly Dictionary<string, GameObjectPool> _goPools = new();
 
         // [ObjectPools] 根与分组
+        /// <summary>
+        /// 对象池根节点
+        /// </summary>
         private Transform _poolRoot;
+        /// <summary>
+        /// 分组根节点缓存
+        /// </summary>
         private readonly Dictionary<string, Transform> _groupRoots = new();
+        /// <summary>
+        /// 分组名称列表
+        /// </summary>
         private string[] _poolGroups = Array.Empty<string>();
 
         // 配置
+        /// <summary>
+        /// 默认初始容量
+        /// </summary>
         private int _defaultInitialCapacity = 16;
+        /// <summary>
+        /// 默认最大容量
+        /// </summary>
         private int _defaultMaxCapacity = 256;
+        /// <summary>
+        /// 默认预热数量
+        /// </summary>
         private int _defaultWarmupCount = 8;
+        /// <summary>
+        /// 清理间隔（秒）
+        /// </summary>
         private float _cleanupInterval = 60f;
+        /// <summary>
+        /// 空闲超时（秒）
+        /// </summary>
         private float _idleTimeout = 120f;
+        /// <summary>
+        /// 清理计时器
+        /// </summary>
         private float _cleanupTimer;
         
+        /// <summary>
+        /// 初始化顺序（数值越小越靠前）
+        /// </summary>
         public int InitOrder => 0;
+
+        /// <summary>
+        /// Update 顺序（数值越小越靠前）
+        /// </summary>
         public int UpdateOrder => 50;
+
+        /// <summary>
+        /// 释放顺序（数值越小越靠前）
+        /// </summary>
         public int DisposeOrder => 0;
         
+        /// <summary>
+        /// 初始化对象池管理器
+        /// </summary>
         public void Initialize()
         {
             // 从 CYConfigurator 读取配置
-            var configurator = CYConfigurator.Instance;
+            var configurator = CYConfigurator.Instance; // 配置中心
             if (configurator != null)
             {
-                var config = configurator.GetConfig<PoolManagerConfig>();
+                var config = configurator.GetConfig<PoolManagerConfig>(); // 池配置
                 if (config != null)
                 {
                     _defaultInitialCapacity = config.DefaultInitialCapacity;
@@ -554,6 +691,9 @@ namespace CYFramework.Core.Pool
             CYLog.Debug("[PoolManager] 初始化完成");
         }
         
+        /// <summary>
+        /// 销毁对象池管理器
+        /// </summary>
         public void Dispose()
         {
             Application.lowMemory -= OnLowMemory;
@@ -561,6 +701,7 @@ namespace CYFramework.Core.Pool
             // 清理所有池
             foreach (var pool in _goPools.Values)
             {
+                // pool 为对象池
                 pool.Clear();
             }
             _goPools.Clear();
@@ -592,10 +733,11 @@ namespace CYFramework.Core.Pool
 
             if (_idleTimeout <= 0f) return;
 
-            float now = Time.unscaledTime;
+            float now = Time.unscaledTime; // 当前时间
             foreach (var kv in _goPools)
             {
-                var pool = kv.Value;
+                // kv 为键值对
+                var pool = kv.Value; // 对象池
                 if (pool == null) continue;
                 if (!pool.IsIdle) continue;
 
@@ -612,9 +754,9 @@ namespace CYFramework.Core.Pool
         /// </summary>
         public ObjectPool<T> GetOrCreatePool<T>(Func<T> factory, PoolConfig config = null) where T : class
         {
-            var type = typeof(T);
+            var type = typeof(T); // 类型
             
-            if (_genericPools.TryGetValue(type, out var pool))
+            if (_genericPools.TryGetValue(type, out var pool)) // pool 为对象池
             {
                 return (ObjectPool<T>)pool;
             }
@@ -622,7 +764,7 @@ namespace CYFramework.Core.Pool
             // 使用默认配置
             config ??= CreateDefaultConfig();
             
-            var newPool = new ObjectPool<T>(factory, config);
+            var newPool = new ObjectPool<T>(factory, config); // 新池
             _genericPools[type] = newPool;
             return newPool;
         }
@@ -633,7 +775,7 @@ namespace CYFramework.Core.Pool
         /// </summary>
         public GameObjectPool GetOrCreatePool(string key, GameObject prefab, PoolConfig config = null)
         {
-            if (_goPools.TryGetValue(key, out var pool))
+            if (_goPools.TryGetValue(key, out var pool)) // pool 为对象池
             {
                 return pool;
             }
@@ -642,9 +784,9 @@ namespace CYFramework.Core.Pool
             config ??= CreateDefaultConfig();
 
             // 默认放入 Misc 分组
-            var groupRoot = GetOrCreateGroupRoot("Misc");
-            var poolRoot = CreatePoolRootUnder(groupRoot, prefab != null ? prefab.name : key);
-            var newPool = new GameObjectPool(prefab, poolRoot, config);
+            var groupRoot = GetOrCreateGroupRoot("Misc"); // 分组根
+            var poolRoot = CreatePoolRootUnder(groupRoot, prefab != null ? prefab.name : key); // 池根
+            var newPool = new GameObjectPool(prefab, poolRoot, config); // 新池
             _goPools[key] = newPool;
             return newPool;
         }
@@ -659,16 +801,16 @@ namespace CYFramework.Core.Pool
         /// <returns>对象池实例</returns>
         public GameObjectPool GetOrCreatePool(string key, GameObject prefab, string groupName, PoolConfig config = null)
         {
-            if (_goPools.TryGetValue(key, out var pool))
+            if (_goPools.TryGetValue(key, out var pool)) // pool 为对象池
             {
                 return pool;
             }
 
             config ??= CreateDefaultConfig();
 
-            var groupRoot = GetOrCreateGroupRoot(string.IsNullOrEmpty(groupName) ? "Misc" : groupName);
-            var poolRoot = CreatePoolRootUnder(groupRoot, prefab != null ? prefab.name : key);
-            var newPool = new GameObjectPool(prefab, poolRoot, config);
+            var groupRoot = GetOrCreateGroupRoot(string.IsNullOrEmpty(groupName) ? "Misc" : groupName); // 分组根
+            var poolRoot = CreatePoolRootUnder(groupRoot, prefab != null ? prefab.name : key); // 池根
+            var newPool = new GameObjectPool(prefab, poolRoot, config); // 新池
             _goPools[key] = newPool;
             return newPool;
         }
@@ -686,20 +828,23 @@ namespace CYFramework.Core.Pool
             };
         }
 
+        /// <summary>
+        /// 创建或绑定对象池根节点
+        /// </summary>
         private void CreateOrBindPoolRoot()
         {
             if (_poolRoot != null) return;
 
             // 注意：GameObject.Find 找不到未激活对象。
             // 你的场景/预制体里可能已经放了一个未激活的 [ObjectPools]，这时如果仅用 Find，会导致框架再创建一个新的根节点。
-            var existing = GameObject.Find("[ObjectPools]") ?? FindInSceneIncludingInactive("[ObjectPools]");
+            var existing = GameObject.Find("[ObjectPools]") ?? FindInSceneIncludingInactive("[ObjectPools]"); // 现有根节点
             if (existing != null)
             {
                 _poolRoot = existing.transform;
             }
             else
             {
-                var rootGo = new GameObject("[ObjectPools]");
+                var rootGo = new GameObject("[ObjectPools]"); // 新根节点
 
                 // 如果框架入口存在，把对象池挂到入口下，层级更清晰（依赖入口对象的 DontDestroyOnLoad，而不是对自己调用）。
                 // 注意：DontDestroyOnLoad 只能作用于根节点，如果 rootGo 作为子节点就不需要单独调用。
@@ -720,6 +865,7 @@ namespace CYFramework.Core.Pool
             {
                 for (int i = 0; i < _poolGroups.Length; i++)
                 {
+                    // i 为索引
                     GetOrCreateGroupRoot(_poolGroups[i]);
                 }
             }
@@ -739,15 +885,15 @@ namespace CYFramework.Core.Pool
         {
             if (string.IsNullOrEmpty(name)) return null;
 
-            var transforms = Resources.FindObjectsOfTypeAll<Transform>();
-            for (int i = 0; i < transforms.Length; i++)
+            var transforms = Resources.FindObjectsOfTypeAll<Transform>(); // 全部 Transform
+            for (int i = 0; i < transforms.Length; i++) // i 为索引
             {
-                var t = transforms[i];
+                var t = transforms[i]; // 当前 Transform
                 if (t == null) continue;
                 if (!string.Equals(t.name, name, StringComparison.Ordinal)) continue;
 
                 // 过滤非场景对象（例如 Prefab Asset）
-                var go = t.gameObject;
+                var go = t.gameObject; // 目标 GameObject
                 if (!go.scene.IsValid()) continue;
 
                 return go;
@@ -756,11 +902,14 @@ namespace CYFramework.Core.Pool
             return null;
         }
 
+        /// <summary>
+        /// 获取或创建分组根节点
+        /// </summary>
         private Transform GetOrCreateGroupRoot(string groupName)
         {
             if (string.IsNullOrEmpty(groupName)) groupName = "Misc";
 
-            if (_groupRoots.TryGetValue(groupName, out var cached) && cached != null)
+            if (_groupRoots.TryGetValue(groupName, out var cached) && cached != null) // cached 为缓存节点
             {
                 return cached;
             }
@@ -770,14 +919,14 @@ namespace CYFramework.Core.Pool
                 CreateOrBindPoolRoot();
             }
 
-            var found = _poolRoot.Find(groupName);
+            var found = _poolRoot.Find(groupName); // 已存在的分组节点
             if (found != null)
             {
                 _groupRoots[groupName] = found;
                 return found;
             }
 
-            var go = new GameObject(groupName);
+            var go = new GameObject(groupName); // 新分组节点
             go.transform.SetParent(_poolRoot, false);
             _groupRoots[groupName] = go.transform;
             return go.transform;
@@ -794,6 +943,9 @@ namespace CYFramework.Core.Pool
             return GetOrCreateGroupRoot(groupName);
         }
 
+        /// <summary>
+        /// 在分组下创建池根节点
+        /// </summary>
         private Transform CreatePoolRootUnder(Transform groupRoot, string prefabNameOrKey)
         {
             if (groupRoot == null)
@@ -801,7 +953,7 @@ namespace CYFramework.Core.Pool
                 groupRoot = GetOrCreateGroupRoot("Misc");
             }
 
-            var root = new GameObject($"Pool_{prefabNameOrKey}");
+            var root = new GameObject($"Pool_{prefabNameOrKey}"); // 池根节点
             root.SetActive(false);
             root.transform.SetParent(groupRoot, false);
             return root.transform;
@@ -823,6 +975,7 @@ namespace CYFramework.Core.Pool
         {
             foreach (var pool in _goPools.Values)
             {
+                // pool 为对象池
                 pool.Shrink();
             }
         }

@@ -13,6 +13,9 @@ namespace CYFramework.Core.UI.MVVM
         /// </summary>
         protected TViewModel ViewModel { get; private set; }
 
+        /// <summary>
+        /// 绑定 UI 时创建并初始化 ViewModel
+        /// </summary>
         protected override void OnBindUI()
         {
             base.OnBindUI();
@@ -22,6 +25,9 @@ namespace CYFramework.Core.UI.MVVM
             OnBindViewModel();
         }
 
+        /// <summary>
+        /// 解绑 UI 时清理 ViewModel
+        /// </summary>
         protected override void OnUnbindUI()
         {
             base.OnUnbindUI();

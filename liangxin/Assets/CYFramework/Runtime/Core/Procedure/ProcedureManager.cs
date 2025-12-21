@@ -19,9 +19,19 @@ namespace CYFramework.Core.Procedure
     [AttributeUsage(AttributeTargets.Class)]
     public class AutoRegisterProcedureAttribute : Attribute
     {
+        /// <summary>
+        /// 流程显示名称（为空时默认使用类名去掉 Procedure 后缀）
+        /// </summary>
         public string Name { get; }
+
+        /// <summary>
+        /// 注册顺序（数值越小越靠前）
+        /// </summary>
         public int Order { get; }
         
+        /// <summary>
+        /// 自动注册特性
+        /// </summary>
         public AutoRegisterProcedureAttribute(string name = null, int order = 0)
         {
             Name = name;
@@ -34,13 +44,30 @@ namespace CYFramework.Core.Procedure
     /// </summary>
     public abstract class ProcedureBase
     {
+        /// <summary>
+        /// 所属流程管理器
+        /// </summary>
         protected ProcedureManager Owner { get; private set; }
         
+        /// <summary>
+        /// 设置所属管理器（由框架内部调用）
+        /// </summary>
         internal void SetOwner(ProcedureManager owner) => Owner = owner;
         
         // Internal 包装方法，供 ProcedureManager 调用
+        /// <summary>
+        /// 内部进入流程（由管理器调用）
+        /// </summary>
         internal void InternalOnEnter(ProcedureBase prev) => OnEnter(prev);
+
+        /// <summary>
+        /// 内部流程更新（由管理器调用）
+        /// </summary>
         internal void InternalOnUpdate(float dt) => OnUpdate(dt);
+
+        /// <summary>
+        /// 内部离开流程（由管理器调用）
+        /// </summary>
         internal void InternalOnLeave(ProcedureBase next) => OnLeave(next);
         
         /// <summary>
@@ -80,6 +107,9 @@ namespace CYFramework.Core.Procedure
     /// </summary>
     public abstract class ProcedureBase<TData> : ProcedureBase, IUserDataReceiver
     {
+        /// <summary>
+        /// 当前流程接收到的用户数据
+        /// </summary>
         protected TData UserData { get; private set; }
         
         void IUserDataReceiver.SetUserData(object data)
@@ -96,6 +126,9 @@ namespace CYFramework.Core.Procedure
     /// </summary>
     internal interface IUserDataReceiver
     {
+        /// <summary>
+        /// 接收用户数据（由流程管理器调用）
+        /// </summary>
         void SetUserData(object data);
     }
     
@@ -105,39 +138,59 @@ namespace CYFramework.Core.Procedure
     /// </summary>
     public class ProcedureManager : IInitializable, IUpdateable
     {
+        /// <summary>
+        /// 初始化顺序（数值越小越靠前）
+        /// </summary>
         public int InitOrder => -30;
+
+        /// <summary>
+        /// Update 顺序（数值越小越靠前）
+        /// </summary>
         public int UpdateOrder => -50; // 优先级较高，在 Timer 之后
-        
+
+        // 流程实例缓存：类型 -> 实例
         private readonly Dictionary<Type, ProcedureBase> _procedures = new Dictionary<Type, ProcedureBase>();
+
+        // 名称 -> 类型映射
         private readonly Dictionary<string, Type> _procedureNames = new Dictionary<string, Type>();
+
+        // 类型 -> 名称映射
         private readonly Dictionary<Type, string> _procedureTypeToName = new Dictionary<Type, string>();
 
         // 记录注册顺序：用于 StartEntry 在未配置入口流程时保持稳定行为（不要依赖 Dictionary 枚举顺序）。
         private readonly List<Type> _registeredOrder = new List<Type>(16);
 
+        // 当前流程实例
         private ProcedureBase _currentProcedure;
+
+        // 挂起的用户数据（预留扩展）
         private object _pendingUserData;
+
+        // 是否已初始化
         private bool _initialized;
 
+        /// <summary>
+        /// 尝试从流程注册表资源中注册流程
+        /// </summary>
         private bool TryRegisterFromRegistry()
         {
-            var registry = Resources.Load<ProcedureRegistryAsset>("CYFramework/ProcedureRegistry");
+            var registry = Resources.Load<ProcedureRegistryAsset>("CYFramework/ProcedureRegistry"); // 注册表资源
             if (registry == null || registry.Procedures == null || registry.Procedures.Count == 0)
             {
                 return false;
             }
 
-            var entries = registry.Procedures.OrderBy(e => e.Order).ToList();
-            int registered = 0;
-            for (int i = 0; i < entries.Count; i++)
+            var entries = registry.Procedures.OrderBy(e => e.Order).ToList(); // 排序后的注册条目
+            int registered = 0; // 已注册数量
+            for (int i = 0; i < entries.Count; i++) // i 为索引
             {
-                var entry = entries[i];
+                var entry = entries[i]; // 当前条目
                 if (string.IsNullOrEmpty(entry.TypeName))
                 {
                     continue;
                 }
 
-                var type = Type.GetType(entry.TypeName);
+                var type = Type.GetType(entry.TypeName); // 目标流程类型
                 if (type == null)
                 {
                     CYLog.Warning($"[ProcedureManager] 注册表类型不存在（可能被裁剪/类型名变更）: {entry.TypeName}。请在 Editor 执行菜单 CYFramework/Generate Procedure Registry 重新生成，并确保已生成/提交 link.xml");
@@ -150,11 +203,11 @@ namespace CYFramework.Core.Procedure
                     continue;
                 }
 
-                var procedure = (ProcedureBase)Activator.CreateInstance(type);
+                var procedure = (ProcedureBase)Activator.CreateInstance(type); // 流程实例
                 procedure.SetOwner(this);
                 _procedures[type] = procedure;
 
-                var name = string.IsNullOrEmpty(entry.Name) ? type.Name.Replace("Procedure", "") : entry.Name;
+                var name = string.IsNullOrEmpty(entry.Name) ? type.Name.Replace("Procedure", "") : entry.Name; // 注册名
                 _procedureNames[name] = type;
                 _procedureTypeToName[type] = name;
                 if (!_registeredOrder.Contains(type))
@@ -173,18 +226,34 @@ namespace CYFramework.Core.Procedure
         }
         
         // 配置
+        /// <summary>
+        /// 入口流程名称（为空时按注册顺序选择）
+        /// </summary>
         private string _entryProcedure = "";
         
         // 自动注册开关
         // ❗ WebGL/微信平台不支持 AppDomain.GetAssemblies()，默认禁用自动扫描
         // 建议使用显式注册: AddProcedure<T>() 或传入指定 Assembly
 #if UNITY_WEBGL || CY_WECHAT
+        /// <summary>
+        /// 是否启用自动注册（受平台限制）
+        /// </summary>
         private bool _autoRegister = false;
 #else
+        /// <summary>
+        /// 是否启用自动注册（受平台限制）
+        /// </summary>
         private bool _autoRegister = true;
 #endif
         
+        /// <summary>
+        /// 当前流程实例
+        /// </summary>
         public ProcedureBase CurrentProcedure => _currentProcedure;
+
+        /// <summary>
+        /// 当前流程类型名（不含注册别名）
+        /// </summary>
         public string CurrentProcedureName => _currentProcedure?.GetType().Name;
 
         /// <summary>
@@ -200,10 +269,13 @@ namespace CYFramework.Core.Procedure
             get
             {
                 if (_currentProcedure == null) return null;
-                var type = _currentProcedure.GetType();
-                return _procedureTypeToName.TryGetValue(type, out var name) ? name : type.Name;
+                var type = _currentProcedure.GetType(); // 当前流程类型
+                return _procedureTypeToName.TryGetValue(type, out var name) ? name : type.Name; // name 为注册名
             }
         }
+        /// <summary>
+        /// 是否正在运行流程
+        /// </summary>
         public bool IsRunning => _currentProcedure != null;
 
         /// <summary>
@@ -226,7 +298,7 @@ namespace CYFramework.Core.Procedure
                 return false;
             }
 
-            if (_procedureNames.TryGetValue(procedureName, out var type))
+            if (_procedureNames.TryGetValue(procedureName, out var type)) // type 为注册名对应的流程类型
             {
                 return _currentProcedure.GetType() == type;
             }
@@ -245,7 +317,7 @@ namespace CYFramework.Core.Procedure
                 return false;
             }
 
-            if (!_procedureNames.TryGetValue(procedureName, out var type))
+            if (!_procedureNames.TryGetValue(procedureName, out var type)) // type 为待切换的流程类型
             {
                 return false;
             }
@@ -271,6 +343,9 @@ namespace CYFramework.Core.Procedure
             return true;
         }
         
+        /// <summary>
+        /// 初始化流程管理器
+        /// </summary>
         public void Initialize()
         {
             // 允许被多次调用（例如：CY.Procedure 在 CYBootstrap.InitializeAll 前被访问并提前创建）
@@ -281,10 +356,10 @@ namespace CYFramework.Core.Procedure
             _initialized = true;
 
             // 从 CYConfigurator 读取配置
-            var configurator = CYConfigurator.Instance;
+            var configurator = CYConfigurator.Instance; // 配置中心实例
             if (configurator != null)
             {
-                var config = configurator.GetConfig<ProcedureManagerConfig>();
+                var config = configurator.GetConfig<ProcedureManagerConfig>(); // 流程配置
                 if (config != null)
                 {
                     _entryProcedure = config.EntryProcedure;
@@ -316,13 +391,13 @@ namespace CYFramework.Core.Procedure
         /// </summary>
         public ProcedureManager AddProcedure<T>(string name = null) where T : ProcedureBase, new()
         {
-            var procedure = new T();
+            var procedure = new T(); // 流程实例
             procedure.SetOwner(this);
-            var type = typeof(T);
+            var type = typeof(T); // 流程类型
             _procedures[type] = procedure;
             
             // 注册名称映射
-            var procedureName = name ?? type.Name.Replace("Procedure", "");
+            var procedureName = name ?? type.Name.Replace("Procedure", ""); // 注册名
             _procedureNames[procedureName] = type;
             _procedureTypeToName[type] = procedureName;
             if (!_registeredOrder.Contains(type))
@@ -338,10 +413,10 @@ namespace CYFramework.Core.Procedure
         public ProcedureManager AddProcedure(ProcedureBase procedure, string name = null)
         {
             procedure.SetOwner(this);
-            var type = procedure.GetType();
+            var type = procedure.GetType(); // 流程类型
             _procedures[type] = procedure;
             
-            var procedureName = name ?? type.Name.Replace("Procedure", "");
+            var procedureName = name ?? type.Name.Replace("Procedure", ""); // 注册名
             _procedureNames[procedureName] = type;
             _procedureTypeToName[type] = procedureName;
             if (!_registeredOrder.Contains(type))
@@ -379,8 +454,9 @@ namespace CYFramework.Core.Procedure
                                 !a.FullName.StartsWith("System") && 
                                 !a.FullName.StartsWith("mscorlib") &&
                                 !a.FullName.StartsWith("netstandard"))
-                    .ToArray();
+                    .ToArray(); // 参与扫描的程序集
             
+            // 扫描到的流程类型
             var procedureTypes = assemblies
                 .SelectMany(a => {
                     try { return a.GetTypes(); }
@@ -389,16 +465,17 @@ namespace CYFramework.Core.Procedure
                 .Where(t => t.IsClass && !t.IsAbstract && typeof(ProcedureBase).IsAssignableFrom(t))
                 .Where(t => t.GetCustomAttribute<AutoRegisterProcedureAttribute>() != null)
                 .OrderBy(t => t.GetCustomAttribute<AutoRegisterProcedureAttribute>()?.Order ?? 0)
-                .ToList();
+                .ToList(); // 待注册流程类型列表
             
             foreach (var type in procedureTypes)
             {
-                var attr = type.GetCustomAttribute<AutoRegisterProcedureAttribute>();
-                var procedure = (ProcedureBase)Activator.CreateInstance(type);
+                // type 为待注册流程类型
+                var attr = type.GetCustomAttribute<AutoRegisterProcedureAttribute>(); // 注册特性
+                var procedure = (ProcedureBase)Activator.CreateInstance(type); // 流程实例
                 procedure.SetOwner(this);
                 _procedures[type] = procedure;
                 
-                var name = attr?.Name ?? type.Name.Replace("Procedure", "");
+                var name = attr?.Name ?? type.Name.Replace("Procedure", ""); // 注册名
                 _procedureNames[name] = type;
                 _procedureTypeToName[type] = name;
                 if (!_registeredOrder.Contains(type))
@@ -415,7 +492,7 @@ namespace CYFramework.Core.Procedure
         /// <typeparam name="T">初始流程类型</typeparam>
         public void Start<T>() where T : ProcedureBase
         {
-            if (_procedures.TryGetValue(typeof(T), out var procedure))
+            if (_procedures.TryGetValue(typeof(T), out var procedure)) // procedure 为目标流程实例
             {
                 _currentProcedure = procedure;
                 _currentProcedure.InternalOnEnter(null);
@@ -450,7 +527,7 @@ namespace CYFramework.Core.Procedure
         /// </summary>
         public void Change(string procedureName, object userData = null)
         {
-            if (_procedureNames.TryGetValue(procedureName, out var type))
+            if (_procedureNames.TryGetValue(procedureName, out var type)) // type 为注册名对应的流程类型
             {
                 ChangeProcedureInternal(type, userData);
             }
@@ -465,9 +542,9 @@ namespace CYFramework.Core.Procedure
         /// </summary>
         public void Start(string procedureName)
         {
-            if (_procedureNames.TryGetValue(procedureName, out var type))
+            if (_procedureNames.TryGetValue(procedureName, out var type)) // type 为注册名对应的流程类型
             {
-                if (_procedures.TryGetValue(type, out var procedure))
+                if (_procedures.TryGetValue(type, out var procedure)) // procedure 为目标流程实例
                 {
                     _currentProcedure = procedure;
                     _currentProcedure.InternalOnEnter(null);
@@ -495,8 +572,8 @@ namespace CYFramework.Core.Procedure
             // 否则使用“注册顺序中的第一个流程”（稳定且可控）
             if (_registeredOrder.Count > 0)
             {
-                var type = _registeredOrder[0];
-                if (_procedures.TryGetValue(type, out var procedure))
+                var type = _registeredOrder[0]; // 第一个注册的流程类型
+                if (_procedures.TryGetValue(type, out var procedure)) // procedure 为入口流程实例
                 {
                     _currentProcedure = procedure;
                     _currentProcedure.InternalOnEnter(null);
@@ -510,9 +587,12 @@ namespace CYFramework.Core.Procedure
             }
         }
         
+        /// <summary>
+        /// 内部切换流程
+        /// </summary>
         private void ChangeProcedureInternal(Type procedureType, object userData)
         {
-            if (!_procedures.TryGetValue(procedureType, out var nextProcedure))
+            if (!_procedures.TryGetValue(procedureType, out var nextProcedure)) // nextProcedure 为目标流程实例
             {
                 CYLog.Error($"[Procedure] 未找到流程: {procedureType.Name}");
                 return;
@@ -523,14 +603,15 @@ namespace CYFramework.Core.Procedure
                 return;
             }
             
-            var previousProcedure = _currentProcedure;
-            var previousName = previousProcedure?.GetType().Name ?? "None";
+            var previousProcedure = _currentProcedure; // 旧流程
+            var previousName = previousProcedure?.GetType().Name ?? "None"; // 旧流程名
             
             _currentProcedure?.InternalOnLeave(nextProcedure);
             
             // 设置用户数据（使用接口避免反射）
             if (userData != null && nextProcedure is IUserDataReceiver receiver)
             {
+                // receiver 为可接收用户数据的流程
                 receiver.SetUserData(userData);
             }
             
@@ -553,7 +634,7 @@ namespace CYFramework.Core.Procedure
         /// </summary>
         public T GetProcedure<T>() where T : ProcedureBase
         {
-            return _procedures.TryGetValue(typeof(T), out var procedure) ? (T)procedure : null;
+            return _procedures.TryGetValue(typeof(T), out var procedure) ? (T)procedure : null; // procedure 为目标流程实例
         }
         
         /// <summary>

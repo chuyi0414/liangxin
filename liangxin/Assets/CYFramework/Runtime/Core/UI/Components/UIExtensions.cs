@@ -51,7 +51,7 @@ namespace CYFramework.Core.UI.Components
         {
             button.interactable = interactable;
             
-            var canvasGroup = button.GetComponent<CanvasGroup>();
+            var canvasGroup = button.GetComponent<CanvasGroup>(); // 透明度控制组件
             if (canvasGroup == null)
             {
                 canvasGroup = button.gameObject.AddComponent<CanvasGroup>();
@@ -68,7 +68,7 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static void SetText(this GameObject go, string text)
         {
-            var textComponent = go.GetComponent<Text>();
+            var textComponent = go.GetComponent<Text>(); // Text 组件
             if (textComponent != null)
             {
                 textComponent.text = text;
@@ -76,7 +76,7 @@ namespace CYFramework.Core.UI.Components
             }
             
 // 尝试 TextMeshPro
-            var tmpText = go.GetComponent<TextMeshProUGUI>();
+            var tmpText = go.GetComponent<TextMeshProUGUI>(); // TMP 组件
             if (tmpText != null)
             {
                 tmpText.text = text;
@@ -88,12 +88,12 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static IEnumerator AnimateNumber(this Text text, int from, int to, float duration, string format = "{0}")
         {
-            float elapsed = 0f;
+            float elapsed = 0f; // 计时
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
-                int current = Mathf.RoundToInt(Mathf.Lerp(from, to, t));
+                float t = Mathf.Clamp01(elapsed / duration); // 归一化时间
+                int current = Mathf.RoundToInt(Mathf.Lerp(from, to, t)); // 当前值
                 text.text = string.Format(format, current);
                 yield return null;
             }
@@ -109,8 +109,8 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static void SetSprite(this Image image, string path)
         {
-            var resourceLoader = ServiceLocator.Get<IResourceLoader>();
-            var sprite = resourceLoader?.Load<Sprite>(path);
+            var resourceLoader = ServiceLocator.Get<IResourceLoader>(); // 资源加载器
+            var sprite = resourceLoader?.Load<Sprite>(path); // 加载的精灵
             if (sprite != null)
             {
                 image.sprite = sprite;
@@ -122,11 +122,11 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static IEnumerator AnimateFill(this Image image, float from, float to, float duration)
         {
-            float elapsed = 0f;
+            float elapsed = 0f; // 计时
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
+                float t = Mathf.Clamp01(elapsed / duration); // 归一化时间
                 image.fillAmount = Mathf.Lerp(from, to, t);
                 yield return null;
             }
@@ -138,7 +138,7 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static void SetAlpha(this Image image, float alpha)
         {
-            var color = image.color;
+            var color = image.color; // 原颜色
             color.a = alpha;
             image.color = color;
         }
@@ -179,13 +179,13 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static IEnumerator AnimateMove(this RectTransform rect, Vector2 from, Vector2 to, float duration, Func<float, float> easing = null)
         {
-            float elapsed = 0f;
+            float elapsed = 0f; // 计时
             rect.anchoredPosition = from;
             
             while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
+                float t = Mathf.Clamp01(elapsed / duration); // 归一化时间
                 if (easing != null) t = easing(t);
                 rect.anchoredPosition = Vector2.Lerp(from, to, t);
                 yield return null;
@@ -223,13 +223,13 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static IEnumerator Fade(this CanvasGroup canvasGroup, float from, float to, float duration)
         {
-            float elapsed = 0f;
+            float elapsed = 0f; // 计时
             canvasGroup.alpha = from;
             
             while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
+                float t = Mathf.Clamp01(elapsed / duration); // 归一化时间
                 canvasGroup.alpha = Mathf.Lerp(from, to, t);
                 yield return null;
             }
@@ -256,8 +256,8 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public static float EaseOutBack(float t)
         {
-            const float c1 = 1.70158f;
-            const float c3 = c1 + 1f;
+            const float c1 = 1.70158f; // 回弹强度
+            const float c3 = c1 + 1f; // 派生常量
             return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
         }
         
@@ -269,7 +269,7 @@ namespace CYFramework.Core.UI.Components
             if (t == 0f) return 0f;
             if (t == 1f) return 1f;
             
-            const float c4 = (2f * Mathf.PI) / 3f;
+            const float c4 = (2f * Mathf.PI) / 3f; // 角频率常量
             return Mathf.Pow(2f, -10f * t) * Mathf.Sin((t * 10f - 0.75f) * c4) + 1f;
         }
         

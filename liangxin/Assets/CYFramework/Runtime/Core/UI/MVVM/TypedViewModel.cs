@@ -12,7 +12,14 @@ namespace CYFramework.Core.UI.MVVM
     /// </summary>
     public abstract class TypedViewModel : IDisposable
     {
+        /// <summary>
+        /// 订阅记录列表（统一释放）
+        /// </summary>
         private readonly List<IDisposable> _subscriptions = new();
+
+        /// <summary>
+        /// 是否已释放
+        /// </summary>
         private bool _disposed;
 
         /// <summary>
@@ -39,22 +46,34 @@ namespace CYFramework.Core.UI.MVVM
             if (_disposed) return;
             _disposed = true;
 
-            for (int i = 0; i < _subscriptions.Count; i++)
+            for (int i = 0; i < _subscriptions.Count; i++) // i 为索引
             {
                 _subscriptions[i]?.Dispose();
             }
             _subscriptions.Clear();
         }
 
+        /// <summary>
+        /// 订阅包装（用于统一释放）
+        /// </summary>
         protected sealed class Subscription : IDisposable
         {
+            /// <summary>
+            /// 释放回调
+            /// </summary>
             private Action _onDispose;
 
+            /// <summary>
+            /// 创建订阅包装
+            /// </summary>
             public Subscription(Action onDispose)
             {
                 _onDispose = onDispose;
             }
 
+            /// <summary>
+            /// 释放订阅
+            /// </summary>
             public void Dispose()
             {
                 _onDispose?.Invoke();
@@ -71,7 +90,7 @@ namespace CYFramework.Core.UI.MVVM
         protected IDisposable Subscribe<T>(ObservableProperty<T> property, ObservableProperty<T>.ChangedHandler handler)
         {
             property.Subscribe(handler);
-            var sub = new Subscription(() => property.Unsubscribe(handler));
+            var sub = new Subscription(() => property.Unsubscribe(handler)); // 订阅包装
             TrackSubscription(sub);
             return sub;
         }

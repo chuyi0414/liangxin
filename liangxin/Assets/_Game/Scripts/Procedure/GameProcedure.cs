@@ -11,6 +11,7 @@ public class GameProcedure : ProcedureBase
     {
         base.OnEnter(previousProcedure);
         CY.UI.Open<GameUIPanel>();
+        CY.Entity.SpawnEntity<>
     }
 
     protected override void OnUpdate(float deltaTime)

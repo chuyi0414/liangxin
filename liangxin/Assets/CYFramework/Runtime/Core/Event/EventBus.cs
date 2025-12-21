@@ -21,8 +21,14 @@ namespace CYFramework.Core.Event
     [AttributeUsage(AttributeTargets.Method)]
     public class EventPriorityAttribute : Attribute
     {
+        /// <summary>
+        /// 优先级（数值越小越先执行）
+        /// </summary>
         public int Priority { get; }
         
+        /// <summary>
+        /// 事件优先级特性
+        /// </summary>
         public EventPriorityAttribute(int priority = 0)
         {
             Priority = priority;
@@ -36,8 +42,14 @@ namespace CYFramework.Core.Event
     [AttributeUsage(AttributeTargets.Method)]
     public class OnEventAttribute : Attribute
     {
+        /// <summary>
+        /// 优先级（数值越小越先执行）
+        /// </summary>
         public int Priority { get; }
         
+        /// <summary>
+        /// 自动订阅特性
+        /// </summary>
         public OnEventAttribute(int priority = 0)
         {
             Priority = priority;
@@ -49,10 +61,29 @@ namespace CYFramework.Core.Event
     /// </summary>
     internal class EventSubscription
     {
+        /// <summary>
+        /// 事件处理委托
+        /// </summary>
         public Delegate Handler;
+
+        /// <summary>
+        /// 优先级（数值越小越先执行）
+        /// </summary>
         public int Priority;
+
+        /// <summary>
+        /// 订阅者对象（用于自动解绑）
+        /// </summary>
         public object Target;  // 用于自动解绑
+
+        /// <summary>
+        /// 是否有效
+        /// </summary>
         public bool IsActive;
+
+        /// <summary>
+        /// 所属事件类型（用于快速定位移除）
+        /// </summary>
         public Type EventType;  // 所属事件类型（用于快速定位移除）
     }
     
@@ -61,8 +92,19 @@ namespace CYFramework.Core.Event
     /// </summary>
     internal struct DelayedEvent
     {
+        /// <summary>
+        /// 事件类型
+        /// </summary>
         public Type EventType;
+
+        /// <summary>
+        /// 事件数据（装箱）
+        /// </summary>
         public object EventData;
+
+        /// <summary>
+        /// 剩余帧数
+        /// </summary>
         public int FramesRemaining;
     }
     
@@ -72,43 +114,100 @@ namespace CYFramework.Core.Event
     public class EventBus : IInitializable, ITickable, IDisposableEx
     {
         // 事件订阅表
+        /// <summary>
+        /// 事件订阅表：事件类型 -> 订阅列表
+        /// </summary>
         private readonly Dictionary<Type, List<EventSubscription>> _subscriptions = new();
         
         // 延迟事件队列
+        /// <summary>
+        /// 延迟事件队列
+        /// </summary>
         private readonly List<DelayedEvent> _delayedEvents = new();
         
         // 订阅者对象到订阅列表的映射（用于自动解绑）
+        /// <summary>
+        /// 订阅者 -> 订阅列表映射
+        /// </summary>
         private readonly Dictionary<object, List<EventSubscription>> _targetSubscriptions = new();
         
         // 临时列表池，支持递归派发（避免递归时共用一个 tempHandlers 导致崩溃）
+        /// <summary>
+        /// 临时列表池（用于派发时复制列表，避免递归冲突）
+        /// </summary>
         private readonly Stack<List<EventSubscription>> _tempListsPool = new();
         
         // 待移除的订阅
+        /// <summary>
+        /// 派发中待移除的订阅列表
+        /// </summary>
         private readonly List<EventSubscription> _pendingRemove = new();
         
         // 派发深度
+        /// <summary>
+        /// 当前派发深度
+        /// </summary>
         private int _dispatchingDepth = 0;
         
         // 延迟事件反射缓存（避免每次 GetMethod/MakeGenericMethod）
+        /// <summary>
+        /// 延迟派发使用的非泛型方法缓存
+        /// </summary>
         private System.Reflection.MethodInfo _postBoxedMethod;
+
+        /// <summary>
+        /// 延迟派发泛型方法缓存
+        /// </summary>
         private readonly Dictionary<Type, System.Reflection.MethodInfo> _postBoxedGenericCache = new();
+
+        /// <summary>
+        /// 反射调用参数缓存（避免重复分配数组）
+        /// </summary>
         private readonly object[] _postBoxedInvokeArgs = new object[1];
 
+        /// <summary>
+        /// SubscribeAll 扫描结果缓存
+        /// </summary>
         private readonly Dictionary<Type, List<(Type eventType, System.Reflection.MethodInfo method, int priority)>> _subscribeAllCache = new();
+
+        /// <summary>
+        /// Subscribe 泛型定义缓存
+        /// </summary>
         private System.Reflection.MethodInfo _subscribeGenericDefinition;
+
+        /// <summary>
+        /// Subscribe 泛型方法缓存
+        /// </summary>
         private readonly Dictionary<Type, System.Reflection.MethodInfo> _subscribeGenericCache = new();
         
+        /// <summary>
+        /// 初始化顺序（数值越小越靠前）
+        /// </summary>
         public int InitOrder => -100; // 最先初始化
+
+        /// <summary>
+        /// Tick 顺序（数值越小越靠前）
+        /// </summary>
         public int TickOrder => -100; // 最先 Tick
+
+        /// <summary>
+        /// 释放顺序（数值越小越靠前）
+        /// </summary>
         public int DisposeOrder => 100; // 最后销毁
         
         #region 生命周期
         
+        /// <summary>
+        /// 初始化事件总线
+        /// </summary>
         public void Initialize()
         {
             CYLog.Debug("[EventBus] 初始化完成");
         }
         
+        /// <summary>
+        /// Tick 驱动（处理延迟事件与延迟移除）
+        /// </summary>
         public void Tick(float deltaTime)
         {
             // 处理延迟事件
@@ -118,6 +217,9 @@ namespace CYFramework.Core.Event
             ProcessPendingRemove();
         }
         
+        /// <summary>
+        /// 释放事件总线
+        /// </summary>
         public void Dispose()
         {
             _subscriptions.Clear();
@@ -141,9 +243,9 @@ namespace CYFramework.Core.Event
         /// <param name="priority">优先级（数值越小越先执行）</param>
         public void Subscribe<T>(EventHandler<T> handler, object target = null, int priority = 0) where T : struct
         {
-            var eventType = typeof(T);
+            var eventType = typeof(T); // 事件类型
             
-            if (!_subscriptions.TryGetValue(eventType, out var list))
+            if (!_subscriptions.TryGetValue(eventType, out var list)) // list 为订阅列表
             {
                 list = new List<EventSubscription>(8);
                 _subscriptions[eventType] = list;
@@ -152,6 +254,7 @@ namespace CYFramework.Core.Event
             // 检查重复订阅
             foreach (var sub in list)
             {
+                // sub 为当前订阅
                 if (sub.Handler.Equals(handler) && sub.IsActive)
                 {
                     CYLog.Warning($"[EventBus] 重复订阅: {eventType.Name}");
@@ -159,7 +262,7 @@ namespace CYFramework.Core.Event
                 }
             }
             
-            var subscription = new EventSubscription
+            var subscription = new EventSubscription // 新增订阅记录
             {
                 Handler = handler,
                 Priority = priority,
@@ -169,8 +272,8 @@ namespace CYFramework.Core.Event
             };
             
             // 按优先级插入
-            int insertIndex = list.Count;
-            for (int i = 0; i < list.Count; i++)
+            int insertIndex = list.Count; // 默认插入末尾
+            for (int i = 0; i < list.Count; i++) // i 为索引
             {
                 if (list[i].Priority > priority)
                 {
@@ -183,7 +286,7 @@ namespace CYFramework.Core.Event
             // 记录订阅者映射（用于自动解绑）
             if (target != null)
             {
-                if (!_targetSubscriptions.TryGetValue(target, out var targetList))
+                if (!_targetSubscriptions.TryGetValue(target, out var targetList)) // targetList 为目标订阅列表
                 {
                     targetList = new List<EventSubscription>(4);
                     _targetSubscriptions[target] = targetList;
@@ -199,20 +302,20 @@ namespace CYFramework.Core.Event
         /// <param name="handler">事件处理器</param>
         public void Unsubscribe<T>(EventHandler<T> handler) where T : struct
         {
-            var eventType = typeof(T);
+            var eventType = typeof(T); // 事件类型
             
-            if (!_subscriptions.TryGetValue(eventType, out var list)) return;
+            if (!_subscriptions.TryGetValue(eventType, out var list)) return; // list 为订阅列表
 
-            for (int i = 0; i < list.Count; i++)
+            for (int i = 0; i < list.Count; i++) // i 为索引
             {
-                var sub = list[i];
+                var sub = list[i]; // 当前订阅
                 if (!sub.Handler.Equals(handler))
                 {
                     continue;
                 }
 
                 // 同步清理 target -> subscriptions 映射，避免悬挂引用导致内存与逻辑噪音。
-                if (sub.Target != null && _targetSubscriptions.TryGetValue(sub.Target, out var targetList))
+                if (sub.Target != null && _targetSubscriptions.TryGetValue(sub.Target, out var targetList)) // targetList 为目标订阅列表
                 {
                     targetList.Remove(sub);
                     if (targetList.Count == 0)
@@ -242,10 +345,11 @@ namespace CYFramework.Core.Event
         {
             if (target == null) return;
             
-            if (!_targetSubscriptions.TryGetValue(target, out var subscriptions)) return;
+            if (!_targetSubscriptions.TryGetValue(target, out var subscriptions)) return; // subscriptions 为目标订阅列表
             
             foreach (var sub in subscriptions)
             {
+                // sub 为当前订阅
                 sub.IsActive = false;
                 _pendingRemove.Add(sub);
             }
@@ -260,19 +364,19 @@ namespace CYFramework.Core.Event
         {
             if (target == null) return;
 
-            var type = target.GetType();
-            var handlers = GetOrCreateSubscribeAllCache(type);
+            var type = target.GetType(); // 目标类型
+            var handlers = GetOrCreateSubscribeAllCache(type); // 缓存的订阅入口
             if (handlers == null || handlers.Count == 0) return;
 
-            for (int i = 0; i < handlers.Count; i++)
+            for (int i = 0; i < handlers.Count; i++) // i 为索引
             {
-                var entry = handlers[i];
+                var entry = handlers[i]; // 订阅条目
                 try
                 {
-                    var handlerType = typeof(EventHandler<>).MakeGenericType(entry.eventType);
-                    var handler = Delegate.CreateDelegate(handlerType, target, entry.method);
+                    var handlerType = typeof(EventHandler<>).MakeGenericType(entry.eventType); // 目标委托类型
+                    var handler = Delegate.CreateDelegate(handlerType, target, entry.method); // 事件处理委托
 
-                    var subscribeMethod = GetOrCreateSubscribeGenericMethod(entry.eventType);
+                    var subscribeMethod = GetOrCreateSubscribeGenericMethod(entry.eventType); // Subscribe<T> 方法
                     subscribeMethod.Invoke(this, new object[] { handler, target, entry.priority });
 
                     CYLog.Debug($"[EventBus] 自动订阅: {type.Name}.{entry.method.Name} -> {entry.eventType.Name}");
@@ -284,31 +388,35 @@ namespace CYFramework.Core.Event
             }
         }
 
+        /// <summary>
+        /// 获取或创建 SubscribeAll 的扫描缓存
+        /// </summary>
         private List<(Type eventType, System.Reflection.MethodInfo method, int priority)> GetOrCreateSubscribeAllCache(Type targetType)
         {
-            if (_subscribeAllCache.TryGetValue(targetType, out var cached))
+            if (_subscribeAllCache.TryGetValue(targetType, out var cached)) // cached 为已缓存条目
             {
                 return cached;
             }
 
-            var result = new List<(Type eventType, System.Reflection.MethodInfo method, int priority)>();
+            var result = new List<(Type eventType, System.Reflection.MethodInfo method, int priority)>(); // 扫描结果
 
+            // 目标方法列表
             var methods = targetType.GetMethods(System.Reflection.BindingFlags.Instance |
                                                 System.Reflection.BindingFlags.Public |
                                                 System.Reflection.BindingFlags.NonPublic);
-            for (int i = 0; i < methods.Length; i++)
+            for (int i = 0; i < methods.Length; i++) // i 为索引
             {
-                var method = methods[i];
-                var attr = method.GetCustomAttributes(typeof(OnEventAttribute), true);
+                var method = methods[i]; // 当前方法
+                var attr = method.GetCustomAttributes(typeof(OnEventAttribute), true); // 特性数组
                 if (attr == null || attr.Length == 0) continue;
 
-                var onEvent = (OnEventAttribute)attr[0];
-                var parameters = method.GetParameters();
+                var onEvent = (OnEventAttribute)attr[0]; // OnEvent 特性
+                var parameters = method.GetParameters(); // 参数列表
 
                 if (parameters.Length != 1) continue;
                 if (!parameters[0].ParameterType.IsByRef) continue;
 
-                var eventType = parameters[0].ParameterType.GetElementType();
+                var eventType = parameters[0].ParameterType.GetElementType(); // 事件类型
                 if (eventType == null || !eventType.IsValueType) continue;
 
                 result.Add((eventType, method, onEvent.Priority));
@@ -318,9 +426,12 @@ namespace CYFramework.Core.Event
             return result;
         }
 
+        /// <summary>
+        /// 获取或创建 Subscribe 的泛型方法缓存
+        /// </summary>
         private System.Reflection.MethodInfo GetOrCreateSubscribeGenericMethod(Type eventType)
         {
-            if (_subscribeGenericCache.TryGetValue(eventType, out var cached))
+            if (_subscribeGenericCache.TryGetValue(eventType, out var cached)) // cached 为已缓存方法
             {
                 return cached;
             }
@@ -330,7 +441,7 @@ namespace CYFramework.Core.Event
                 _subscribeGenericDefinition = typeof(EventBus).GetMethod(nameof(Subscribe));
             }
 
-            var method = _subscribeGenericDefinition.MakeGenericMethod(eventType);
+            var method = _subscribeGenericDefinition.MakeGenericMethod(eventType); // 目标泛型方法
             _subscribeGenericCache[eventType] = method;
             return method;
         }
@@ -344,7 +455,7 @@ namespace CYFramework.Core.Event
         /// </summary>
         public bool HasSubscribers<T>() where T : struct
         {
-            return _subscriptions.TryGetValue(typeof(T), out var list) && list != null && list.Count > 0;
+            return _subscriptions.TryGetValue(typeof(T), out var list) && list != null && list.Count > 0; // list 为订阅列表
         }
 
         /// <summary>
@@ -375,13 +486,13 @@ namespace CYFramework.Core.Event
         /// </summary>
         public void Post<T>(ref T evt) where T : struct
         {
-            var eventType = typeof(T);
+            var eventType = typeof(T); // 事件类型
             
-            if (!_subscriptions.TryGetValue(eventType, out var list)) return;
+            if (!_subscriptions.TryGetValue(eventType, out var list)) return; // list 为订阅列表
             if (list.Count == 0) return;
             
             // 获取临时列表（从池中取或新建）
-            List<EventSubscription> tempHandlers;
+            List<EventSubscription> tempHandlers; // 临时处理列表
             if (_tempListsPool.Count > 0)
             {
                 tempHandlers = _tempListsPool.Pop();
@@ -402,6 +513,7 @@ namespace CYFramework.Core.Event
                 // 这里用 foreach 保持原样也行，但既然改了就安全第一
                 foreach (var sub in tempHandlers)
                 {
+                    // sub 为当前订阅
                     if (!sub.IsActive) continue;
                     
                     try
@@ -432,7 +544,7 @@ namespace CYFramework.Core.Event
         {
             if (frames <= 0)
             {
-                var mutableEvt = evt;
+                var mutableEvt = evt; // 拷贝为可变值
                 Post(ref mutableEvt);
                 return;
             }
@@ -455,15 +567,15 @@ namespace CYFramework.Core.Event
         /// </summary>
         private void ProcessDelayedEvents()
         {
-            for (int i = _delayedEvents.Count - 1; i >= 0; i--)
+            for (int i = _delayedEvents.Count - 1; i >= 0; i--) // i 为索引（反向遍历便于删除）
             {
-                var delayed = _delayedEvents[i];
+                var delayed = _delayedEvents[i]; // 当前延迟事件
                 delayed.FramesRemaining--;
                 
                 if (delayed.FramesRemaining <= 0)
                 {
                     // 使用缓存的反射信息，避免每次 GetMethod/MakeGenericMethod
-                    var genericMethod = GetOrCreatePostBoxedMethod(delayed.EventType);
+                    var genericMethod = GetOrCreatePostBoxedMethod(delayed.EventType); // 反射方法
 
                     // 避免每次 new object[1] 产生 GC（延迟事件仍然会装箱，但至少不额外分配参数数组）。
                     _postBoxedInvokeArgs[0] = delayed.EventData;
@@ -484,7 +596,7 @@ namespace CYFramework.Core.Event
         /// </summary>
         private System.Reflection.MethodInfo GetOrCreatePostBoxedMethod(Type eventType)
         {
-            if (_postBoxedGenericCache.TryGetValue(eventType, out var cached))
+            if (_postBoxedGenericCache.TryGetValue(eventType, out var cached)) // cached 为已缓存方法
             {
                 return cached;
             }
@@ -496,7 +608,7 @@ namespace CYFramework.Core.Event
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             }
             
-            var genericMethod = _postBoxedMethod.MakeGenericMethod(eventType);
+            var genericMethod = _postBoxedMethod.MakeGenericMethod(eventType); // 泛型方法
             _postBoxedGenericCache[eventType] = genericMethod;
             return genericMethod;
         }
@@ -506,7 +618,7 @@ namespace CYFramework.Core.Event
         /// </summary>
         private void PostBoxed<T>(object evt) where T : struct
         {
-            var unboxed = (T)evt;
+            var unboxed = (T)evt; // 反装箱为结构体
             Post(ref unboxed);
         }
         
@@ -520,8 +632,9 @@ namespace CYFramework.Core.Event
             
             foreach (var sub in _pendingRemove)
             {
+                // sub 为待移除订阅
                 // 使用 EventType 直接定位列表，O(1) 查找 + O(n) 移除
-                if (sub.EventType != null && _subscriptions.TryGetValue(sub.EventType, out var list))
+                if (sub.EventType != null && _subscriptions.TryGetValue(sub.EventType, out var list)) // list 为订阅列表
                 {
                     list.Remove(sub);
                 }

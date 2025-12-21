@@ -102,59 +102,122 @@ namespace CYFramework.Core.Save
     /// </summary>
     public class SaveService : IInitializable, IUpdateable, IDisposableEx
     {
+        /// <summary>
+        /// 保存配置
+        /// </summary>
         private SaveConfig _config;
+        /// <summary>
+        /// 文件系统适配器
+        /// </summary>
         private IFileSystem _fileSystem;
+
+        /// <summary>
+        /// 存储适配器（Storage）
+        /// </summary>
         private IStorageAdapter _storage;
         
         // 是否使用 Storage 模式（微信/WebGL）
+        /// <summary>
+        /// 是否使用 Storage 模式
+        /// </summary>
         private bool _useStorageMode;
         
         // 迁移器链
+        /// <summary>
+        /// 版本迁移器列表
+        /// </summary>
         private readonly List<IMigration> _migrations = new();
         
         // 当前存档版本
+        /// <summary>
+        /// 当前存档版本
+        /// </summary>
         private int _currentVersion = 1;
 
         // 默认存档键（来自 SaveServiceConfig.SaveFileName）
+        /// <summary>
+        /// 默认存档键
+        /// </summary>
         private string _defaultSaveKey = "save.dat";
 
         // 最大存档槽位数量（来自 SaveServiceConfig.MaxSaveSlots）
+        /// <summary>
+        /// 最大存档槽位数量
+        /// </summary>
         private int _maxSaveSlots = 3;
 
         // 自动存档间隔（秒，来自 SaveServiceConfig.AutoSaveInterval；0 表示禁用）
+        /// <summary>
+        /// 自动存档间隔（秒）
+        /// </summary>
         private float _autoSaveInterval;
+
+        /// <summary>
+        /// 自动存档计时器
+        /// </summary>
         private float _autoSaveTimer;
 
         // Storage 模式是否有待落盘的数据（避免每次 SetString 都立刻 Save）
+        /// <summary>
+        /// Storage 模式是否有脏数据
+        /// </summary>
         private bool _storageDirty;
         
         // 缓存的存档数据
+        /// <summary>
+        /// 存档数据缓存
+        /// </summary>
         private readonly Dictionary<string, object> _cache = new();
 
         // 脏标记集合：
         // SaveDataBase 是引用类型，框架无法自动感知字段变更；业务在修改后应显式调用 MarkDirty(key)。
         // 说明：使用 Dictionary<string, byte> 作为“集合”，在一些旧环境/IL2CPP 下更稳，并且便于调试。
+        /// <summary>
+        /// 脏标记键集合
+        /// </summary>
         private readonly Dictionary<string, byte> _dirtyKeys = new(32);
+
+        /// <summary>
+        /// 脏标记临时缓冲
+        /// </summary>
         private readonly List<string> _dirtyKeyBuffer = new(32);
         
+        /// <summary>
+        /// 初始化顺序（数值越小越靠前）
+        /// </summary>
         public int InitOrder => 20;
+
+        /// <summary>
+        /// Update 顺序（数值越小越靠前）
+        /// </summary>
         public int UpdateOrder => 20;
+
+        /// <summary>
+        /// 释放顺序（数值越小越靠前）
+        /// </summary>
         public int DisposeOrder => 20;
         
+        /// <summary>
+        /// 构造存档服务
+        /// </summary>
         public SaveService(SaveConfig config = null)
         {
+            // config 为空时使用默认配置
             _config = config ?? new SaveConfig();
         }
         
         #region 生命周期
         
+        /// <summary>
+        /// 初始化存档服务
+        /// </summary>
         public void Initialize()
         {
             // 从 CYConfigurator 读取配置
-            var configurator = CYConfigurator.Instance;
+            var configurator = CYConfigurator.Instance; // 配置中心
             if (configurator != null)
             {
-                var externalConfig = configurator.GetConfig<SaveServiceConfig>();
+                var externalConfig = configurator.GetConfig<SaveServiceConfig>(); // 外部配置
                 if (externalConfig != null)
                 {
                     _config.EnableEncryption = externalConfig.EnableEncryption;
@@ -171,12 +234,12 @@ namespace CYFramework.Core.Save
             }
             
             // 获取平台适配器
-            if (ServiceLocator.TryGet<IFileSystem>(out var fs))
+            if (ServiceLocator.TryGet<IFileSystem>(out var fs)) // 文件系统适配器
             {
                 _fileSystem = fs;
             }
             
-            if (ServiceLocator.TryGet<IStorageAdapter>(out var storage))
+            if (ServiceLocator.TryGet<IStorageAdapter>(out var storage)) // 存储适配器
             {
                 _storage = storage;
             }
@@ -191,6 +254,9 @@ namespace CYFramework.Core.Save
             #endif
         }
 
+        /// <summary>
+        /// 自动存档更新驱动
+        /// </summary>
         public void OnUpdate(float deltaTime)
         {
             // 自动存档：仅在有脏数据时触发，避免无意义写入。
@@ -205,6 +271,9 @@ namespace CYFramework.Core.Save
             SaveAllDirty();
         }
         
+        /// <summary>
+        /// 释放存档服务并写回脏数据
+        /// </summary>
         public void Dispose()
         {
             // 保存所有缓存的存档
@@ -265,13 +334,13 @@ namespace CYFramework.Core.Save
                 
                 // 序列化
                 // 注意：校验和字段会被序列化，为避免“校验和参与自身计算”导致不稳定，先写入固定占位值。
-                string json;
+                string json; // 序列化后的 JSON
 
                 // 计算校验和
                 if (_config.EnableChecksum)
                 {
                     data.Checksum = "";
-                    var jsonForChecksum = JsonUtility.ToJson(data);
+                    var jsonForChecksum = JsonUtility.ToJson(data); // 校验用 JSON
                     data.Checksum = ComputeChecksum(jsonForChecksum);
                     json = JsonUtility.ToJson(data);
                 }
@@ -283,7 +352,7 @@ namespace CYFramework.Core.Save
                 }
                 
                 // 加密
-                string finalData = _config.EnableEncryption ? Encrypt(json) : json;
+                string finalData = _config.EnableEncryption ? Encrypt(json) : json; // 最终写入内容
                 
                 // 根据平台选择存储方式
                 if (_useStorageMode)
@@ -302,7 +371,7 @@ namespace CYFramework.Core.Save
                         CreateBackup(key);
                     }
                     
-                    string path = GetSavePath(key);
+                    string path = GetSavePath(key); // 存档路径
                     _fileSystem?.WriteText(path, finalData);
                 }
                 
@@ -328,14 +397,14 @@ namespace CYFramework.Core.Save
             key = NormalizeKey(key);
 
             // 检查缓存
-            if (_cache.TryGetValue(key, out var cached))
+            if (_cache.TryGetValue(key, out var cached)) // cached 为缓存数据
             {
                 return (T)cached;
             }
             
             try
             {
-                string content;
+                string content; // 原始内容
                 
                 if (_useStorageMode)
                 {
@@ -350,7 +419,7 @@ namespace CYFramework.Core.Save
                 else
                 {
                     // Native: 从文件读取
-                    string path = GetSavePath(key);
+                    string path = GetSavePath(key); // 存档路径
                     
                     if (_fileSystem == null || !_fileSystem.FileExists(path))
                     {
@@ -362,19 +431,19 @@ namespace CYFramework.Core.Save
                 }
                 
                 // 解密
-                string json = _config.EnableEncryption ? Decrypt(content) : content;
+                string json = _config.EnableEncryption ? Decrypt(content) : content; // 解密后的 JSON
                 
                 // 反序列化
-                var data = JsonUtility.FromJson<T>(json);
+                var data = JsonUtility.FromJson<T>(json); // 数据对象
                 
                 // 校验和验证
                 if (_config.EnableChecksum)
                 {
-                    var expectedChecksum = data.Checksum;
+                    var expectedChecksum = data.Checksum; // 期望校验和
 
                     // 与保存端一致：将 Checksum 置为固定占位值后计算。
                     data.Checksum = "";
-                    var actualChecksum = ComputeChecksum(JsonUtility.ToJson(data));
+                    var actualChecksum = ComputeChecksum(JsonUtility.ToJson(data)); // 实际校验和
 
                     // 还原，便于调试（并保持数据对象字段语义正确）。
                     data.Checksum = expectedChecksum;
@@ -383,7 +452,7 @@ namespace CYFramework.Core.Save
                     {
                         CYLog.Warning($"[SaveService] 校验和不匹配，存档可能被篡改: {key}");
                         // 尝试从备份恢复
-                        var backup = LoadFromBackup<T>(key);
+                        var backup = LoadFromBackup<T>(key); // 备份数据
                         if (backup != null) return backup;
                     }
                 }
@@ -391,7 +460,7 @@ namespace CYFramework.Core.Save
                 // 版本迁移
                 if (data.Version < _currentVersion)
                 {
-                    json = MigrateData(json, data.Version);
+                    json = MigrateData(json, data.Version); // 迁移后的 JSON
                     data = JsonUtility.FromJson<T>(json);
                     data.Version = _currentVersion;
                     
@@ -411,7 +480,7 @@ namespace CYFramework.Core.Save
                 CYLog.Error($"[SaveService] 加载失败: {key}", ex);
                 
                 // 尝试从备份恢复
-                var backup = LoadFromBackup<T>(key);
+                var backup = LoadFromBackup<T>(key); // 备份数据
                 return backup ?? new T();
             }
         }
@@ -433,7 +502,7 @@ namespace CYFramework.Core.Save
                 }
                 else
                 {
-                    string path = GetSavePath(key);
+                    string path = GetSavePath(key); // 存档路径
                     _fileSystem?.DeleteFile(path);
                 }
 
@@ -462,7 +531,7 @@ namespace CYFramework.Core.Save
             }
             else
             {
-                string path = GetSavePath(key);
+                string path = GetSavePath(key); // 存档路径
                 return _fileSystem?.FileExists(path) ?? false;
             }
         }
@@ -564,13 +633,15 @@ namespace CYFramework.Core.Save
             _dirtyKeyBuffer.Clear();
             foreach (var kv in _cache)
             {
+                // kv 为缓存键值对
                 _dirtyKeyBuffer.Add(kv.Key);
             }
 
             for (int i = 0; i < _dirtyKeyBuffer.Count; i++)
             {
-                var key = _dirtyKeyBuffer[i];
-                if (_cache.TryGetValue(key, out var cached) && cached is SaveDataBase saveData)
+                // i 为索引
+                var key = _dirtyKeyBuffer[i]; // 存档键
+                if (_cache.TryGetValue(key, out var cached) && cached is SaveDataBase saveData) // cached 为缓存对象
                 {
                     Save(key, saveData);
                 }
@@ -608,7 +679,7 @@ namespace CYFramework.Core.Save
                 return Load<T>(key);
             }
 
-            var created = new T();
+            var created = new T(); // 新创建的存档对象
             _cache[key] = created;
             _dirtyKeys[key] = 1;
             return created;
@@ -630,12 +701,12 @@ namespace CYFramework.Core.Save
         {
             key = NormalizeKey(key);
             if (!_dirtyKeys.ContainsKey(key)) return false;
-            if (!_cache.TryGetValue(key, out var cached)) return false;
+            if (!_cache.TryGetValue(key, out var cached)) return false; // cached 为缓存对象
 
             if (cached is SaveDataBase saveData)
             {
                 // Save<T> 的数据类型约束更强，这里用基类调用即可覆盖 99% 用法。
-                var ok = Save(key, saveData);
+                var ok = Save(key, saveData); // 保存结果
                 if (ok) _dirtyKeys.Remove(key);
                 return ok;
             }
@@ -657,11 +728,13 @@ namespace CYFramework.Core.Save
             _dirtyKeyBuffer.Clear();
             foreach (var kv in _dirtyKeys)
             {
+                // kv 为脏标记键值对
                 _dirtyKeyBuffer.Add(kv.Key);
             }
 
             for (int i = 0; i < _dirtyKeyBuffer.Count; i++)
             {
+                // i 为索引
                 SaveDirty(_dirtyKeyBuffer[i]);
             }
 
@@ -720,12 +793,12 @@ namespace CYFramework.Core.Save
         private string BuildSlotKey(int slotIndex)
         {
             // DefaultSaveKey 允许包含目录与扩展名
-            var baseKey = NormalizeKey(null);
-            var extension = Path.GetExtension(baseKey);
-            var nameNoExt = Path.GetFileNameWithoutExtension(baseKey);
-            var dir = Path.GetDirectoryName(baseKey);
+            var baseKey = NormalizeKey(null); // 基准键
+            var extension = Path.GetExtension(baseKey); // 扩展名
+            var nameNoExt = Path.GetFileNameWithoutExtension(baseKey); // 文件名（无扩展）
+            var dir = Path.GetDirectoryName(baseKey); // 目录名
 
-            var fileName = $"{nameNoExt}_slot{slotIndex}{extension}";
+            var fileName = $"{nameNoExt}_slot{slotIndex}{extension}"; // 目标文件名
             if (string.IsNullOrEmpty(dir))
             {
                 return fileName;
@@ -756,13 +829,13 @@ namespace CYFramework.Core.Save
             key = NormalizeKey(key);
 
             // 允许传入带扩展名的文件名（例如 "save.dat"），此时不强制追加 .sav
-            var fileName = key;
+            var fileName = key; // 原始文件名
             if (Path.IsPathRooted(fileName))
             {
                 return fileName;
             }
 
-            fileName = fileName.TrimStart('/', '\\');
+            fileName = fileName.TrimStart('/', '\\'); // 清理前导分隔符
             if (string.IsNullOrEmpty(Path.GetExtension(fileName)))
             {
                 fileName += ".sav";
@@ -797,25 +870,26 @@ namespace CYFramework.Core.Save
             {
                 if (_config.MaxBackupCount <= 0) return;
 
-                string sourcePath = GetSavePath(key);
+                string sourcePath = GetSavePath(key); // 源文件路径
                 
                 if (_fileSystem == null || !_fileSystem.FileExists(sourcePath)) return;
                 
                 // 移动旧备份
                 for (int i = _config.MaxBackupCount - 1; i > 0; i--)
                 {
-                    string oldPath = GetBackupPath(key, i - 1);
-                    string newPath = GetBackupPath(key, i);
+                    // i 为备份索引（从后往前移动）
+                    string oldPath = GetBackupPath(key, i - 1); // 旧备份路径
+                    string newPath = GetBackupPath(key, i); // 新备份路径
                     
                     if (_fileSystem.FileExists(oldPath))
                     {
-                        string content = _fileSystem.ReadText(oldPath);
+                        string content = _fileSystem.ReadText(oldPath); // 旧备份内容
                         _fileSystem.WriteText(newPath, content);
                     }
                 }
                 
                 // 创建新备份
-                string data = _fileSystem.ReadText(sourcePath);
+                string data = _fileSystem.ReadText(sourcePath); // 原存档内容
                 _fileSystem.WriteText(GetBackupPath(key, 0), data);
             }
             catch (Exception ex)
@@ -830,17 +904,17 @@ namespace CYFramework.Core.Save
         /// </summary>
         private T LoadFromBackup<T>(string key) where T : SaveDataBase
         {
-            for (int i = 0; i < _config.MaxBackupCount; i++)
+            for (int i = 0; i < _config.MaxBackupCount; i++) // i 为备份索引
             {
                 try
                 {
-                    string backupPath = GetBackupPath(key, i);
+                    string backupPath = GetBackupPath(key, i); // 备份路径
                     
                     if (_fileSystem != null && _fileSystem.FileExists(backupPath))
                     {
-                        string content = _fileSystem.ReadText(backupPath);
-                        string json = _config.EnableEncryption ? Decrypt(content) : content;
-                        var data = JsonUtility.FromJson<T>(json);
+                        string content = _fileSystem.ReadText(backupPath); // 备份内容
+                        string json = _config.EnableEncryption ? Decrypt(content) : content; // 备份 JSON
+                        var data = JsonUtility.FromJson<T>(json); // 数据对象
                         
                         CYLog.Info($"[SaveService] 从备份 #{i} 恢复成功: {key}");
                         return data;
@@ -860,12 +934,12 @@ namespace CYFramework.Core.Save
         /// </summary>
         private string MigrateData(string json, int fromVersion)
         {
-            string current = json;
-            int version = fromVersion;
+            string current = json; // 当前 JSON
+            int version = fromVersion; // 当前版本
             
             while (version < _currentVersion)
             {
-                var migration = _migrations.Find(m => m.FromVersion == version);
+                var migration = _migrations.Find(m => m.FromVersion == version); // 迁移器
                 
                 if (migration == null)
                 {
@@ -887,9 +961,9 @@ namespace CYFramework.Core.Save
         /// </summary>
         private string ComputeChecksum(string data)
         {
-            using var md5 = MD5.Create();
-            byte[] bytes = Encoding.UTF8.GetBytes(data);
-            byte[] hash = md5.ComputeHash(bytes);
+            using var md5 = MD5.Create(); // MD5 实例
+            byte[] bytes = Encoding.UTF8.GetBytes(data); // 数据字节
+            byte[] hash = md5.ComputeHash(bytes); // 哈希结果
             return Convert.ToBase64String(hash);
         }
         
@@ -923,15 +997,15 @@ namespace CYFramework.Core.Save
         {
             try
             {
-                using var aes = Aes.Create();
-                aes.Key = Encoding.UTF8.GetBytes(_config.EncryptionKey.PadRight(16).Substring(0, 16));
-                aes.IV = new byte[16];
+                using var aes = Aes.Create(); // AES 实例
+                aes.Key = Encoding.UTF8.GetBytes(_config.EncryptionKey.PadRight(16).Substring(0, 16)); // 密钥
+                aes.IV = new byte[16]; // 初始向量
                 aes.Mode = CipherMode.CBC;
                 aes.Padding = PaddingMode.PKCS7;
                 
-                using var encryptor = aes.CreateEncryptor();
-                byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
-                byte[] encryptedBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+                using var encryptor = aes.CreateEncryptor(); // 加密器
+                byte[] plainBytes = Encoding.UTF8.GetBytes(plainText); // 明文字节
+                byte[] encryptedBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length); // 加密结果
                 
                 return Convert.ToBase64String(encryptedBytes);
             }
@@ -971,15 +1045,15 @@ namespace CYFramework.Core.Save
         {
             try
             {
-                using var aes = Aes.Create();
-                aes.Key = Encoding.UTF8.GetBytes(_config.EncryptionKey.PadRight(16).Substring(0, 16));
-                aes.IV = new byte[16];
+                using var aes = Aes.Create(); // AES 实例
+                aes.Key = Encoding.UTF8.GetBytes(_config.EncryptionKey.PadRight(16).Substring(0, 16)); // 密钥
+                aes.IV = new byte[16]; // 初始向量
                 aes.Mode = CipherMode.CBC;
                 aes.Padding = PaddingMode.PKCS7;
                 
-                using var decryptor = aes.CreateDecryptor();
-                byte[] cipherBytes = Convert.FromBase64String(cipherText);
-                byte[] plainBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
+                using var decryptor = aes.CreateDecryptor(); // 解密器
+                byte[] cipherBytes = Convert.FromBase64String(cipherText); // 密文字节
+                byte[] plainBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length); // 明文字节
                 
                 return Encoding.UTF8.GetString(plainBytes);
             }

@@ -28,10 +28,16 @@ namespace CYFramework.Core.UI.Components
             get
             {
                 if (_rectTransform == null)
+                {
+                    // 缓存 RectTransform
                     _rectTransform = GetComponent<RectTransform>();
+                }
                 return _rectTransform;
             }
         }
+        /// <summary>
+        /// 缓存的 RectTransform
+        /// </summary>
         private RectTransform _rectTransform;
         
         /// <summary>
@@ -63,8 +69,12 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         protected T Data { get; private set; }
         
+        /// <summary>
+        /// 设置列表数据
+        /// </summary>
         public override void SetData(object data)
         {
+            // data 为当前数据对象
             Data = (T)data;
             OnDataChanged(Data);
         }
@@ -82,27 +92,60 @@ namespace CYFramework.Core.UI.Components
     public class UIListView : MonoBehaviour
     {
         [Header("配置")]
+        /// <summary>
+        /// 列表项预制体
+        /// </summary>
         [SerializeField] private GameObject _itemPrefab;
+        /// <summary>
+        /// 内容容器
+        /// </summary>
         [SerializeField] private Transform _content;
+        /// <summary>
+        /// 滚动视图
+        /// </summary>
         [SerializeField] private UnityEngine.UI.ScrollRect _scrollRect;
+        /// <summary>
+        /// 对象池容量
+        /// </summary>
         [SerializeField] private int _poolCapacity = 20;
+        /// <summary>
+        /// 单项高度
+        /// </summary>
         [SerializeField] private float _itemHeight = 100f; // 默认项高度
+        /// <summary>
+        /// 滚动动画时长
+        /// </summary>
         [SerializeField] private float _scrollDuration = 0.3f; // 滚动动画时长
         
         // 对象池
+        /// <summary>
+        /// 列表项对象池
+        /// </summary>
         private readonly Queue<UIListItem> _pool = new();
         
         // 当前显示的项
+        /// <summary>
+        /// 当前显示项列表
+        /// </summary>
         private readonly List<UIListItem> _activeItems = new();
         
         // 数据源
+        /// <summary>
+        /// 数据源（object 列表）
+        /// </summary>
         private IList<object> _dataSource;
         
         // 点击事件
+        /// <summary>
+        /// 列表项点击事件（索引, 数据）
+        /// </summary>
         public event Action<int, object> OnItemClicked;
         
         #region 生命周期
         
+        /// <summary>
+        /// Unity Awake
+        /// </summary>
         private void Awake()
         {
             if (_content == null)
@@ -111,6 +154,9 @@ namespace CYFramework.Core.UI.Components
             }
         }
         
+        /// <summary>
+        /// Unity OnDestroy
+        /// </summary>
         private void OnDestroy()
         {
             ClearPool();
@@ -126,9 +172,10 @@ namespace CYFramework.Core.UI.Components
         public void SetData<T>(IList<T> data)
         {
             // 转换为 object 列表
-            var objectList = new List<object>(data.Count);
+            var objectList = new List<object>(data.Count); // 缓存为 object 列表
             foreach (var item in data)
             {
+                // item 为当前数据
                 objectList.Add(item);
             }
             _dataSource = objectList;
@@ -173,6 +220,7 @@ namespace CYFramework.Core.UI.Components
             // 回收所有项
             foreach (var item in _activeItems)
             {
+                // item 为当前显示项
                 RecycleItem(item);
             }
             _activeItems.Clear();
@@ -182,6 +230,7 @@ namespace CYFramework.Core.UI.Components
             // 创建新项
             for (int i = 0; i < _dataSource.Count; i++)
             {
+                // i 为索引
                 var item = GetOrCreateItem();
                 item.SetIndex(i);
                 item.SetData(_dataSource[i]);
@@ -206,7 +255,7 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         public void InsertItem(int index, object data)
         {
-            var item = GetOrCreateItem();
+            var item = GetOrCreateItem(); // 新项
             item.SetIndex(index);
             item.SetData(data);
             item.transform.SetParent(_content, false);
@@ -214,7 +263,7 @@ namespace CYFramework.Core.UI.Components
             _activeItems.Insert(index, item);
             
             // 更新后续项索引
-            for (int i = index + 1; i < _activeItems.Count; i++)
+            for (int i = index + 1; i < _activeItems.Count; i++) // i 为索引
             {
                 _activeItems[i].SetIndex(i);
             }
@@ -227,12 +276,12 @@ namespace CYFramework.Core.UI.Components
         {
             if (index < 0 || index >= _activeItems.Count) return;
             
-            var item = _activeItems[index];
+            var item = _activeItems[index]; // 待移除项
             _activeItems.RemoveAt(index);
             RecycleItem(item);
             
             // 更新后续项索引
-            for (int i = index; i < _activeItems.Count; i++)
+            for (int i = index; i < _activeItems.Count; i++) // i 为索引
             {
                 _activeItems[i].SetIndex(i);
             }
@@ -245,6 +294,7 @@ namespace CYFramework.Core.UI.Components
         {
             foreach (var item in _activeItems)
             {
+                // item 为当前显示项
                 RecycleItem(item);
             }
             _activeItems.Clear();
@@ -322,15 +372,18 @@ namespace CYFramework.Core.UI.Components
             }
         }
         
+        /// <summary>
+        /// 滚动到指定位置协程
+        /// </summary>
         private System.Collections.IEnumerator ScrollToPositionCoroutine(float targetPosition)
         {
-            float startPosition = _scrollRect.verticalNormalizedPosition;
-            float elapsed = 0f;
+            float startPosition = _scrollRect.verticalNormalizedPosition; // 起始位置
+            float elapsed = 0f; // 计时
             
             while (elapsed < _scrollDuration)
             {
                 elapsed += Time.unscaledDeltaTime;
-                float t = Mathf.Clamp01(elapsed / _scrollDuration);
+                float t = Mathf.Clamp01(elapsed / _scrollDuration); // 归一化时间
                 
                 // 使用 EaseOutCubic 缓动
                 float eased = 1f - Mathf.Pow(1f - t, 3f);
@@ -351,7 +404,7 @@ namespace CYFramework.Core.UI.Components
         /// </summary>
         private UIListItem GetOrCreateItem()
         {
-            UIListItem item;
+            UIListItem item; // 列表项实例
             
             if (_pool.Count > 0)
             {
@@ -360,14 +413,14 @@ namespace CYFramework.Core.UI.Components
             }
             else
             {
-                var go = Instantiate(_itemPrefab);
+                var go = Instantiate(_itemPrefab); // 新建实例
                 item = go.GetComponent<UIListItem>();
                 
                 // 绑定点击事件
                 var clickHandler = go.GetComponent<UnityEngine.UI.Button>();
                 if (clickHandler != null)
                 {
-                    var capturedItem = item;
+                    var capturedItem = item; // 捕获引用
                     clickHandler.onClick.AddListener(() =>
                     {
                         OnItemClicked?.Invoke(capturedItem.Index, _dataSource[capturedItem.Index]);
@@ -403,7 +456,7 @@ namespace CYFramework.Core.UI.Components
         {
             while (_pool.Count > 0)
             {
-                var item = _pool.Dequeue();
+                var item = _pool.Dequeue(); // 当前项
                 if (item != null)
                 {
                     Destroy(item.gameObject);
