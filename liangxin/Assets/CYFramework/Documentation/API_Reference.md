@@ -85,6 +85,7 @@
 | `RegisterEntity(type, prefab, preload, parent)` | 类型名, 预制体, 预加载数, 父节点 | `void` | 注册实体类型 |
 | `RegisterEntity(type, assetPath, groupName, preload)` | 类型名, 资源路径, 分组名, 预加载数 | `bool` | 注册实体类型（自动加载资源） |
 | `SpawnEntity<T>(type, userData)` | 类型名, 用户数据 | `T` | 生成实体 |
+| `SpawnEntity<T>(userData)` | 用户数据 | `T` | 生成实体（EntityType=组件类型名） |
 | `SpawnEntity(type, userData)` | 类型名, 用户数据 | `IEntity` | 生成实体 |
 | `SpawnEntity<T>(type, assetPath, groupName, userData)` | 类型名, 资源路径, 分组名, 用户数据 | `T` | 生成实体（自动注册） |
 | `RecycleEntity(entityId)` | 实体 ID | `void` | 回收实体到对象池 |
@@ -655,6 +656,20 @@ public abstract class EntityBase : MonoBehaviour, IEntity
 }
 ```
 
+#### EntityPrefabAttribute
+```csharp
+[EntityPrefab("Prefabs/Entities/Game/CompanyEntity")]
+public class CompanyEntity : EntityBase
+{
+}
+
+[EntityPrefab("Prefabs/Entities/Game/CompanyEntity", "CompanyEntity", "Props")]
+public class CompanyEntityWithMeta : EntityBase
+{
+}
+```
+说明：当调用 `SpawnEntity<T>(...)` 且实体未注册时，会优先读取该特性进行自动注册。`EntityType`/`GroupName` 为空则分别默认使用组件类型名与根节点分组（路径需相对 `Resources`，且不包含 `.prefab`）。
+
 **使用示例**:
 ```csharp
 public class EnemyEntity : EntityBase
@@ -993,6 +1008,9 @@ var bosses = table.GetRows(m => m.Hp > 1000);
 ```csharp
 [UIPrefab("UI/Panels/MyPanel")]  // 指定预制体路径
 public class MyPanel : UIPanel { }
+
+[UIPrefab("UI/Panels/MyPanel", "Popup", 100)]  // 指定预制体路径 + 自定义层
+public class MyPopupPanel : UIPanel { }
 ```
 
 ---

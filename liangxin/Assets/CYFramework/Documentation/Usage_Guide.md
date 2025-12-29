@@ -2316,6 +2316,7 @@ using UnityEngine.UI;
 /// 主菜单面板
 /// - 预制体放在 Resources/UI/Panels/MainMenuPanel.prefab
 /// - 路径写成相对 Resources 的路径：UI/Panels/MainMenuPanel
+/// - 如需自定义层级：可用 [UIPrefab(path, layerName, sortOrder)]
 /// </summary>
 [UIPrefab("UI/Panels/MainMenuPanel")]
 public sealed class MainMenuPanel : UIPanel

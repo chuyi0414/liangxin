@@ -161,6 +161,21 @@ namespace CYFramework.Core.UI
         private readonly Dictionary<string, GameObject> _prefabCache = new();
 
         /// <summary>
+        /// UIPrefab 元信息（路径/层级）
+        /// </summary>
+        private struct UIPrefabMeta
+        {
+            public string Path;
+            public string LayerName;
+            public int SortOrder;
+        }
+
+        /// <summary>
+        /// UIPrefab 元信息缓存（类型 -> 元信息）
+        /// </summary>
+        private readonly Dictionary<Type, UIPrefabMeta> _prefabMetaCache = new();
+
+        /// <summary>
         /// UI 对象池根节点（统一存放回收的 UI 面板）
         /// </summary>
         private Transform _uiPoolRoot;
@@ -524,7 +539,19 @@ namespace CYFramework.Core.UI
             }
 
             // 目标容器（若传入覆盖容器则优先）
-            var container = overrideContainer ?? GetLayerContainer(panel.Layer);
+            Transform container = overrideContainer;
+            if (container == null)
+            {
+                var meta = GetPrefabMeta(panelType);
+                if (!string.IsNullOrEmpty(meta.LayerName))
+                {
+                    container = GetOrCreateCustomLayer(meta.LayerName, meta.SortOrder);
+                }
+                else
+                {
+                    container = GetLayerContainer(panel.Layer);
+                }
+            }
             if (container != null)
             {
                 panel.transform.SetParent(container, false);
@@ -1494,20 +1521,54 @@ namespace CYFramework.Core.UI
         }
         
         /// <summary>
+        /// 获取 UIPrefab 元信息（路径/层级）
+        /// </summary>
+        private UIPrefabMeta GetPrefabMeta(Type panelType)
+        {
+            if (_prefabMetaCache.TryGetValue(panelType, out var cached))
+            {
+                return cached;
+            }
+
+            // 检查是否有 UIPrefab 特性
+            var attr = Attribute.GetCustomAttribute(panelType, typeof(UIPrefabAttribute)) as UIPrefabAttribute;
+            var meta = new UIPrefabMeta
+            {
+                Path = (attr != null && !string.IsNullOrEmpty(attr.Path))
+                    ? attr.Path
+                    : $"{_config.PrefabPathPrefix}{panelType.Name}",
+                LayerName = attr?.LayerName ?? string.Empty,
+                SortOrder = attr?.SortOrder ?? 0
+            };
+
+            _prefabMetaCache[panelType] = meta;
+            return meta;
+        }
+
+        /// <summary>
         /// 获取预制体路径
         /// </summary>
         private string GetPrefabPath(Type panelType)
         {
-            // 检查是否有 UIPrefab 特性
-            // UIPrefab 特性实例
-            var attr = Attribute.GetCustomAttribute(panelType, typeof(UIPrefabAttribute)) as UIPrefabAttribute;
-            if (attr != null && !string.IsNullOrEmpty(attr.Path))
+            return GetPrefabMeta(panelType).Path;
+        }
+
+        /// <summary>
+        /// 获取或创建自定义层容器
+        /// </summary>
+        private Transform GetOrCreateCustomLayer(string layerName, int sortOrder)
+        {
+            if (string.IsNullOrEmpty(layerName))
             {
-                return attr.Path;
+                return null;
             }
-            
-            // 默认路径：UI/Panels/面板类名
-            return $"{_config.PrefabPathPrefix}{panelType.Name}";
+
+            if (_customLayers.TryGetValue(layerName, out var existing))
+            {
+                return existing;
+            }
+
+            return CreateLayer(layerName, sortOrder);
         }
 
         /// <summary>

@@ -30,6 +30,16 @@ namespace CYFramework.Core.UI
         /// 预制体资源路径
         /// </summary>
         public string Path { get; }
+
+        /// <summary>
+        /// 自定义层名（可选）
+        /// </summary>
+        public string LayerName { get; }
+
+        /// <summary>
+        /// 自定义层排序（可选，仅在 LayerName 有效）
+        /// </summary>
+        public int SortOrder { get; }
         
         /// <summary>
         /// UI 预制体路径特性构造
@@ -38,6 +48,21 @@ namespace CYFramework.Core.UI
         public UIPrefabAttribute(string path)
         {
             Path = path;
+            LayerName = string.Empty;
+            SortOrder = 0;
+        }
+
+        /// <summary>
+        /// UI 预制体路径 + 自定义层特性构造
+        /// </summary>
+        /// <param name="path">Resources/Addressable 中的预制体路径</param>
+        /// <param name="layerName">自定义层名</param>
+        /// <param name="sortOrder">自定义层排序</param>
+        public UIPrefabAttribute(string path, string layerName, int sortOrder = 0)
+        {
+            Path = path;
+            LayerName = layerName ?? string.Empty;
+            SortOrder = sortOrder;
         }
     }
     

@@ -7,11 +7,14 @@ using UnityEngine;
 [AutoRegisterProcedure(name: "Game", order: 20)]
 public class GameProcedure : ProcedureBase
 {
+    //¹«Ë¾
+    private CompanyEntity CompanyEntity;
+
     protected override void OnEnter(ProcedureBase previousProcedure)
     {
         base.OnEnter(previousProcedure);
         CY.UI.Open<GameUIPanel>();
-        CY.Entity.SpawnEntity<>
+        CompanyEntity = CY.Entity.SpawnEntity<CompanyEntity>();
     }
 
     protected override void OnUpdate(float deltaTime)
@@ -24,5 +27,6 @@ public class GameProcedure : ProcedureBase
     {
         base.OnLeave(nextProcedure);
         CY.UI.Close<GameUIPanel>();
+        CY.Entity.RecycleEntity(CompanyEntity);
     }
 }

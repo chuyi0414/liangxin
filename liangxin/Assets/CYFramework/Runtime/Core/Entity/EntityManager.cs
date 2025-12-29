@@ -373,6 +373,21 @@ namespace CYFramework.Core.Entity
         /// </summary>
         private readonly Dictionary<string, Queue<IEntity>> _entityPools = new();
 
+        /// <summary>
+        /// 实体预制体元信息（路径/类型/分组）
+        /// </summary>
+        private struct EntityPrefabMeta
+        {
+            public string Path;
+            public string EntityType;
+            public string GroupName;
+        }
+
+        /// <summary>
+        /// 实体预制体元信息缓存（实体组件类型 -> 元信息，避免频繁反射）
+        /// </summary>
+        private readonly Dictionary<Type, EntityPrefabMeta> _entityPrefabAttributeCache = new(32);
+
         // HideAllEntities/HideAllEntities(string) 使用的复用缓冲，避免每次 new List 产生 GC
         private readonly List<IEntity> _hideBuffer = new(64);
 
@@ -732,6 +747,24 @@ namespace CYFramework.Core.Entity
         }
 
         /// <summary>
+        /// 尝试从 EntityPrefabAttribute 获取元信息，并进行缓存
+        /// </summary>
+        private bool TryGetEntityPrefabMeta(Type entityComponentType, out EntityPrefabMeta meta)
+        {
+            if (_entityPrefabAttributeCache.TryGetValue(entityComponentType, out meta))
+            {
+                return !string.IsNullOrEmpty(meta.Path);
+            }
+
+            var attr = Attribute.GetCustomAttribute(entityComponentType, typeof(EntityPrefabAttribute)) as EntityPrefabAttribute;
+            meta.Path = attr != null ? attr.Path : string.Empty;
+            meta.EntityType = attr != null ? attr.EntityType : string.Empty;
+            meta.GroupName = attr != null ? attr.GroupName : string.Empty;
+            _entityPrefabAttributeCache[entityComponentType] = meta;
+            return !string.IsNullOrEmpty(meta.Path);
+        }
+
+        /// <summary>
         /// 生成实体（使用枚举分组）
         /// </summary>
         /// <typeparam name="T">实体组件类型</typeparam>
@@ -750,7 +783,39 @@ namespace CYFramework.Core.Entity
         /// </summary>
         public T SpawnEntity<T>(string entityType, object userData = null) where T : class, IEntity
         {
-            return SpawnEntity(entityType, userData) as T;
+            EntityPrefabMeta meta = default;
+            var hasMeta = false;
+            var finalType = entityType;
+
+            if (string.IsNullOrEmpty(finalType))
+            {
+                hasMeta = TryGetEntityPrefabMeta(typeof(T), out meta);
+                finalType = !string.IsNullOrEmpty(meta.EntityType) ? meta.EntityType : typeof(T).Name;
+            }
+
+            if (!_entityInfos.ContainsKey(finalType))
+            {
+                if (!hasMeta && !TryGetEntityPrefabMeta(typeof(T), out meta))
+                {
+                    CYLog.Error($"[EntityManager] 未注册实体且未配置 EntityPrefabAttribute: {finalType}, Component={typeof(T).Name}");
+                    return null;
+                }
+
+                var groupName = string.IsNullOrEmpty(meta.GroupName) ? null : meta.GroupName;
+                if (!RegisterEntity(finalType, meta.Path, groupName))
+                {
+                    return null;
+                }
+            }
+            return SpawnEntity(finalType, userData) as T;
+        }
+
+        /// <summary>
+        /// 生成/显示实体（直接使用组件类型名作为 EntityType）
+        /// </summary>
+        public T SpawnEntity<T>(object userData = null) where T : class, IEntity
+        {
+            return SpawnEntity<T>(string.Empty, userData);
         }
 
         /// <summary>
