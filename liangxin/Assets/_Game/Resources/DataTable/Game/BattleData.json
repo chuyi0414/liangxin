@@ -1,7 +1,7 @@
 {
     "Money": 1000,
-    "Conscience": 0,
+    "Conscience": 100,
     "BlackHeart": 0,
     "CompanyConscience": 100,
-    "CompanyPollution": 0
+    "CompanyPollution": 20
 }

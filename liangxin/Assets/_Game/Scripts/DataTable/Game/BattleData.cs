@@ -16,7 +16,7 @@ public sealed class BattleData : IDataRow
     public int BlackHeart;
     /// <summary>公司良心</summary>
     public int CompanyConscience;
-    /// <summary>公司污染度</summary>
+    /// <summary>公司污染度上限</summary>
     public int CompanyPollution;
 
     int IDataRow.Id => Id;
