@@ -7,6 +7,14 @@ public class LoadProcedure : ProcedureBase
 {
     private const string BattleDataTableName = "BattleData";
     private const string BattleDataJsonPath = "DataTable/Game/BattleData";
+    private const string PlayerDataTableName = "Player";
+    private const string PlayerDataCsvPath = "DataTable/Unit/Player/Player";
+    private const string EnemyDataTableName = "Enemy";
+    private const string EnemyDataCsvPath = "DataTable/Unit/Enemy/Enemy";
+    private const string SpawnTypeTableName = "SpawnType"; // 生成类型表名
+    private const string SpawnTypeCsvPath = "DataTable/Wave/SpawnType"; // 生成类型路径
+    private const string AssaultSpawnTypeTableName = "AssaultSpawnType"; // 奇袭生成类型表名
+    private const string AssaultSpawnTypeCsvPath = "DataTable/Wave/AssaultSpawnType"; // 奇袭生成类型路径
 
     protected override void OnEnter(ProcedureBase previousProcedure)
     {
@@ -14,6 +22,10 @@ public class LoadProcedure : ProcedureBase
 
         CY.UI.Open<LoadUIPanel>();
         LoadBattleData();
+        LoadPlayerData();
+        LoadEnemyData();
+        LoadSpawnTypeData(); // 加载生成类型
+        LoadAssaultSpawnTypeData(); // 加载奇袭生成类型
     }
 
     protected override void OnUpdate(float deltaTime)
@@ -47,4 +59,86 @@ public class LoadProcedure : ProcedureBase
 
         CY.Data.LoadFromJsonObject<BattleData>(jsonAsset.text, BattleDataTableName, autoFixIdIfZero: true);
     }
+
+    /// <summary>
+    /// 加载玩家数据（CSV，默认使用第一行）。
+    /// </summary>
+    private void LoadPlayerData()
+    {
+        if (CY.Data.HasDataTable(PlayerDataTableName))
+        {
+            CY.Data.UnloadDataTable(PlayerDataTableName);
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(PlayerDataCsvPath);
+        if (csvAsset == null)
+        {
+            CY.LogError($"[LoadProcedure] 加载玩家数据失败：{PlayerDataCsvPath}");
+            return;
+        }
+
+        CY.Data.LoadFromCsv<PlayerUnitRow>(csvAsset.text, PlayerDataTableName);
+    }
+
+    /// <summary>
+    /// 加载敌人数据（CSV，支持任意 Id 查询）。
+    /// </summary>
+    private void LoadEnemyData()
+    {
+        if (CY.Data.HasDataTable(EnemyDataTableName))
+        {
+            CY.Data.UnloadDataTable(EnemyDataTableName);
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(EnemyDataCsvPath);
+        if (csvAsset == null)
+        {
+            CY.LogError($"[LoadProcedure] 加载敌人数据失败：{EnemyDataCsvPath}");
+            return;
+        }
+
+        CY.Data.LoadFromCsv<EnemyUnitRow>(csvAsset.text, EnemyDataTableName);
+    }
+
+    /// <summary>
+    /// 加载生成类型数据（CSV）。
+    /// </summary>
+    private void LoadSpawnTypeData() // 加载生成类型表
+    {
+        if (CY.Data.HasDataTable(SpawnTypeTableName)) // 判断是否已加载
+        {
+            CY.Data.UnloadDataTable(SpawnTypeTableName); // 卸载旧表
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(SpawnTypeCsvPath); // 加载 CSV 资源
+        if (csvAsset == null) // 资源为空判定
+        {
+            CY.LogError($"[LoadProcedure] 加载生成类型失败：{SpawnTypeCsvPath}"); // 输出错误日志
+            return; // 直接退出
+        }
+
+        CY.Data.LoadFromCsv<SpawnTypeRow>(csvAsset.text, SpawnTypeTableName); // 解析生成类型表
+    }
+
+    /// <summary>
+    /// 加载奇袭生成类型数据（CSV）。
+    /// </summary>
+    private void LoadAssaultSpawnTypeData() // 加载奇袭生成类型表
+    {
+        if (CY.Data.HasDataTable(AssaultSpawnTypeTableName)) // 判断是否已加载
+        {
+            CY.Data.UnloadDataTable(AssaultSpawnTypeTableName); // 卸载旧表
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(AssaultSpawnTypeCsvPath); // 加载 CSV 资源
+        if (csvAsset == null) // 资源为空判定
+        {
+            CY.LogWarning($"[LoadProcedure] 加载奇袭生成类型失败：{AssaultSpawnTypeCsvPath}"); // 输出警告日志
+            return; // 允许奇袭表缺失
+        }
+
+        CY.Data.LoadFromCsv<AssaultSpawnTypeRow>(csvAsset.text, AssaultSpawnTypeTableName); // 解析奇袭生成类型表
+    }
+
+
 }

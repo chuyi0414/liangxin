@@ -1,0 +1,2 @@
+Id,UnlockWave,MaxWave,Weight,PrepareDuration,SpawnDuration,SpawnCountMin,SpawnCountMax,IntervalMin,IntervalMax,PointId,EnemyList
+1,1,0,100,3,10,1,1,1,1,Dong,1:60

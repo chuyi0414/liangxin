@@ -1,4 +1,5 @@
 ﻿using CYFramework;
+using CYFramework.Core.Timer;
 using CYFramework.Core.UI;
 using TMPro;
 using UnityEngine;
@@ -29,11 +30,21 @@ public class GameUIPanel : UIPanel
     /// <summary>
     /// 公司滑动条
     /// </summary>
-    [SerializeField] private Scrollbar _scrollbarCompanyPollution;
+    [SerializeField] private Slider _sliderCompanyPollution;
     /// <summary>
     /// 当前污染度
     /// </summary>
     [SerializeField] private float _floatCompanyPollution;
+    /// <summary>
+    /// 波次倒计时
+    /// </summary>
+    [SerializeField] private TMP_Text _txtWaveCountdown;
+    /// <summary>
+    /// 波次阶段
+    /// </summary>
+    [SerializeField] private TMP_Text _txtStage;
+    /// <summary>波次 UI 刷新计时器。</summary>
+    private Timer _waveUiTimer;
 
     protected override void OnBindUI()
     {
@@ -60,6 +71,7 @@ public class GameUIPanel : UIPanel
         base.OnOpen(userData);
         _floatCompanyPollution = 0;
         RefreshBattleData();
+        StartWaveUiTimer();
     }
 
     /// <summary>
@@ -78,6 +90,8 @@ public class GameUIPanel : UIPanel
         {
             _btnPause.onClick.RemoveListener(OnBtnPauseClick);
         }
+
+        StopWaveUiTimer();
     }
 
     /// <summary>
@@ -149,13 +163,133 @@ public class GameUIPanel : UIPanel
     /// </summary>
     private void SetCompanyPollutionScrollbar(int percent)
     {
-        if (_scrollbarCompanyPollution == null) return;
+        if (_sliderCompanyPollution == null) return;
         if (percent <= 0)
         {
-            _scrollbarCompanyPollution.size = 0f;
+            _sliderCompanyPollution.value = 0f;
             return;
         }
 
-        _scrollbarCompanyPollution.size = percent >= 100 ? 1f : percent / 100f;
+        _sliderCompanyPollution.value = percent >= 100 ? 1f : percent / 100f;
+    }
+
+    /// <summary>
+    /// 启动波次 UI 刷新计时器。
+    /// </summary>
+    private void StartWaveUiTimer()
+    {
+        StopWaveUiTimer();
+        _waveUiTimer = CY.Timer.Loop(0.2f, UpdateWaveUi);
+        UpdateWaveUi();
+    }
+
+    /// <summary>
+    /// 停止波次 UI 刷新计时器。
+    /// </summary>
+    private void StopWaveUiTimer()
+    {
+        if (_waveUiTimer == null)
+        {
+            return;
+        }
+
+        _waveUiTimer.Stop();
+        _waveUiTimer = null;
+    }
+
+    /// <summary>
+    /// 刷新波次倒计时与阶段显示。
+    /// </summary>
+    private void UpdateWaveUi()
+    {
+        var waveManager = CY.Wave;
+        if (waveManager == null)
+        {
+            SetWaveStageText("--");
+            SetWaveCountdownText("--:--");
+            return;
+        }
+
+        if (!waveManager.TryGetMainWaveStatus(out var waveId, out var stage, out var remaining))
+        {
+            SetWaveStageText("--");
+            SetWaveCountdownText("--:--");
+            return;
+        }
+
+        SetWaveStageText(waveId, stage);
+        var seconds = Mathf.CeilToInt(remaining);
+        SetWaveCountdownText(seconds);
+    }
+
+    /// <summary>
+    /// 设置波次阶段文本。
+    /// </summary>
+    private void SetWaveStageText(int waveId, WaveStage stage)
+    {
+        if (_txtStage == null)
+        {
+            return;
+        }
+
+        if (stage == WaveStage.Prepare)
+        {
+            _txtStage.SetText("第{0}波 准备中", waveId);
+            return;
+        }
+
+        if (stage == WaveStage.Spawn)
+        {
+            _txtStage.SetText("第{0}波 刷怪中", waveId);
+            return;
+        }
+
+        _txtStage.SetText("--");
+    }
+
+    /// <summary>
+    /// 设置波次阶段文本（无数据）。
+    /// </summary>
+    private void SetWaveStageText(string text)
+    {
+        if (_txtStage == null)
+        {
+            return;
+        }
+
+        _txtStage.SetText(text);
+    }
+
+    /// <summary>
+    /// 设置波次倒计时文本。
+    /// </summary>
+    private void SetWaveCountdownText(int seconds)
+    {
+        if (_txtWaveCountdown == null)
+        {
+            return;
+        }
+
+        if (seconds < 0)
+        {
+            seconds = 0; // 负数保护
+        }
+
+        var minutes = seconds / 60; // 计算分钟
+        var remainSeconds = seconds - minutes * 60; // 计算剩余秒
+        _txtWaveCountdown.SetText("{0:00}:{1:00}", minutes, remainSeconds); // 按 mm:ss 输出
+    }
+
+    /// <summary>
+    /// 设置波次倒计时文本（无数据）。
+    /// </summary>
+    private void SetWaveCountdownText(string text)
+    {
+        if (_txtWaveCountdown == null)
+        {
+            return;
+        }
+
+        _txtWaveCountdown.SetText(text);
     }
 }
