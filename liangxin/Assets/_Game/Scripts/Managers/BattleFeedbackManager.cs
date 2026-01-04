@@ -1,5 +1,8 @@
 using System.Collections.Generic; // 集合类型引用
 using CYFramework; // CYFramework 入口引用
+using CYFramework.Core.Config; // 配置系统引用
+using CYFramework.Core.Pool; // 对象池系统引用
+using CYFramework.Core.UI; // UI 系统引用
 using CYFramework.Infrastructure; // 生命周期接口引用
 using UnityEngine; // Unity 引擎类型引用
 
@@ -10,8 +13,8 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
 {
     /// <summary>是否在切场景时保留该对象。</summary>
     [SerializeField] private bool _dontDestroyOnLoad = true;
-    /// <summary>UI 根节点（全屏 RectTransform）。</summary>
-    [SerializeField] private RectTransform _uiRoot;
+    /// <summary>UI 层级根节点（运行时创建的 BattleFeedback 容器）。</summary>
+    private RectTransform _uiLayerRoot;
     /// <summary>世界相机（用于世界转屏幕坐标）。</summary>
     [SerializeField] private Camera _worldCamera;
     /// <summary>UI 相机（Overlay 可为空）。</summary>
@@ -31,19 +34,26 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     /// <summary>是否使用碰撞体顶部作为额外偏移。</summary>
     [SerializeField] private bool _useColliderTopOffset = true;
 
-    /// <summary>血条对象池。</summary>
-    private readonly Queue<UnitHpBarItem> _hpBarPool = new Queue<UnitHpBarItem>(64);
+    /// <summary>UI 层级名称（与 Main/Popup/Tips 同级）。</summary>
+    private const string UiLayerName = "BattleFeedback";
+    /// <summary>UI 层级排序（固定使用 150）。</summary>
+    private const int UiLayerOrder = 150;
+    /// <summary>血条对象池 Key。</summary>
+    private const string HpBarPoolKey = "BattleFeedback_HpBar";
+    /// <summary>飘字对象池 Key。</summary>
+    private const string DamagePoolKey = "BattleFeedback_DamageText";
+
+    /// <summary>血条对象池（框架 UIElementPool）。</summary>
+    private UIElementPool _hpBarPool;
     /// <summary>激活血条列表。</summary>
     private readonly List<UnitHpBarItem> _activeHpBars = new List<UnitHpBarItem>(64);
     /// <summary>单位 Id 对应血条。</summary>
     private readonly Dictionary<int, UnitHpBarItem> _hpBarMap = new Dictionary<int, UnitHpBarItem>(64);
-    /// <summary>飘字对象池。</summary>
-    private readonly Queue<DamageTextItem> _damagePool = new Queue<DamageTextItem>(128);
+    /// <summary>飘字对象池（框架 UIElementPool）。</summary>
+    private UIElementPool _damagePool;
     /// <summary>激活飘字列表。</summary>
     private readonly List<DamageTextItem> _activeDamageTexts = new List<DamageTextItem>(128);
 
-    /// <summary>对象池根节点。</summary>
-    private RectTransform _poolRoot;
     /// <summary>是否已注册到 ServiceLocator。</summary>
     private bool _registered;
     /// <summary>是否已订阅事件。</summary>
@@ -56,6 +66,8 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     private bool _warnedDamageConfig;
     /// <summary>是否已提示相机配置缺失。</summary>
     private bool _warnedCameraConfig;
+    /// <summary>是否已提示 UI 层级创建失败。</summary>
+    private bool _warnedUiLayerRoot;
 
     /// <summary>初始化顺序（数值小的先执行）。</summary>
     public int InitOrder => 180;
@@ -96,10 +108,10 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     /// </summary>
     public void Initialize()
     {
-        CacheCamera();
-        EnsurePoolRoot();
-        PrewarmPools();
-        EnsureSubscribed();
+        CacheCamera(); // 缓存相机引用
+        EnsureUiLayerRoot(); // 创建 BattleFeedback UI 层级
+        PrewarmPools(); // 预热对象池
+        EnsureSubscribed(); // 订阅事件
     }
 
     /// <summary>
@@ -127,16 +139,34 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
             return;
         }
 
-        _disposed = true;
+        _disposed = true; // 标记已释放
         if (_subscribed)
         {
-            CY.Event.UnsubscribeAll(this);
-            _subscribed = false;
+            CY.Event.UnsubscribeAll(this); // 取消事件订阅
+            _subscribed = false; // 标记已取消订阅
         }
 
-        _hpBarMap.Clear();
-        _activeHpBars.Clear();
-        _activeDamageTexts.Clear();
+        for (int i = _activeHpBars.Count - 1; i >= 0; i--)
+        {
+            RemoveHpBarAt(i); // 回收血条实例
+        }
+
+        _hpBarMap.Clear(); // 清理血条映射
+
+        for (int i = _activeDamageTexts.Count - 1; i >= 0; i--)
+        {
+            RemoveDamageTextAt(i); // 回收飘字实例
+        }
+
+        if (_hpBarPool != null)
+        {
+            _hpBarPool = null; // 释放血条池引用
+        }
+
+        if (_damagePool != null)
+        {
+            _damagePool = null; // 释放飘字池引用
+        }
     }
 
     /// <summary>
@@ -151,19 +181,162 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     }
 
     /// <summary>
-    /// 确保对象池根节点存在。
+    /// 获取 UI 容器（BattleFeedback 层级）。
     /// </summary>
-    private void EnsurePoolRoot()
+    private RectTransform GetUiContainer()
     {
-        if (_poolRoot != null)
+        if (!EnsureUiLayerRoot())
+        {
+            return null; // UI 层级不可用
+        }
+
+        return _uiLayerRoot; // 返回 UI 层级根节点
+    }
+
+    /// <summary>
+    /// 确保 UI 层级根节点已创建。
+    /// </summary>
+    private bool EnsureUiLayerRoot()
+    {
+        if (_uiLayerRoot != null)
+        {
+            ApplyUiLayerOrder(_uiLayerRoot); // 刷新层级排序
+            return true; // 已有缓存
+        }
+
+        Transform layerRoot; // 层级节点
+        if (CY.UI.HasLayer(UiLayerName))
+        {
+            layerRoot = CY.UI.GetLayerContainer(UiLayerName); // 获取已存在层级
+        }
+        else
+        {
+            layerRoot = CY.UI.CreateLayer(UiLayerName, UiLayerOrder); // 创建自定义层级
+        }
+
+        _uiLayerRoot = layerRoot as RectTransform; // 缓存层级节点
+        if (_uiLayerRoot == null)
+        {
+            if (!_warnedUiLayerRoot)
+            {
+                CY.LogWarning("[BattleFeedbackManager] 创建 BattleFeedback UI 层级失败。"); // 输出警告日志
+                _warnedUiLayerRoot = true; // 仅提示一次
+            }
+
+            return false; // UI 层级创建失败
+        }
+
+        ApplyUiLayerOrder(_uiLayerRoot); // 应用层级排序
+        return true; // 层级创建完成
+    }
+
+    /// <summary>
+    /// 应用 BattleFeedback UI 层级排序。
+    /// </summary>
+    /// <param name="layerRoot">层级根节点。</param>
+    private void ApplyUiLayerOrder(RectTransform layerRoot)
+    {
+        if (layerRoot == null)
         {
             return;
         }
 
-        var go = new GameObject("[BattleFeedbackPools]");
-        go.SetActive(false);
-        _poolRoot = go.AddComponent<RectTransform>();
-        _poolRoot.SetParent(transform, false);
+        var canvas = layerRoot.GetComponent<Canvas>(); // BattleFeedback Canvas
+        if (canvas == null)
+        {
+            return; // Canvas 缺失
+        }
+
+        canvas.overrideSorting = true; // 开启排序覆盖
+        canvas.sortingOrder = UiLayerOrder; // 设置固定排序
+
+        if (_uiCamera == null && canvas.worldCamera != null)
+        {
+            _uiCamera = canvas.worldCamera; // 缓存 UI 相机
+        }
+    }
+
+    /// <summary>
+    /// 创建池配置（优先读取框架默认配置）。
+    /// </summary>
+    /// <param name="warmupCount">预热数量。</param>
+    private PoolConfig CreatePoolConfig(int warmupCount)
+    {
+        var config = new PoolConfig(); // 对象池配置
+        var configurator = CYConfigurator.Instance; // 配置入口
+        if (configurator != null)
+        {
+            var poolConfig = configurator.GetConfig<PoolManagerConfig>(); // 框架池配置
+            if (poolConfig != null)
+            {
+                config.InitialCapacity = poolConfig.DefaultInitialCapacity; // 读取默认初始容量
+                config.MaxCapacity = poolConfig.DefaultMaxCapacity; // 读取默认最大容量
+                config.WarmupCount = poolConfig.DefaultWarmupCount; // 读取默认预热数量
+            }
+        }
+
+        config.WarmupCount = Mathf.Max(0, warmupCount); // 覆盖预热数量
+        if (config.WarmupCount > config.InitialCapacity)
+        {
+            config.InitialCapacity = config.WarmupCount; // 保证初始容量不小于预热数量
+        }
+
+        if (config.WarmupCount > config.MaxCapacity)
+        {
+            config.MaxCapacity = config.WarmupCount; // 保证最大容量不小于预热数量
+        }
+
+        return config;
+    }
+
+    /// <summary>
+    /// 确保血条对象池已创建。
+    /// </summary>
+    private void EnsureHpBarPool()
+    {
+        if (_hpBarPool != null)
+        {
+            return;
+        }
+
+        if (_hpBarPrefab == null)
+        {
+            return;
+        }
+
+        var config = CreatePoolConfig(_prewarmHpBarCount); // 血条池配置
+        _hpBarPool = CY.UI.GetOrCreateUIElementPool(HpBarPoolKey, _hpBarPrefab.gameObject, config); // 创建血条对象池
+        if (_hpBarPool == null) // 判空检查
+        {
+            return; // 对象池创建失败
+        }
+
+        _hpBarPool.Warmup(); // 预热血条对象池
+    }
+
+    /// <summary>
+    /// 确保飘字对象池已创建。
+    /// </summary>
+    private void EnsureDamagePool()
+    {
+        if (_damagePool != null)
+        {
+            return;
+        }
+
+        if (_damageTextPrefab == null)
+        {
+            return;
+        }
+
+        var config = CreatePoolConfig(_prewarmDamageCount); // 飘字池配置
+        _damagePool = CY.UI.GetOrCreateUIElementPool(DamagePoolKey, _damageTextPrefab.gameObject, config); // 创建飘字对象池
+        if (_damagePool == null) // 判空检查
+        {
+            return; // 对象池创建失败
+        }
+
+        _damagePool.Warmup(); // 预热飘字对象池
     }
 
     /// <summary>
@@ -171,29 +344,8 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     /// </summary>
     private void PrewarmPools()
     {
-        if (_hpBarPrefab != null)
-        {
-            for (int i = 0; i < _prewarmHpBarCount; i++)
-            {
-                var item = CreateHpBarInstance();
-                if (item != null)
-                {
-                    _hpBarPool.Enqueue(item);
-                }
-            }
-        }
-
-        if (_damageTextPrefab != null)
-        {
-            for (int i = 0; i < _prewarmDamageCount; i++)
-            {
-                var item = CreateDamageTextInstance();
-                if (item != null)
-                {
-                    _damagePool.Enqueue(item);
-                }
-            }
-        }
+        EnsureHpBarPool(); // 确保血条池已创建并预热
+        EnsureDamagePool(); // 确保飘字池已创建并预热
     }
 
     /// <summary>
@@ -377,7 +529,8 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
             return;
         }
 
-        if (_uiRoot == null || _worldCamera == null)
+        var uiRoot = GetUiContainer(); // UI 容器
+        if (uiRoot == null || _worldCamera == null)
         {
             return;
         }
@@ -391,7 +544,7 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
                 continue;
             }
 
-            item.UpdatePosition(_uiRoot, _worldCamera, _uiCamera);
+            item.UpdatePosition(uiRoot, _worldCamera, _uiCamera); // 刷新血条位置
         }
     }
 
@@ -406,10 +559,16 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
             return;
         }
 
+        var uiRoot = GetUiContainer(); // UI 容器
+        if (uiRoot == null || _worldCamera == null)
+        {
+            return; // UI 层级或相机不可用
+        }
+
         for (int i = _activeDamageTexts.Count - 1; i >= 0; i--)
         {
             var item = _activeDamageTexts[i];
-            if (item == null || !item.Tick(deltaTime, _uiRoot, _worldCamera, _uiCamera))
+            if (item == null || !item.Tick(deltaTime, uiRoot, _worldCamera, _uiCamera))
             {
                 RemoveDamageTextAt(i);
             }
@@ -421,14 +580,26 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     /// </summary>
     private UnitHpBarItem GetHpBarFromPool()
     {
-        var item = _hpBarPool.Count > 0 ? _hpBarPool.Dequeue() : CreateHpBarInstance();
-        if (item == null)
+        EnsureHpBarPool(); // 确保血条池可用
+        var uiRoot = GetUiContainer(); // UI 容器
+        if (_hpBarPool == null || uiRoot == null)
         {
             return null;
         }
 
-        item.gameObject.SetActive(true);
-        item.transform.SetParent(_uiRoot, false);
+        var go = _hpBarPool.Get(uiRoot); // 取出血条实例
+        if (go == null)
+        {
+            return null;
+        }
+
+        var item = go.GetComponent<UnitHpBarItem>(); // 获取血条组件
+        if (item == null)
+        {
+            _hpBarPool.Return(go); // 归还异常实例
+            return null;
+        }
+
         return item;
     }
 
@@ -437,44 +608,26 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     /// </summary>
     private DamageTextItem GetDamageTextFromPool()
     {
-        var item = _damagePool.Count > 0 ? _damagePool.Dequeue() : CreateDamageTextInstance();
+        EnsureDamagePool(); // 确保飘字池可用
+        var uiRoot = GetUiContainer(); // UI 容器
+        if (_damagePool == null || uiRoot == null)
+        {
+            return null;
+        }
+
+        var go = _damagePool.Get(uiRoot); // 取出飘字实例
+        if (go == null)
+        {
+            return null;
+        }
+
+        var item = go.GetComponent<DamageTextItem>(); // 获取飘字组件
         if (item == null)
         {
+            _damagePool.Return(go); // 归还异常实例
             return null;
         }
 
-        item.gameObject.SetActive(true);
-        item.transform.SetParent(_uiRoot, false);
-        return item;
-    }
-
-    /// <summary>
-    /// 创建血条实例（放入对象池）。
-    /// </summary>
-    private UnitHpBarItem CreateHpBarInstance()
-    {
-        if (_hpBarPrefab == null || _poolRoot == null)
-        {
-            return null;
-        }
-
-        var item = Instantiate(_hpBarPrefab, _poolRoot);
-        item.gameObject.SetActive(false);
-        return item;
-    }
-
-    /// <summary>
-    /// 创建飘字实例（放入对象池）。
-    /// </summary>
-    private DamageTextItem CreateDamageTextInstance()
-    {
-        if (_damageTextPrefab == null || _poolRoot == null)
-        {
-            return null;
-        }
-
-        var item = Instantiate(_damageTextPrefab, _poolRoot);
-        item.gameObject.SetActive(false);
         return item;
     }
 
@@ -488,11 +641,16 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
             return;
         }
 
-        item.Unbind();
-        var parent = _poolRoot != null ? _poolRoot : transform;
-        item.transform.SetParent(parent, false);
-        item.gameObject.SetActive(false);
-        _hpBarPool.Enqueue(item);
+        item.Unbind(); // 解除目标绑定
+        if (_hpBarPool != null)
+        {
+            _hpBarPool.Return(item.gameObject); // 归还到血条对象池
+            return;
+        }
+
+        var parent = transform; // 回收父节点
+        item.transform.SetParent(parent, false); // 挂回回收节点
+        item.gameObject.SetActive(false); // 关闭对象
     }
 
     /// <summary>
@@ -524,10 +682,15 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
             return;
         }
 
-        var parent = _poolRoot != null ? _poolRoot : transform;
-        item.transform.SetParent(parent, false);
-        item.gameObject.SetActive(false);
-        _damagePool.Enqueue(item);
+        if (_damagePool != null)
+        {
+            _damagePool.Return(item.gameObject); // 归还到飘字对象池
+            return;
+        }
+
+        var parent = transform; // 回收父节点
+        item.transform.SetParent(parent, false); // 挂回回收节点
+        item.gameObject.SetActive(false); // 关闭对象
     }
 
     /// <summary>
@@ -545,31 +708,35 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     /// </summary>
     private bool EnsureHpUiReady()
     {
-        CacheCamera();
-        EnsurePoolRoot();
-        if (_uiRoot == null || _hpBarPrefab == null)
+        CacheCamera(); // 缓存相机引用
+        if (!EnsureUiLayerRoot())
+        {
+            return false; // UI 层级不可用
+        }
+
+        if (_hpBarPrefab == null)
         {
             if (!_warnedHpConfig)
             {
-                CY.LogWarning("[BattleFeedbackManager] 血条 UI 配置缺失，无法显示血条。");
-                _warnedHpConfig = true;
+                CY.LogWarning("[BattleFeedbackManager] 血条 UI 配置缺失，无法显示血条。"); // 输出警告日志
+                _warnedHpConfig = true; // 仅提示一次
             }
 
-            return false;
+            return false; // 血条配置缺失
         }
 
         if (_worldCamera == null)
         {
             if (!_warnedCameraConfig)
             {
-                CY.LogWarning("[BattleFeedbackManager] 未设置世界相机，血条无法跟随。");
-                _warnedCameraConfig = true;
+                CY.LogWarning("[BattleFeedbackManager] 未设置世界相机，血条无法跟随。"); // 输出警告日志
+                _warnedCameraConfig = true; // 仅提示一次
             }
 
-            return false;
+            return false; // 相机配置缺失
         }
 
-        return true;
+        return true; // 血条 UI 配置有效
     }
 
     /// <summary>
@@ -577,31 +744,35 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     /// </summary>
     private bool EnsureDamageUiReady()
     {
-        CacheCamera();
-        EnsurePoolRoot();
-        if (_uiRoot == null || _damageTextPrefab == null)
+        CacheCamera(); // 缓存相机引用
+        if (!EnsureUiLayerRoot())
+        {
+            return false; // UI 层级不可用
+        }
+
+        if (_damageTextPrefab == null)
         {
             if (!_warnedDamageConfig)
             {
-                CY.LogWarning("[BattleFeedbackManager] 飘字 UI 配置缺失，无法显示飘字。");
-                _warnedDamageConfig = true;
+                CY.LogWarning("[BattleFeedbackManager] 飘字 UI 配置缺失，无法显示飘字。"); // 输出警告日志
+                _warnedDamageConfig = true; // 仅提示一次
             }
 
-            return false;
+            return false; // 飘字配置缺失
         }
 
         if (_worldCamera == null)
         {
             if (!_warnedCameraConfig)
             {
-                CY.LogWarning("[BattleFeedbackManager] 未设置世界相机，飘字无法跟随。");
-                _warnedCameraConfig = true;
+                CY.LogWarning("[BattleFeedbackManager] 未设置世界相机，飘字无法跟随。"); // 输出警告日志
+                _warnedCameraConfig = true; // 仅提示一次
             }
 
-            return false;
+            return false; // 相机配置缺失
         }
 
-        return true;
+        return true; // 飘字 UI 配置有效
     }
 
     /// <summary>

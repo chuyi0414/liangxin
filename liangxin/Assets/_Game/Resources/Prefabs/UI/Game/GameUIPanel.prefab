@@ -537,7 +537,7 @@ MonoBehaviour:
   m_fontSizeMax: 72
   m_fontStyle: 1
   m_HorizontalAlignment: 2
-  m_VerticalAlignment: 1024
+  m_VerticalAlignment: 4096
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_wordSpacing: 0
@@ -2196,7 +2196,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u826F\u5FC3"
+  m_text: "\u516C\u53F8\n\u826F\u5FC3"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: c7de02e98d023314d9ff9a67790b9769, type: 2}
   m_sharedMaterial: {fileID: -5460135408750244798, guid: c7de02e98d023314d9ff9a67790b9769, type: 2}
@@ -2228,10 +2228,10 @@ MonoBehaviour:
   m_fontWeight: 400
   m_enableAutoSizing: 1
   m_fontSizeMin: 18
-  m_fontSizeMax: 72
+  m_fontSizeMax: 74.01
   m_fontStyle: 1
   m_HorizontalAlignment: 2
-  m_VerticalAlignment: 1024
+  m_VerticalAlignment: 4096
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_wordSpacing: 0

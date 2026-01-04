@@ -1,2 +1,2 @@
-Id,Code,Name,Camp,LifeState,Level,MaxHp,Attack,Defense,DefensePenetration,DefensePenetrationRate,CritRate,DodgeRate,IsRanged,MoveSpeed,AttackRange,SightRange,AttackInterval,AttackStopDuration
-1,E0001,壌藍分此,3,0,1,300,10,2,0,0,0.03,0.01,False,4,1,4,1.2,0.5
+﻿Id,Code,Name,Camp,LifeState,Level,MaxHp,Attack,Defense,DefensePenetration,DefensePenetrationRate,CritRate,DodgeRate,IsRanged,MoveSpeed,AttackRange,SightRange,AttackInterval,AttackStopDuration
+1,E0001,卷王尸骸,3,0,1,25,2,0,0,0,0,0,FALSE,4,1,4,1.2,0.5

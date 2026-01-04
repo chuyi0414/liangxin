@@ -78,7 +78,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
-  m_Color: {r: 1, g: 0.76415086, b: 0.76415086, a: 1}
+  m_Color: {r: 0.433, g: 0, b: 0, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -217,4 +217,9 @@ MonoBehaviour:
   _showAttackRangeGizmos: 1
   _showAttackRangeAlways: 1
   _attackRangeGizmosColor: {r: 1, g: 0.6, b: 0, a: 0.8}
+  _showSightRangeGizmos: 1
+  _showSightRangeAlways: 1
+  _sightRangeGizmosColor: {r: 0.2, g: 0.7, b: 1, a: 0.8}
+  _sightRange: 6
+  _attackStopDuration: 0.5
   _defaultAI: {fileID: 0}

@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using CYFramework; // CYFramework 入口引用
 using CYFramework.Core.Config;
 using CYFramework.Core.Pool;
 using CYFramework.Core.Resource;
@@ -149,6 +150,11 @@ namespace CYFramework.Core.UI
         /// 面板对象池（类型 -> 队列）
         /// </summary>
         private readonly Dictionary<Type, Queue<UIPanel>> _panelPool = new();
+        
+        /// <summary>
+        /// UI 元素对象池（Key -> 对象池）
+        /// </summary>
+        private readonly Dictionary<string, UIElementPool> _uiElementPools = new(); // UI 元素对象池缓存
 
         /// <summary>
         /// 回收前的兄弟顺序缓存，保证从对象池取回后恢复原层级顺序
@@ -338,6 +344,7 @@ namespace CYFramework.Core.UI
             // 清理缓存
             _prefabCache.Clear();
             _panelPool.Clear();
+            _uiElementPools.Clear(); // 清理 UI 元素对象池缓存
 
             if (_uiRoot != null)
             {
@@ -1227,6 +1234,41 @@ namespace CYFramework.Core.UI
             return names;
         }
         
+        #endregion
+
+        #region UI 元素池 API
+
+        /// <summary>
+        /// 获取或创建 UI 元素对象池。
+        /// </summary>
+        /// <param name="key">对象池 Key。</param>
+        /// <param name="prefab">预制体对象。</param>
+        /// <param name="config">对象池配置。</param>
+        public UIElementPool GetOrCreateUIElementPool(string key, GameObject prefab, PoolConfig config = null) // 获取或创建 UI 元素池
+        {
+            if (string.IsNullOrEmpty(key)) // Key 判空检查
+            {
+                CY.LogWarning("[UIManager] UI 元素对象池 Key 为空，无法创建。"); // 输出警告日志
+                return null; // 返回空
+            }
+
+            if (prefab == null) // 预制体判空检查
+            {
+                CY.LogWarning($"[UIManager] UI 元素对象池预制体为空，Key: {key}"); // 输出警告日志
+                return null; // 返回空
+            }
+
+            if (_uiElementPools.TryGetValue(key, out var cachedPool)) // 查询缓存池
+            {
+                return cachedPool; // 返回缓存池
+            }
+
+            var goPool = CY.Pool.GetOrCreatePool(key, prefab, "UI", config); // 创建 GameObject 对象池
+            var elementPool = new UIElementPool(goPool); // 创建 UI 元素池包装
+            _uiElementPools[key] = elementPool; // 缓存 UI 元素池
+            return elementPool; // 返回 UI 元素池
+        }
+
         #endregion
         
         #region 私有方法

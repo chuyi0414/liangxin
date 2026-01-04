@@ -212,6 +212,7 @@ public T LoadConfig<T>(string path) where T : ScriptableObject
 - **内存收缩**：低内存警告时回`Overflow` 对象 + 50% 空闲对象
 
 - **类型支持**：GameObject / 纯数Struct / UI 节点
+- **UI 元素池**：`CY.UI.GetOrCreateUIElementPool(key, prefab, config)`，用于非 UIPanel 的 UI 元素复用（如血条、飘字），池根挂在 `[ObjectPools]/UI`，取出后自动修正 `RectTransform.anchoredPosition3D.z = 0`。
 
 #### 3.1.7 音频系统 (Audio System) [NEW]
 
