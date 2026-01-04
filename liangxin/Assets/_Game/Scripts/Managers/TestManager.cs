@@ -93,7 +93,7 @@ public sealed class TestManager : MonoBehaviour, IInitializable, IUpdateable, ID
             return;
         }
 
-        if (Input.GetKeyDown(KeyCode.Space))
+        /*if (Input.GetKeyDown(KeyCode.Space))
         {
             var unitManager = CY.Unit;
             if (unitManager == null)
@@ -144,6 +144,6 @@ public sealed class TestManager : MonoBehaviour, IInitializable, IUpdateable, ID
             var paused = !waveManager.IsPaused; // 计算目标暂停状态
             waveManager.SetPaused(paused); // 设置暂停
             CY.LogInfo($"[TestManager] 波次暂停状态切换为：{paused}。"); // 输出日志
-        }
+        }*/
     }
 }

@@ -87,6 +87,14 @@ public abstract class UnitEntity : EntityBase
     private bool _hasDespawnedEvent;
     /// <summary>攻击冷却计时器（秒）。</summary>
     private float _attackCooldown;
+    /// <summary>子弹预制体路径（Resources 相对路径，不含 .prefab）。</summary>
+    private string _bulletPrefabPath; // 子弹预制体路径
+    /// <summary>子弹飞行速度（允许为 0，表示使用子弹默认速度）。</summary>
+    private float _bulletSpeed; // 子弹速度
+    /// <summary>Transform 缓存（避免高频访问开销）。</summary>
+    private Transform _cachedTransform; // Transform 缓存引用
+    /// <summary>碰撞体缓存（用于距离计算与命中点推导）。</summary>
+    private Collider2D _cachedCollider2D; // 碰撞体缓存引用
 
     /// <summary>策划配置表 ID（只读）。</summary>
     public int UnitConfigId => _unitConfigId;
@@ -108,6 +116,25 @@ public abstract class UnitEntity : EntityBase
     public int MaxHp => _baseStats.MaxHp;
     /// <summary>攻击冷却剩余时间（只读）。</summary>
     public float AttackCooldown => _attackCooldown;
+    /// <summary>子弹预制体路径（只读）。</summary>
+    public string BulletPrefabPath => _bulletPrefabPath; // 子弹路径只读访问
+    /// <summary>子弹飞行速度（只读，0 表示使用子弹默认速度）。</summary>
+    public float BulletSpeed => _bulletSpeed; // 子弹速度只读访问
+    /// <summary>Transform 缓存（只读）。</summary>
+    public Transform CachedTransform => _cachedTransform; // 对外只读 Transform
+    /// <summary>碰撞体缓存（只读）。</summary>
+    public Collider2D CachedCollider2D => _cachedCollider2D; // 对外只读碰撞体
+
+    /// <summary>
+    /// 实体初始化：缓存组件引用。
+    /// </summary>
+    /// <param name="userData">初始化传入的数据。</param>
+    protected override void OnEntityInit(object userData)
+    {
+        base.OnEntityInit(userData); // 调用父类初始化
+        _cachedTransform = transform; // 缓存 Transform
+        _cachedCollider2D = GetComponent<Collider2D>(); // 缓存碰撞体组件
+    }
 
     /// <summary>
     /// 应用基础数据（用于数据表初始化，避免在外部直接改字段）。
@@ -121,6 +148,31 @@ public abstract class UnitEntity : EntityBase
         _lifeState = lifeState;
         _level = level < 1 ? 1 : level;
         _baseStats = stats;
+    }
+
+    /// <summary>
+    /// 应用子弹预制体路径（来自配置表）。
+    /// </summary>
+    /// <param name="bulletPrefabPath">Resources 相对路径（不含 .prefab）。</param>
+    protected void ApplyBulletPrefabPath(string bulletPrefabPath)
+    {
+        _bulletPrefabPath = string.IsNullOrEmpty(bulletPrefabPath) ? string.Empty : bulletPrefabPath; // 写入子弹路径
+    }
+
+    /// <summary>
+    /// 应用子弹飞行速度（来自配置表）。
+    /// </summary>
+    /// <param name="bulletSpeed">子弹速度（允许为 0，表示使用子弹默认速度）。</param>
+    protected void ApplyBulletSpeed(float bulletSpeed)
+    {
+        if (bulletSpeed < 0f)
+        {
+            CY.LogWarning("[UnitEntity] 子弹速度小于 0，已回退为 0（使用子弹默认速度）。"); // 输出速度纠正警告
+            _bulletSpeed = 0f; // 回退为 0
+            return;
+        }
+
+        _bulletSpeed = bulletSpeed; // 写入子弹速度
     }
 
     /// <summary>
@@ -256,15 +308,151 @@ public abstract class UnitEntity : EntityBase
         {
             return false;
         }
-
-        if (!target.TryApplyDamage(damage, isCrit))
+        
+        var attackSuccess = false; // 攻击成功标记
+        if (_baseStats.IsRanged)
         {
-            return false;
+            attackSuccess = TryFireBullet(target, damage, isCrit); // 远程攻击走发射子弹
+        }
+        else
+        {
+            attackSuccess = target.TryApplyDamage(damage, isCrit); // 近战攻击直接伤害
+        }
+
+        if (!attackSuccess)
+        {
+            return false; // 攻击未成功时返回失败
         }
 
         var interval = _baseStats.AttackInterval;
         _attackCooldown = interval > 0f ? interval : 0f;
         return true;
+    }
+
+    /// <summary>
+    /// 按方向尝试远程攻击（按 AttackInterval 冷却）。
+    /// </summary>
+    /// <param name="direction">发射方向。</param>
+    /// <param name="isCrit">是否暴击。</param>
+    public bool TryAttackDirection(Vector2 direction, bool isCrit = false)
+    {
+        if (_lifeState == UnitLifeState.Dead)
+        {
+            return false; // 死亡时不可攻击
+        }
+
+        if (!_baseStats.IsRanged)
+        {
+            return false; // 非远程单位不允许方向攻击
+        }
+
+        if (_attackCooldown > 0f)
+        {
+            return false; // 冷却未结束时返回
+        }
+
+        var damage = _baseStats.Attack; // 读取攻击力
+        if (damage <= 0)
+        {
+            return false; // 攻击力无效时返回
+        }
+
+        if (direction.sqrMagnitude <= 0f)
+        {
+            return false; // 方向无效时返回
+        }
+
+        if (!TryFireBulletByDirection(direction, damage, isCrit))
+        {
+            return false; // 发射失败时返回
+        }
+
+        var interval = _baseStats.AttackInterval; // 读取攻击间隔
+        _attackCooldown = interval > 0f ? interval : 0f; // 写入冷却时间
+        return true; // 返回攻击成功
+    }
+
+    /// <summary>
+    /// 远程攻击：生成子弹并朝目标方向发射。
+    /// </summary>
+    /// <param name="target">攻击目标。</param>
+    /// <param name="damage">子弹伤害值。</param>
+    /// <param name="isCrit">是否暴击。</param>
+    private bool TryFireBullet(UnitEntity target, int damage, bool isCrit)
+    {
+        if (target == null)
+        {
+            return false; // 目标为空时返回失败
+        }
+
+        if (damage <= 0)
+        {
+            return false; // 伤害无效时返回失败
+        }
+
+        var origin = _cachedTransform != null ? (Vector2)_cachedTransform.position : (Vector2)transform.position; // 读取子弹出生点
+        var targetPos = origin; // 初始化目标点为出生点
+        if (target.CachedCollider2D != null)
+        {
+            targetPos = target.CachedCollider2D.ClosestPoint(origin); // 使用碰撞体最近点作为命中目标点
+        }
+        else if (target.CachedTransform != null)
+        {
+            targetPos = (Vector2)target.CachedTransform.position; // 使用目标 Transform 坐标
+        }
+        else
+        {
+            targetPos = (Vector2)target.transform.position; // 兜底使用目标 Transform 坐标
+        }
+
+        var direction = targetPos - origin; // 计算发射方向
+        if (direction.sqrMagnitude <= 0f)
+        {
+            return false; // 方向无效时返回失败
+        }
+
+        return TryFireBulletByDirection(direction, damage, isCrit); // 使用方向发射子弹
+    }
+
+    /// <summary>
+    /// 按方向发射子弹（内部使用，需确保方向有效）。
+    /// </summary>
+    /// <param name="direction">发射方向。</param>
+    /// <param name="damage">子弹伤害值。</param>
+    /// <param name="isCrit">是否暴击。</param>
+    private bool TryFireBulletByDirection(Vector2 direction, int damage, bool isCrit)
+    {
+        var bulletPrefabPath = _bulletPrefabPath; // 读取子弹预制体路径
+        if (string.IsNullOrEmpty(bulletPrefabPath))
+        {
+            CY.LogError("[UnitEntity] 远程攻击缺少子弹预制体路径。"); // 输出子弹路径缺失错误
+            return false; // 无路径时返回失败
+        }
+
+        direction.Normalize(); // 归一化方向向量
+
+        var origin = _cachedTransform != null ? (Vector2)_cachedTransform.position : (Vector2)transform.position; // 读取子弹出生点
+
+        var bullet = CY.Entity.SpawnEntity<BulletEntity>(bulletPrefabPath, bulletPrefabPath, EntityGroup.Projectiles); // 使用配置路径生成子弹
+        if (bullet == null)
+        {
+            return false; // 子弹生成失败时返回失败
+        }
+
+        var data = new BulletSpawnData // 组装子弹生成数据
+        {
+            Position = origin, // 子弹出生位置
+            Direction = direction, // 子弹飞行方向
+            Speed = _bulletSpeed, // 子弹速度（0 表示使用子弹默认速度）
+            Lifetime = 0f, // 生命周期为 0 表示使用子弹默认寿命
+            Damage = damage, // 子弹伤害
+            Camp = _camp, // 子弹阵营
+            Owner = this, // 子弹拥有者
+            IsCrit = isCrit // 是否暴击
+        };
+
+        bullet.Setup(ref data); // 初始化子弹数据
+        return true; // 返回发射成功
     }
 
     /// <summary>

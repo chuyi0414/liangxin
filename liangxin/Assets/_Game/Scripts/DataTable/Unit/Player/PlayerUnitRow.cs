@@ -40,6 +40,10 @@ public sealed class PlayerUnitRow : IDataRow
     public float AttackRange;
     /// <summary>攻击间隔（秒）。</summary>
     public float AttackInterval;
+    /// <summary>子弹预制体路径（Resources 相对路径，不含 .prefab）。</summary>
+    public string BulletPrefabPath;
+    /// <summary>子弹飞行速度（必填，允许为 0 表示使用子弹默认速度）。</summary>
+    public float BulletSpeed;
 
     int IDataRow.Id => Id;
 
@@ -65,5 +69,7 @@ public sealed class PlayerUnitRow : IDataRow
         MoveSpeed = float.Parse(values[14], CultureInfo.InvariantCulture);
         AttackRange = float.Parse(values[15], CultureInfo.InvariantCulture);
         AttackInterval = float.Parse(values[16], CultureInfo.InvariantCulture);
+        BulletPrefabPath = values[17]; // 读取子弹预制体路径（必填）
+        BulletSpeed = float.Parse(values[18], CultureInfo.InvariantCulture); // 读取子弹速度（允许为 0）
     }
 }

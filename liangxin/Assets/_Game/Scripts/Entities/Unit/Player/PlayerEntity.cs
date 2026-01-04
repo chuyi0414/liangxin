@@ -13,6 +13,20 @@ public sealed class PlayerEntity : UnitEntity
     private Transform _cachedTransform;
     /// <summary>2D 刚体组件，用于物理移动与碰撞。</summary>
     private Rigidbody2D _rigidbody2D;
+    /// <summary>攻击按键（默认空格）。</summary>
+    [SerializeField] private KeyCode _attackKey = KeyCode.Space; // 攻击按键配置
+    /// <summary>是否允许长按连续发射。</summary>
+    [SerializeField] private bool _allowHoldAttack = true; // 长按攻击开关
+    /// <summary>主摄像机缓存。</summary>
+    private Camera _cachedCamera; // 摄像机缓存
+    /// <summary>是否已输出缺少摄像机的日志。</summary>
+    private bool _hasLoggedMissingCamera; // 缺少摄像机日志标记
+    /// <summary>是否显示攻击范围 Gizmos。</summary>
+    [SerializeField] private bool _showAttackRangeGizmos = true; // 攻击范围显示开关
+    /// <summary>是否始终显示攻击范围（不选中也显示）。</summary>
+    [SerializeField] private bool _showAttackRangeAlways = true; // 是否常显攻击范围
+    /// <summary>攻击范围 Gizmos 颜色。</summary>
+    [SerializeField] private Color _attackRangeGizmosColor = new Color(0.2f, 1f, 0.2f, 0.8f); // 攻击范围颜色
 
     /// <summary>
     /// 初始化时缓存组件，避免在 Update 中重复查询。
@@ -22,6 +36,11 @@ public sealed class PlayerEntity : UnitEntity
         base.OnEntityInit(userData);
         _cachedTransform = transform;
         _rigidbody2D = GetComponent<Rigidbody2D>();
+        _cachedCamera = Camera.main; // 缓存主摄像机
+        if (_cachedCamera == null)
+        {
+            _cachedCamera = FindObjectOfType<Camera>(); // 回退获取场景中的任意摄像机（低频）
+        }
     }
 
     /// <summary>
@@ -52,6 +71,8 @@ public sealed class PlayerEntity : UnitEntity
         };
 
         ApplyBaseData(row.Id, row.Code, row.Name, row.Camp, row.LifeState, row.Level, stats);
+        ApplyBulletPrefabPath(row.BulletPrefabPath); // 应用子弹预制体路径
+        ApplyBulletSpeed(row.BulletSpeed); // 应用子弹飞行速度
         base.OnEntityShow(userData);
     }
 
@@ -64,41 +85,129 @@ public sealed class PlayerEntity : UnitEntity
     {
         base.OnEntityUpdate(deltaTime);
 
-        if (_rigidbody2D == null)
+        if (_rigidbody2D != null)
         {
-            return;
+            float horizontal = 0f; // 水平输入
+            if (Input.GetKey(KeyCode.A)) horizontal -= 1f; // A 向左
+            if (Input.GetKey(KeyCode.D)) horizontal += 1f; // D 向右
+
+            float vertical = 0f; // 垂直输入
+            if (Input.GetKey(KeyCode.S)) vertical -= 1f; // S 向下
+            if (Input.GetKey(KeyCode.W)) vertical += 1f; // W 向上
+
+            if (horizontal != 0f || vertical != 0f)
+            {
+                var speed = BaseStats.MoveSpeed; // 读取移动速度
+                if (speed > 0f)
+                {
+                    var direction = new Vector2(horizontal, vertical); // 组装移动方向
+                    if (direction.sqrMagnitude > 1f)
+                    {
+                        direction.Normalize(); // 归一化避免斜向加速
+                    }
+
+                    _rigidbody2D.MovePosition(_rigidbody2D.position + direction * speed * deltaTime); // 使用刚体移动
+                }
+            }
         }
 
-        float horizontal = 0f;
-        if (Input.GetKey(KeyCode.A)) horizontal -= 1f;
-        if (Input.GetKey(KeyCode.D)) horizontal += 1f;
-
-        float vertical = 0f;
-        if (Input.GetKey(KeyCode.S)) vertical -= 1f;
-        if (Input.GetKey(KeyCode.W)) vertical += 1f;
-
-        if (horizontal == 0f && vertical == 0f)
-        {
-            return;
-        }
-
-        var speed = BaseStats.MoveSpeed;
-        if (speed <= 0f)
-        {
-            return;
-        }
-
-        var direction = new Vector2(horizontal, vertical);
-        if (direction.sqrMagnitude > 1f)
-        {
-            direction.Normalize();
-        }
-
-        _rigidbody2D.MovePosition(_rigidbody2D.position + direction * speed * deltaTime);
+        TryHandleAttackInput(); // 处理攻击输入
     }
 
     protected override void OnEntityRecycle()
     {
         base.OnEntityRecycle();
+    }
+
+    /// <summary>
+    /// 绘制攻击范围（仅在编辑器 Scene 视图中显示）。
+    /// </summary>
+    private void OnDrawGizmos()
+    {
+        if (!_showAttackRangeGizmos || !_showAttackRangeAlways)
+        {
+            return;
+        }
+
+        DrawAttackRangeGizmos(); // 绘制攻击范围
+    }
+
+    /// <summary>
+    /// 绘制攻击范围（选中时显示）。
+    /// </summary>
+    private void OnDrawGizmosSelected()
+    {
+        if (!_showAttackRangeGizmos)
+        {
+            return;
+        }
+
+        DrawAttackRangeGizmos(); // 绘制攻击范围
+    }
+
+    /// <summary>
+    /// 绘制攻击范围（统一入口）。
+    /// </summary>
+    private void DrawAttackRangeGizmos()
+    {
+        if (!BaseStats.IsRanged)
+        {
+            return; // 近战不显示攻击范围
+        }
+
+        var t = _cachedTransform != null ? _cachedTransform : transform; // 获取可用 Transform
+        var attackRange = BaseStats.AttackRange; // 获取攻击范围
+        if (attackRange <= 0f)
+        {
+            return;
+        }
+
+        Gizmos.color = _attackRangeGizmosColor; // 设置攻击范围颜色
+        Gizmos.DrawWireSphere(t.position, attackRange); // 绘制攻击范围圆
+    }
+
+    /// <summary>
+    /// 处理攻击输入：按键长按，根据鼠标方向发射子弹。
+    /// </summary>
+    private void TryHandleAttackInput()
+    {
+        if (!BaseStats.IsRanged)
+        {
+            return; // 近战不处理远程输入
+        }
+
+        var wantsFire = _allowHoldAttack ? Input.GetKey(_attackKey) : Input.GetKeyDown(_attackKey); // 判断是否触发攻击
+        if (!wantsFire)
+        {
+            return; // 未触发攻击时退出
+        }
+
+        if (_cachedCamera == null)
+        {
+            _cachedCamera = Camera.main; // 重新获取主摄像机
+        }
+
+        if (_cachedCamera == null)
+        {
+            if (!_hasLoggedMissingCamera)
+            {
+                CY.LogError("[PlayerEntity] 未找到可用摄像机（需要 MainCamera 标签或场景摄像机）。"); // 输出摄像机缺失错误
+                _hasLoggedMissingCamera = true; // 标记已输出日志
+            }
+
+            return; // 摄像机为空时无法计算世界坐标
+        }
+
+        var origin = _cachedTransform != null ? _cachedTransform.position : transform.position; // 获取自身位置
+        var screenPos = Input.mousePosition; // 读取鼠标屏幕坐标
+        screenPos.z = Mathf.Abs(_cachedCamera.transform.position.z - origin.z); // 设置投射深度
+        var mouseWorld = _cachedCamera.ScreenToWorldPoint(screenPos); // 计算鼠标世界坐标
+        var direction = (Vector2)mouseWorld - (Vector2)origin; // 计算发射方向
+        if (direction.sqrMagnitude <= 0f)
+        {
+            return; // 方向无效时退出
+        }
+
+        TryAttackDirection(direction); // 按方向触发攻击
     }
 }

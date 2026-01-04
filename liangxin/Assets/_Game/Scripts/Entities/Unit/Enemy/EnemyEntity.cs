@@ -52,6 +52,8 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
     private EnemyAIBase _currentAI; // 当前 AI 缓存
     /// <summary>攻击停顿计时器（秒）。</summary>
     private float _attackLockTimer; // 攻击锁定计时器
+    /// <summary>是否已处理死亡回收（防止重复执行）。</summary>
+    private bool _hasDeathRecycled; // 死亡回收标记
 
     /// <summary>当前 AI（只读）。</summary>
     public EnemyAIBase CurrentAI => _currentAI; // 对外只读访问
@@ -86,6 +88,7 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
         ApplyEnemyData(userData as EnemyUnitRow); // 读取敌人数据行
         base.OnEntityShow(userData); // 调用父类显示
         _hasDestination = false; // 重置目的地标记
+        _hasDeathRecycled = false; // 重置死亡回收标记
         SetAI(null, true); // 显示时强制重置为默认 AI
     }
 
@@ -128,6 +131,12 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
     protected override void OnEntityUpdate(float deltaTime) // 实体更新入口
     {
         base.OnEntityUpdate(deltaTime); // 调用父类更新
+        if (LifeState == UnitLifeState.Dead) // 死亡状态优先处理回收
+        {
+            HandleDeathRecycle(); // 执行死亡回收逻辑
+            return; // 死亡后不再执行 AI
+        }
+
         TickAttackLock(deltaTime); // 推进攻击停顿计时
         if (IsAttackLocked)
         {
@@ -146,6 +155,41 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
         }
 
         _currentAI.Tick(this, deltaTime); // 执行当前 AI 逻辑
+    }
+
+    /// <summary>
+    /// 处理死亡回收（停止移动、退出 AI、移除管理器引用、回收实体）。
+    /// </summary>
+    private void HandleDeathRecycle() // 死亡回收入口
+    {
+        if (_hasDeathRecycled) // 已处理过回收则直接返回
+        {
+            return; // 避免重复回收
+        }
+
+        _hasDeathRecycled = true; // 标记已处理死亡回收
+        StopMovement(); // 停止移动避免继续寻路
+
+        if (_currentAI != null) // 存在 AI 时执行退出
+        {
+            _currentAI.OnExit(this); // 通知 AI 退出
+            _currentAI = null; // 清理当前 AI 引用
+        }
+
+        if (_unitManager == null) // 管理器为空时尝试重新获取
+        {
+            _unitManager = CY.Unit; // 重新缓存单位管理器
+        }
+
+        if (_unitManager != null) // 管理器有效时移除敌人引用
+        {
+            _unitManager.RemoveEnemy(this); // 从敌人列表移除
+        }
+
+        if (Id > 0) // 实体 Id 有效时才回收
+        {
+            CY.Entity.RecycleEntity(Id); // 交给实体系统回收
+        }
     }
 
     /// <summary>
