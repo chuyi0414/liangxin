@@ -1,4 +1,5 @@
 # 项目规则入口
+所有恢复必须要中文回复
 
 主规则：`Assets/CYFramework/AI_SYSTEM_PROMPT.md`
 

@@ -37,7 +37,7 @@ public struct BulletSpawnData // 子弹生成数据结构体
 [RequireComponent(typeof(Rigidbody2D))] // 约束必须挂载刚体组件
 [RequireComponent(typeof(Collider2D))] // 约束必须挂载碰撞体组件
 [EntityPrefab("Prefabs/Entities/Projectiles/BulletBase", "BulletBase", "Projectiles")] // 绑定子弹预制体路径
-public class BulletEntity : EntityBase // 子弹实体定义
+public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // 子弹实体定义
 {
     [Header("基础参数")] // Inspector 分组：基础参数
     /// <summary>默认移动速度。</summary>
@@ -94,6 +94,8 @@ public class BulletEntity : EntityBase // 子弹实体定义
     private Vector2 _cachedVelocityBeforePause; // 暂停速度缓存
     /// <summary>是否有暂停速度缓存。</summary>
     private bool _hasPauseVelocity; // 暂停缓存标记
+    /// <summary>是否已应用预显示数据。</summary>
+    private bool _hasPreShowData; // 预显示数据标记
 
     /// <summary>当前方向（只读）。</summary>
     public Vector2 Direction => _direction; // 方向只读访问
@@ -116,9 +118,22 @@ public class BulletEntity : EntityBase // 子弹实体定义
     /// <param name="data">生成数据（按需设置）。</param>
     public void Setup(ref BulletSpawnData data) // 外部初始化入口
     {
+        DisableCachedRenderers(); // 初始化前先隐藏渲染
         ResetRuntimeState(); // 重置运行时状态
         ApplySpawnData(ref data); // 应用生成数据
         ApplySpawnVelocity(); // 应用初始速度
+        RestoreCachedRenderersToDefault(); // 初始化完成后恢复渲染
+    }
+
+    /// <summary>
+    /// 预显示数据应用（激活前调用）。
+    /// </summary>
+    /// <param name="data">预显示数据。</param>
+    public void ApplyPreShowData(ref BulletSpawnData data) // 预显示数据应用入口
+    {
+        ResetRuntimeState(); // 重置运行时状态
+        ApplySpawnData(ref data); // 应用生成数据
+        _hasPreShowData = true; // 标记已应用预显示数据
     }
 
     /// <summary>
@@ -145,24 +160,41 @@ public class BulletEntity : EntityBase // 子弹实体定义
     }
 
     /// <summary>
+    /// 实体预显示：在激活前应用出生数据。
+    /// </summary>
+    /// <param name="userData">预显示阶段数据。</param>
+    protected override void OnEntityPreShow(object userData) // 实体预显示入口
+    {
+        base.OnEntityPreShow(userData); // 调用父类预显示
+        if (userData is BulletSpawnData data)
+        {
+            ApplyPreShowData(ref data); // 使用用户数据应用预显示数据
+        }
+    }
+
+    /// <summary>
     /// 实体显示：重置状态并应用生成数据。
     /// </summary>
     /// <param name="userData">显示时传入的数据。</param>
     protected override void OnEntityShow(object userData) // 实体显示入口
     {
         base.OnEntityShow(userData); // 调用父类显示
-        ResetRuntimeState(); // 重置运行时状态
+        if (!_hasPreShowData)
+        {
+            ResetRuntimeState(); // 未应用预显示数据时重置状态
 
-        if (userData is BulletSpawnData data)
-        {
-            ApplySpawnData(ref data); // 应用生成数据
-        }
-        else if (userData != null)
-        {
-            CY.LogWarning("[BulletEntity] UserData 类型不正确，已使用默认参数。"); // 输出类型不匹配警告
+            if (userData is BulletSpawnData data)
+            {
+                ApplySpawnData(ref data); // 应用生成数据
+            }
+            else if (userData != null)
+            {
+                CY.LogWarning("[BulletEntity] UserData 类型不正确，已使用默认参数。"); // 输出类型不匹配警告
+            }
         }
 
         ApplySpawnVelocity(); // 应用初始速度
+        _hasPreShowData = false; // 清理预显示数据标记
     }
 
     /// <summary>
@@ -175,6 +207,7 @@ public class BulletEntity : EntityBase // 子弹实体定义
         _canHit = false; // 关闭命中
         _owner = null; // 清理拥有者引用
         _hasHit = false; // 清理命中标记
+        _hasPreShowData = false; // 清理预显示数据标记
         base.OnEntityHide(); // 调用父类隐藏
     }
 
@@ -188,6 +221,7 @@ public class BulletEntity : EntityBase // 子弹实体定义
         _canHit = false; // 关闭命中
         _owner = null; // 清理拥有者引用
         _hasHit = false; // 清理命中标记
+        _hasPreShowData = false; // 清理预显示数据标记
         base.OnEntityRecycle(); // 调用父类回收
     }
 

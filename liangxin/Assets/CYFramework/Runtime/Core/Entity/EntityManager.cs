@@ -114,6 +114,40 @@ namespace CYFramework.Core.Entity
         void OnRecycle();
     }
     
+
+
+    /// <summary>
+    /// 实体预显示接口（用于在激活前应用位置与朝向）。
+    /// </summary>
+    public interface IEntityPreShowTransform // 实体预显示变换接口
+    {
+        /// <summary>
+        /// 获取预显示位置（世界坐标）。
+        /// </summary>
+        /// <param name="position">输出位置。</param>
+        /// <returns>是否提供有效位置。</returns>
+        bool TryGetPreShowPosition(out Vector3 position); // 预显示位置获取
+
+        /// <summary>
+        /// 获取预显示旋转。
+        /// </summary>
+        /// <param name="rotation">输出旋转。</param>
+        /// <returns>是否提供有效旋转。</returns>
+        bool TryGetPreShowRotation(out Quaternion rotation); // 预显示旋转获取
+    }
+
+    /// <summary>
+    /// 实体预显示数据接口（用于无装箱注入出生数据）。
+    /// </summary>
+    /// <typeparam name="TData">出生数据类型。</typeparam>
+    public interface IEntityPreShowData<TData> where TData : struct // 实体预显示数据接口
+    {
+        /// <summary>
+        /// 应用预显示数据（激活前调用）。
+        /// </summary>
+        /// <param name="data">出生数据（引用传递）。</param>
+        void ApplyPreShowData(ref TData data); // 预显示数据应用
+    }
     /// <summary>
     /// 实体基类
     /// </summary>
@@ -160,6 +194,36 @@ namespace CYFramework.Core.Entity
         /// 用户数据缓存
         /// </summary>
         protected object UserData { get; private set; }
+
+        /// <summary>
+        /// 渲染组件缓存。
+        /// </summary>
+        private Renderer[] _cachedRenderers; // 渲染组件缓存
+        /// <summary>
+        /// 渲染组件默认启用状态缓存。
+        /// </summary>
+        private bool[] _cachedRendererDefaultStates; // 渲染默认状态缓存
+        /// <summary>
+        /// 渲染缓存是否已初始化。
+        /// </summary>
+        private bool _rendererCacheReady; // 渲染缓存就绪标记
+        /// <summary>
+        /// 是否自动恢复渲染组件可见性。
+        /// </summary>
+        private bool _autoRestoreRenderers = true; // 自动恢复渲染开关
+        /// <summary>
+        /// 回收隐藏位置（用于对象池回收后远离场景）。
+        /// </summary>
+        private static readonly Vector3 HiddenWorldPosition = new Vector3(100000f, 100000f, 0f); // 回收隐藏位置
+
+        /// <summary>
+        /// 是否自动恢复渲染组件可见性（供子类控制）。
+        /// </summary>
+        protected bool AutoRestoreRenderers // 自动恢复渲染属性
+        {
+            get => _autoRestoreRenderers; // 读取自动恢复开关
+            set => _autoRestoreRenderers = value; // 写入自动恢复开关
+        }
         
         /// <summary>
         /// 初始化实体
@@ -169,6 +233,7 @@ namespace CYFramework.Core.Entity
             Id = id;
             UserData = userData;
             IsPaused = false;
+            CacheRenderersIfNeeded(); // 缓存渲染默认状态
             OnEntityInit(userData);
         }
         
@@ -180,8 +245,15 @@ namespace CYFramework.Core.Entity
             UserData = userData;
             IsVisible = true;
             IsPaused = false;
+            ApplyPreShowTransform(userData); // 应用预显示变换
+            OnEntityPreShow(userData); // 预显示钩子
+            DisableCachedRenderers(); // 先隐藏渲染避免旧状态闪烁
             gameObject.SetActive(true);
             OnEntityShow(userData);
+            if (_autoRestoreRenderers)
+            {
+                RestoreCachedRenderersToDefault(); // 自动恢复渲染默认可见性
+            }
         }
         
         /// <summary>
@@ -191,6 +263,8 @@ namespace CYFramework.Core.Entity
         {
             IsVisible = false;
             OnEntityHide();
+            DisableCachedRenderers(); // 隐藏渲染避免回收残留
+            MoveToHiddenPosition(); // 移动到隐藏位置避免残留碰撞
             gameObject.SetActive(false);
         }
         
@@ -253,6 +327,8 @@ namespace CYFramework.Core.Entity
         public void OnRecycle()
         {
             OnEntityRecycle();
+            DisableCachedRenderers(); // 回收前隐藏渲染
+            MoveToHiddenPosition(); // 回收时移动到隐藏位置
             Id = 0;
             UserData = null;
             IsPaused = false;
@@ -267,12 +343,143 @@ namespace CYFramework.Core.Entity
         /// 对象池回收回调
         /// </summary>
         public void OnDespawn() => OnRecycle();
+
+        /// <summary>
+        /// 应用预显示变换（由 userData 驱动）。
+        /// </summary>
+        /// <param name="userData">显示阶段用户数据。</param>
+        private void ApplyPreShowTransform(object userData) // 预显示变换应用入口
+        {
+            if (userData is not IEntityPreShowTransform preShowTransform)
+            {
+                return; // 未实现接口时直接返回
+            }
+
+            var t = transform; // 获取 Transform
+            if (t == null)
+            {
+                return; // Transform 为空时返回
+            }
+
+            if (preShowTransform.TryGetPreShowPosition(out var position))
+            {
+                t.position = position; // 设置预显示位置
+            }
+
+            if (preShowTransform.TryGetPreShowRotation(out var rotation))
+            {
+                t.rotation = rotation; // 设置预显示旋转
+            }
+        }
+
+        /// <summary>
+        /// 缓存渲染组件与默认启用状态（仅初始化一次）。
+        /// </summary>
+        private void CacheRenderersIfNeeded() // 渲染缓存初始化入口
+        {
+            if (_rendererCacheReady)
+            {
+                return; // 已缓存时直接返回
+            }
+
+            _cachedRenderers = GetComponentsInChildren<Renderer>(true); // 获取渲染组件集合
+            if (_cachedRenderers == null || _cachedRenderers.Length == 0)
+            {
+                _cachedRenderers = Array.Empty<Renderer>(); // 置空渲染缓存
+                _cachedRendererDefaultStates = Array.Empty<bool>(); // 置空默认状态缓存
+                _rendererCacheReady = true; // 标记缓存完成
+                return; // 无渲染组件时退出
+            }
+
+            _cachedRendererDefaultStates = new bool[_cachedRenderers.Length]; // 分配默认状态缓存
+            for (int i = 0; i < _cachedRenderers.Length; i++) // i 为索引
+            {
+                var renderer = _cachedRenderers[i]; // 获取当前渲染组件
+                _cachedRendererDefaultStates[i] = renderer != null && renderer.enabled; // 记录默认启用状态
+            }
+
+            _rendererCacheReady = true; // 标记缓存完成
+        }
+
+        /// <summary>
+        /// 禁用缓存中的所有渲染组件。
+        /// </summary>
+        protected void DisableCachedRenderers() // 渲染禁用入口
+        {
+            CacheRenderersIfNeeded(); // 确保渲染缓存可用
+            if (_cachedRenderers == null || _cachedRenderers.Length == 0)
+            {
+                return; // 无渲染组件时返回
+            }
+
+            for (int i = 0; i < _cachedRenderers.Length; i++) // i 为索引
+            {
+                var renderer = _cachedRenderers[i]; // 获取当前渲染组件
+                if (renderer == null)
+                {
+                    continue; // 空组件时跳过
+                }
+
+                renderer.enabled = false; // 关闭渲染组件
+            }
+        }
+
+        /// <summary>
+        /// 恢复缓存中的渲染组件到默认启用状态。
+        /// </summary>
+        protected void RestoreCachedRenderersToDefault() // 渲染恢复入口
+        {
+            CacheRenderersIfNeeded(); // 确保渲染缓存可用
+            if (_cachedRenderers == null || _cachedRenderers.Length == 0)
+            {
+                return; // 无渲染组件时返回
+            }
+
+            var defaultStates = _cachedRendererDefaultStates; // 读取默认状态缓存
+            if (defaultStates == null || defaultStates.Length == 0)
+            {
+                return; // 默认状态无效时返回
+            }
+
+            for (int i = 0; i < _cachedRenderers.Length; i++) // i 为索引
+            {
+                var renderer = _cachedRenderers[i]; // 获取当前渲染组件
+                if (renderer == null)
+                {
+                    continue; // 空组件时跳过
+                }
+
+                renderer.enabled = defaultStates[i]; // 恢复默认启用状态
+            }
+        }
+
+        /// <summary>
+        /// 将实体移动到隐藏位置，避免对象池复用闪烁与误碰撞。
+        /// </summary>
+        private void MoveToHiddenPosition() // 隐藏位置移动入口
+        {
+            var t = transform; // 获取 Transform
+            if (t == null)
+            {
+                return; // Transform 为空时返回
+            }
+
+            var pos = t.position; // 获取当前世界坐标
+            pos.x = HiddenWorldPosition.x; // 写入隐藏 X
+            pos.y = HiddenWorldPosition.y; // 写入隐藏 Y
+            t.position = pos; // 写回世界坐标
+        }
         
         // 子类重写
         /// <summary>
         /// 实体初始化（子类重写）
         /// </summary>
         protected virtual void OnEntityInit(object userData) { }
+        /// <summary>
+        /// 实体预显示（子类重写）。
+        /// </summary>
+        /// <param name="userData">显示阶段用户数据。</param>
+        protected virtual void OnEntityPreShow(object userData) { }
         /// <summary>
         /// 实体显示（子类重写）
         /// </summary>
@@ -381,6 +588,13 @@ namespace CYFramework.Core.Entity
             public string Path;
             public string EntityType;
             public string GroupName;
+        }
+
+        /// <summary>
+        /// 空预显示数据结构（用于无预显示数据的统一入口）。
+        /// </summary>
+        private struct EmptyPreShowData // 空预显示数据结构
+        {
         }
 
         /// <summary>
@@ -779,6 +993,24 @@ namespace CYFramework.Core.Entity
         }
 
         /// <summary>
+        /// 生成实体（使用枚举分组，预显示数据版）
+        /// </summary>
+        /// <typeparam name="T">实体组件类型</typeparam>
+        /// <typeparam name="TData">预显示数据类型</typeparam>
+        /// <param name="entityType">实体类型/Key</param>
+        /// <param name="assetPath">资源路径</param>
+        /// <param name="group">实体分组枚举</param>
+        /// <param name="data">预显示数据（引用传递）</param>
+        /// <param name="userData">用户数据（传递给 OnInit/OnShow）</param>
+        /// <returns>实体实例</returns>
+        public T SpawnEntity<T, TData>(string entityType, string assetPath, EntityGroup group, ref TData data, object userData = null)
+            where T : class, IEntity
+            where TData : struct
+        {
+            return SpawnEntity<T, TData>(entityType, assetPath, group.ToString(), ref data, userData); // 转发到字符串分组版本
+        }
+
+        /// <summary>
         /// 生成/显示实体（泛型版，推荐使用）
         /// </summary>
         public T SpawnEntity<T>(string entityType, object userData = null) where T : class, IEntity
@@ -811,11 +1043,67 @@ namespace CYFramework.Core.Entity
         }
 
         /// <summary>
+        /// 生成/显示实体（泛型版，预显示数据版）
+        /// </summary>
+        /// <typeparam name="T">实体组件类型</typeparam>
+        /// <typeparam name="TData">预显示数据类型</typeparam>
+        /// <param name="entityType">实体类型/Key</param>
+        /// <param name="data">预显示数据（引用传递）</param>
+        /// <param name="userData">用户数据（传递给 OnInit/OnShow）</param>
+        /// <returns>实体实例</returns>
+        public T SpawnEntity<T, TData>(string entityType, ref TData data, object userData = null)
+            where T : class, IEntity
+            where TData : struct
+        {
+            EntityPrefabMeta meta = default; // 预制体元信息
+            var hasMeta = false; // 是否已获取元信息
+            var finalType = entityType; // 最终实体类型
+
+            if (string.IsNullOrEmpty(finalType))
+            {
+                hasMeta = TryGetEntityPrefabMeta(typeof(T), out meta); // 尝试获取元信息
+                finalType = !string.IsNullOrEmpty(meta.EntityType) ? meta.EntityType : typeof(T).Name; // 生成最终类型
+            }
+
+            if (!_entityInfos.ContainsKey(finalType))
+            {
+                if (!hasMeta && !TryGetEntityPrefabMeta(typeof(T), out meta))
+                {
+                    CYLog.Error($"[EntityManager] 未注册实体且未配置 EntityPrefabAttribute: {finalType}, Component={typeof(T).Name}"); // 输出错误日志
+                    return null; // 返回空实例
+                }
+
+                var groupName = string.IsNullOrEmpty(meta.GroupName) ? null : meta.GroupName; // 获取分组名称
+                if (!RegisterEntity(finalType, meta.Path, groupName))
+                {
+                    return null; // 注册失败时返回空
+                }
+            }
+
+            return SpawnEntityInternal(finalType, userData, ref data, true) as T; // 使用预显示数据生成实体
+        }
+
+        /// <summary>
         /// 生成/显示实体（直接使用组件类型名作为 EntityType）
         /// </summary>
         public T SpawnEntity<T>(object userData = null) where T : class, IEntity
         {
             return SpawnEntity<T>(string.Empty, userData);
+        }
+
+        /// <summary>
+        /// 生成/显示实体（直接使用组件类型名作为 EntityType，预显示数据版）
+        /// </summary>
+        /// <typeparam name="T">实体组件类型</typeparam>
+        /// <typeparam name="TData">预显示数据类型</typeparam>
+        /// <param name="data">预显示数据（引用传递）</param>
+        /// <param name="userData">用户数据（传递给 OnInit/OnShow）</param>
+        /// <returns>实体实例</returns>
+        public T SpawnEntity<T, TData>(ref TData data, object userData = null)
+            where T : class, IEntity
+            where TData : struct
+        {
+            return SpawnEntity<T, TData>(string.Empty, ref data, userData); // 转发到实体类型版本
         }
 
         /// <summary>
@@ -842,13 +1130,57 @@ namespace CYFramework.Core.Entity
         }
 
         /// <summary>
+        /// 生成/显示实体（自动加载版，预显示数据版）
+        /// 从对象池获取或创建新实体
+        /// </summary>
+        /// <typeparam name="T">实体组件类型</typeparam>
+        /// <typeparam name="TData">预显示数据类型</typeparam>
+        /// <param name="entityType">实体类型/Key</param>
+        /// <param name="assetPath">资源路径（若未注册则自动注册）</param>
+        /// <param name="groupName">分组名称</param>
+        /// <param name="data">预显示数据（引用传递）</param>
+        /// <param name="userData">用户数据</param>
+        /// <returns>实体实例</returns>
+        public T SpawnEntity<T, TData>(string entityType, string assetPath, string groupName, ref TData data, object userData = null)
+            where T : class, IEntity
+            where TData : struct
+        {
+            // 尝试自动注册
+            if (!_entityInfos.ContainsKey(entityType))
+            {
+                if (!RegisterEntity(entityType, assetPath, groupName))
+                {
+                    return null; // 注册失败时返回空
+                }
+            }
+            return SpawnEntity<T, TData>(entityType, ref data, userData); // 使用预显示数据生成实体
+        }
+
+        /// <summary>
         /// 生成/显示实体（自动加载版，默认分组）
         /// </summary>
         public T SpawnEntity<T>(string entityType, string assetPath, object userData = null) where T : class, IEntity
         {
             return SpawnEntity<T>(entityType, assetPath, null, userData);
         }
-        
+
+        /// <summary>
+        /// 生成/显示实体（自动加载版，默认分组，预显示数据版）
+        /// </summary>
+        /// <typeparam name="T">实体组件类型</typeparam>
+        /// <typeparam name="TData">预显示数据类型</typeparam>
+        /// <param name="entityType">实体类型/Key</param>
+        /// <param name="assetPath">资源路径（若未注册则自动注册）</param>
+        /// <param name="data">预显示数据（引用传递）</param>
+        /// <param name="userData">用户数据</param>
+        /// <returns>实体实例</returns>
+        public T SpawnEntity<T, TData>(string entityType, string assetPath, ref TData data, object userData = null)
+            where T : class, IEntity
+            where TData : struct
+        {
+            return SpawnEntity<T, TData>(entityType, assetPath, null, ref data, userData); // 转发到分组版本
+        }
+
         /// <summary>
         /// 生成实体（基础实现）
         /// </summary>
@@ -857,44 +1189,66 @@ namespace CYFramework.Core.Entity
         /// <returns>实体接口</returns>
         public IEntity SpawnEntity(string entityType, object userData = null)
         {
+            var emptyData = default(EmptyPreShowData); // 空预显示数据占位
+            return SpawnEntityInternal(entityType, userData, ref emptyData, false); // 使用统一入口生成实体
+        }
+
+        /// <summary>
+        /// 生成实体（内部实现，支持预显示数据注入）。
+        /// </summary>
+        /// <typeparam name="TData">预显示数据类型</typeparam>
+        /// <param name="entityType">实体类型</param>
+        /// <param name="userData">用户数据</param>
+        /// <param name="data">预显示数据（引用传递）</param>
+        /// <param name="applyPreShowData">是否应用预显示数据</param>
+        /// <returns>实体接口</returns>
+        private IEntity SpawnEntityInternal<TData>(string entityType, object userData, ref TData data, bool applyPreShowData)
+            where TData : struct
+        {
             // 实体类型信息
             if (!_entityInfos.TryGetValue(entityType, out var info))
             {
-                CYLog.Error($"[EntityManager] 未注册的实体类型: {entityType}");
-                return null;
+                CYLog.Error($"[EntityManager] 未注册的实体类型: {entityType}"); // 输出未注册错误
+                return null; // 返回空实体
             }
-            
+
             // 实体实例
-            IEntity entity;
-            
+            IEntity entity; // 目标实体实例
+
             // 从池中获取或创建新实体
             if (_entityPools[entityType].Count > 0)
             {
-                entity = _entityPools[entityType].Dequeue();
+                entity = _entityPools[entityType].Dequeue(); // 从对象池取出实体
             }
             else
             {
-                entity = CreateEntityInstance(info);
+                entity = CreateEntityInstance(info); // 创建新实体实例
             }
-            
+
             // 初始化并显示
             // 分配实体 ID
-            int entityId = _nextEntityId++;
-            
+            int entityId = _nextEntityId++; // 生成新的实体 ID
+
             // 确保父节点正确（如果是从池里取出来的，它可能在 PoolRoot 下）
             if (entity.GameObject.transform.parent != info.Parent)
             {
-                entity.GameObject.transform.SetParent(info.Parent);
+                entity.GameObject.transform.SetParent(info.Parent); // 修正实体父节点
             }
-            
-            entity.OnInit(entityId, userData);
+
+            entity.OnInit(entityId, userData); // 触发实体初始化
+
+            if (applyPreShowData && entity is IEntityPreShowData<TData> preShowData)
+            {
+                preShowData.ApplyPreShowData(ref data); // 激活前应用预显示数据
+            }
+
             // Spawn 时默认显示
-            entity.OnShow(userData);
-            
-            _entities[entityId] = entity;
-            _entityGroups[entityType].Add(entity);
-            
-            return entity;
+            entity.OnShow(userData); // 触发实体显示
+
+            _entities[entityId] = entity; // 注册实体到实例表
+            _entityGroups[entityType].Add(entity); // 注册实体到分组列表
+
+            return entity; // 返回实体实例
         }
 
         /// <summary>

@@ -27,6 +27,17 @@ namespace CYFramework.Core.Pool
         /// </summary>
         void OnDespawn();
     }
+
+    /// <summary>
+    /// 渲染可见性控制接口（用于对象池渲染自动恢复控制）。
+    /// </summary>
+    public interface IPoolRendererControl // 渲染控制接口
+    {
+        /// <summary>
+        /// 是否自动恢复渲染组件默认可见性。
+        /// </summary>
+        bool AutoRestoreRenderers { get; } // 自动恢复渲染开关
+    }
     
     /// <summary>
     /// 池配置
@@ -349,6 +360,33 @@ namespace CYFramework.Core.Pool
         /// IPoolable 缓存
         /// </summary>
         private readonly Dictionary<GameObject, IPoolable[]> _poolableCache = new();
+        /// <summary>
+        /// 渲染控制缓存。
+        /// </summary>
+        private readonly Dictionary<GameObject, IPoolRendererControl[]> _rendererControlCache = new(); // 渲染控制缓存
+        /// <summary>
+        /// 渲染组件缓存。
+        /// </summary>
+        private readonly Dictionary<GameObject, RendererCache> _rendererCache = new(); // 渲染组件缓存
+        /// <summary>
+        /// 回收隐藏位置（世界坐标）。
+        /// </summary>
+        private static readonly Vector3 HiddenWorldPosition = new Vector3(100000f, 100000f, 0f); // 回收隐藏位置
+        /// <summary>
+        /// 回收隐藏位置（UI 锚点坐标）。
+        /// </summary>
+        private static readonly Vector3 HiddenUiPosition = new Vector3(100000f, 100000f, 0f); // UI 回收隐藏位置
+
+        /// <summary>
+        /// 渲染组件缓存结构体。
+        /// </summary>
+        private struct RendererCache // 渲染缓存结构体
+        {
+            /// <summary>渲染组件数组。</summary>
+            public Renderer[] Renderers; // 渲染组件数组
+            /// <summary>渲染默认启用状态数组。</summary>
+            public bool[] DefaultEnabledStates; // 默认启用状态数组
+        }
         
         /// <summary>
         /// 当前激活数量
@@ -404,6 +442,7 @@ namespace CYFramework.Core.Pool
                 var go = CreateNew(); // 新对象
                 go.SetActive(false);
                 go.transform.SetParent(_poolRoot, false);
+                MoveToHiddenPosition(go); // 移动到隐藏位置
                 _pool.Push(go);
             }
 
@@ -439,6 +478,10 @@ namespace CYFramework.Core.Pool
                 _overflowCount++;
             }
             
+            CacheRendererControls(go); // 缓存渲染控制组件
+            CacheRenderers(go); // 缓存渲染组件
+            SetRenderersVisible(go, false); // 激活前先隐藏渲染
+
             // 设置位置和父级
             go.transform.SetParent(parent, false);
             go.transform.position = position;
@@ -454,6 +497,11 @@ namespace CYFramework.Core.Pool
                 {
                     poolables[i].OnSpawn();
                 }
+            }
+
+            if (ShouldAutoRestoreRenderers(go))
+            {
+                SetRenderersVisible(go, true); // 自动恢复渲染默认状态
             }
             
             return go;
@@ -476,12 +524,14 @@ namespace CYFramework.Core.Pool
                 }
             }
             
+            SetRenderersVisible(go, false); // 回收前隐藏渲染
             go.SetActive(false);
             
             // Overflow 对象直接销毁
             if (_overflowObjects.Contains(go))
             {
                 _overflowObjects.Remove(go);
+                RemoveFromCache(go); // 清理缓存避免泄漏
                 UnityEngine.Object.Destroy(go);
                 _totalCreated--;
                 _overflowCount--;
@@ -490,6 +540,7 @@ namespace CYFramework.Core.Pool
             
             // 放回池中
             go.transform.SetParent(_poolRoot, false);
+            MoveToHiddenPosition(go); // 移动到隐藏位置
             _pool.Push(go);
             LastUsedTime = Time.unscaledTime;
         }
@@ -503,6 +554,7 @@ namespace CYFramework.Core.Pool
             foreach (var go in _overflowObjects)
             {
                 // go 为溢出对象
+                RemoveFromCache(go); // 清理缓存避免泄漏
                 UnityEngine.Object.Destroy(go);
                 _totalCreated--;
             }
@@ -514,6 +566,7 @@ namespace CYFramework.Core.Pool
             for (int i = 0; i < shrinkCount; i++) // i 为索引
             {
                 var go = _pool.Pop(); // 回收对象
+                RemoveFromCache(go); // 清理缓存避免泄漏
                 UnityEngine.Object.Destroy(go);
                 _totalCreated--;
             }
@@ -534,12 +587,14 @@ namespace CYFramework.Core.Pool
             while (_pool.Count > 0)
             {
                 var go = _pool.Pop(); // 回收对象
+                RemoveFromCache(go); // 清理缓存避免泄漏
                 UnityEngine.Object.Destroy(go);
             }
             
             foreach (var go in _overflowObjects)
             {
                 // go 为溢出对象
+                RemoveFromCache(go); // 清理缓存避免泄漏
                 UnityEngine.Object.Destroy(go);
             }
             _overflowObjects.Clear();
@@ -548,6 +603,10 @@ namespace CYFramework.Core.Pool
             {
                 UnityEngine.Object.Destroy(_poolRoot.gameObject);
             }
+
+            _poolableCache.Clear(); // 清空 IPoolable 缓存
+            _rendererControlCache.Clear(); // 清空渲染控制缓存
+            _rendererCache.Clear(); // 清空渲染组件缓存
             
             _totalCreated = 0;
             _overflowCount = 0;
@@ -567,6 +626,9 @@ namespace CYFramework.Core.Pool
             {
                 _poolableCache[go] = poolables;
             }
+
+            CacheRendererControls(go); // 缓存渲染控制组件
+            CacheRenderers(go); // 缓存渲染组件
             
             return go;
         }
@@ -582,13 +644,201 @@ namespace CYFramework.Core.Pool
             }
             return null;
         }
+
+        /// <summary>
+        /// 将对象移动到隐藏位置，避免对象池复用时闪烁与误碰撞。
+        /// </summary>
+        /// <param name="go">目标对象。</param>
+        private void MoveToHiddenPosition(GameObject go) // 隐藏位置移动入口
+        {
+            if (go == null)
+            {
+                return; // 空对象时返回
+            }
+
+            if (go.transform is RectTransform rectTransform)
+            {
+                var anchoredPos = rectTransform.anchoredPosition3D; // 获取当前锚点坐标
+                anchoredPos.x = HiddenUiPosition.x; // 写入隐藏 X
+                anchoredPos.y = HiddenUiPosition.y; // 写入隐藏 Y
+                rectTransform.anchoredPosition3D = anchoredPos; // 写回锚点坐标
+                return; // UI 元素处理完毕直接返回
+            }
+
+            var pos = go.transform.position; // 获取当前世界坐标
+            pos.x = HiddenWorldPosition.x; // 写入隐藏 X
+            pos.y = HiddenWorldPosition.y; // 写入隐藏 Y
+            go.transform.position = pos; // 写回世界坐标
+        }
+
+        /// <summary>
+        /// 缓存渲染控制组件（避免高频 GetComponents 分配）。
+        /// </summary>
+        /// <param name="go">目标对象。</param>
+        private void CacheRendererControls(GameObject go) // 渲染控制缓存入口
+        {
+            if (go == null)
+            {
+                return; // 空对象时返回
+            }
+
+            if (_rendererControlCache.ContainsKey(go))
+            {
+                return; // 已缓存时返回
+            }
+
+            var controls = go.GetComponentsInChildren<IPoolRendererControl>(true); // 获取渲染控制组件
+            if (controls == null || controls.Length == 0)
+            {
+                _rendererControlCache[go] = Array.Empty<IPoolRendererControl>(); // 写入空缓存
+                return; // 无控制组件时返回
+            }
+
+            _rendererControlCache[go] = controls; // 写入控制组件缓存
+        }
+
+        /// <summary>
+        /// 获取缓存的渲染控制组件（零 GC）。
+        /// </summary>
+        /// <param name="go">目标对象。</param>
+        private IPoolRendererControl[] GetCachedRendererControls(GameObject go) // 渲染控制缓存获取入口
+        {
+            if (_rendererControlCache.TryGetValue(go, out var controls)) // controls 为缓存数组
+            {
+                return controls; // 返回缓存数组
+            }
+
+            return null; // 未缓存时返回空
+        }
+
+        /// <summary>
+        /// 判断是否允许自动恢复渲染默认可见性。
+        /// </summary>
+        /// <param name="go">目标对象。</param>
+        private bool ShouldAutoRestoreRenderers(GameObject go) // 自动恢复判断入口
+        {
+            var controls = GetCachedRendererControls(go); // 获取渲染控制缓存
+            if (controls == null || controls.Length == 0)
+            {
+                return true; // 无控制组件时默认自动恢复
+            }
+
+            for (int i = 0; i < controls.Length; i++) // i 为索引
+            {
+                var control = controls[i]; // 获取控制组件
+                if (control == null)
+                {
+                    continue; // 空组件时跳过
+                }
+
+                if (!control.AutoRestoreRenderers)
+                {
+                    return false; // 任一组件关闭自动恢复则返回 false
+                }
+            }
+
+            return true; // 默认自动恢复
+        }
+
+        /// <summary>
+        /// 缓存渲染组件与默认启用状态。
+        /// </summary>
+        /// <param name="go">目标对象。</param>
+        private void CacheRenderers(GameObject go) // 渲染组件缓存入口
+        {
+            if (go == null)
+            {
+                return; // 空对象时返回
+            }
+
+            if (_rendererCache.ContainsKey(go))
+            {
+                return; // 已缓存时返回
+            }
+
+            var renderers = go.GetComponentsInChildren<Renderer>(true); // 获取渲染组件数组
+            if (renderers == null || renderers.Length == 0)
+            {
+                _rendererCache[go] = new RendererCache // 写入空渲染缓存
+                {
+                    Renderers = Array.Empty<Renderer>(), // 空渲染组件数组
+                    DefaultEnabledStates = Array.Empty<bool>() // 空默认状态数组
+                };
+                return; // 无渲染组件时返回
+            }
+
+            var defaultStates = new bool[renderers.Length]; // 创建默认状态数组
+            for (int i = 0; i < renderers.Length; i++) // i 为索引
+            {
+                var renderer = renderers[i]; // 获取当前渲染组件
+                defaultStates[i] = renderer != null && renderer.enabled; // 记录默认启用状态
+            }
+
+            _rendererCache[go] = new RendererCache // 写入渲染缓存
+            {
+                Renderers = renderers, // 绑定渲染组件数组
+                DefaultEnabledStates = defaultStates // 绑定默认状态数组
+            };
+        }
+
+        /// <summary>
+        /// 尝试获取渲染缓存。
+        /// </summary>
+        /// <param name="go">目标对象。</param>
+        /// <param name="cache">输出渲染缓存。</param>
+        private bool TryGetRendererCache(GameObject go, out RendererCache cache) // 渲染缓存获取入口
+        {
+            return _rendererCache.TryGetValue(go, out cache); // 返回缓存获取结果
+        }
+
+        /// <summary>
+        /// 设置渲染组件可见性（可恢复默认状态）。
+        /// </summary>
+        /// <param name="go">目标对象。</param>
+        /// <param name="visible">是否可见。</param>
+        private void SetRenderersVisible(GameObject go, bool visible) // 渲染可见性设置入口
+        {
+            if (go == null)
+            {
+                return; // 空对象时返回
+            }
+
+            if (!TryGetRendererCache(go, out var cache))
+            {
+                CacheRenderers(go); // 缓存渲染组件
+                if (!TryGetRendererCache(go, out cache))
+                {
+                    return; // 无缓存时返回
+                }
+            }
+
+            var renderers = cache.Renderers; // 获取渲染组件数组
+            var defaultStates = cache.DefaultEnabledStates; // 获取默认状态数组
+            if (renderers == null || renderers.Length == 0)
+            {
+                return; // 无渲染组件时返回
+            }
+
+            for (int i = 0; i < renderers.Length; i++) // i 为索引
+            {
+                var renderer = renderers[i]; // 获取当前渲染组件
+                if (renderer == null)
+                {
+                    continue; // 空组件时跳过
+                }
+
+                renderer.enabled = visible ? defaultStates[i] : false; // 设置渲染组件可见性
+            }
+        }
         
         /// <summary>
         /// 清理缓存
         /// </summary>
         private void RemoveFromCache(GameObject go)
         {
-            _poolableCache.Remove(go);
+            _poolableCache.Remove(go); // 移除 IPoolable 缓存
+            _rendererControlCache.Remove(go); // 移除渲染控制缓存
+            _rendererCache.Remove(go); // 移除渲染组件缓存
         }
     }
     

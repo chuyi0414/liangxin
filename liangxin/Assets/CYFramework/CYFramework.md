@@ -212,6 +212,13 @@ public T LoadConfig<T>(string path) where T : ScriptableObject
 - **内存收缩**：低内存警告时回`Overflow` 对象 + 50% 空闲对象
 
 - **类型支持**：GameObject / 纯数Struct / UI 节点
+- **渲染可见性**：取出前先隐藏 Renderer，取出后默认恢复到预制体初始启用状态，避免复用时旧位置/旧状态闪烁。
+  - **实体池手动控制**：`EntityBase.AutoRestoreRenderers = false` 后，自行调用 `RestoreCachedRenderersToDefault()`。
+  - **GameObject 池手动控制**：实现 `IPoolRendererControl` 并返回 `AutoRestoreRenderers = false`，自行决定启用时机。
+- **回收位置**：归还池时自动移动到远离场景的隐藏坐标，避免复用闪烁与误碰撞。
+- **实体预显示**：实体生成支持“激活前”注入出生数据，确保位置/朝向在 `SetActive(true)` 之前完成。
+  - **推荐**：`SpawnEntity<T, TData>(..., ref data)` + 实体实现 `IEntityPreShowData<TData>`。
+  - **兼容**：`userData` 实现 `IEntityPreShowTransform` 时，`EntityBase` 会在激活前应用位置/旋转。
 - **UI 元素池**：`CY.UI.GetOrCreateUIElementPool(key, prefab, config)`，用于非 UIPanel 的 UI 元素复用（如血条、飘字），池根挂在 `[ObjectPools]/UI`，取出后自动修正 `RectTransform.anchoredPosition3D.z = 0`。
 
 #### 3.1.7 音频系统 (Audio System) [NEW]

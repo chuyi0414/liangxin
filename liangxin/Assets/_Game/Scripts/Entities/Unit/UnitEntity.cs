@@ -433,12 +433,6 @@ public abstract class UnitEntity : EntityBase
 
         var origin = _cachedTransform != null ? (Vector2)_cachedTransform.position : (Vector2)transform.position; // 读取子弹出生点
 
-        var bullet = CY.Entity.SpawnEntity<BulletEntity>(bulletPrefabPath, bulletPrefabPath, EntityGroup.Projectiles); // 使用配置路径生成子弹
-        if (bullet == null)
-        {
-            return false; // 子弹生成失败时返回失败
-        }
-
         var data = new BulletSpawnData // 组装子弹生成数据
         {
             Position = origin, // 子弹出生位置
@@ -451,7 +445,12 @@ public abstract class UnitEntity : EntityBase
             IsCrit = isCrit // 是否暴击
         };
 
-        bullet.Setup(ref data); // 初始化子弹数据
+        var bullet = CY.Entity.SpawnEntity<BulletEntity, BulletSpawnData>(bulletPrefabPath, bulletPrefabPath, EntityGroup.Projectiles, ref data); // 使用预显示数据生成子弹
+        if (bullet == null)
+        {
+            return false; // 子弹生成失败时返回失败
+        }
+
         return true; // 返回发射成功
     }
 
