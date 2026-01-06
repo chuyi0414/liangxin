@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 7085033269187287213}
   - component: {fileID: 6322288927111858911}
   - component: {fileID: 7312062283359229281}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: CompanyEntity
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -144,6 +144,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9164cc50e7c351a449719b9be9550cce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _forceChaseDistance: 2
 --- !u!208 &7312062283359229281
 NavMeshObstacle:
   m_ObjectHideFlags: 0

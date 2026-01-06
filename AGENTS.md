@@ -4,7 +4,7 @@
 主规则：`Assets/CYFramework/AI_SYSTEM_PROMPT.md`
 
 项目补充：
-- 修改/新增文本文件必须使用 UTF-8 无 BOM 编码,并且要先给出最优解决方案，等待用户确认才能修改/新增文本。
+- 修改/新增文本文件必须使用 UTF-8 无 BOM 编码,并且要先给出最优解决方案，不要直接贴出完整代码，等待用户确认才能修改/新增文本。
 - 事件使用 `CY.Event`，事件必须是 `struct`，发布用 `CY.Event.Post(ref evt)`。
 - 日志使用 `CY.Log / CY.LogInfo / CY.LogWarning / CY.LogError`。
 - 计时使用 `CY.Timer.Delay / Loop / NextFrame`。

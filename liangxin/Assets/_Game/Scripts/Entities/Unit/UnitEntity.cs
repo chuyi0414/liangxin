@@ -433,21 +433,20 @@ public abstract class UnitEntity : EntityBase
 
         var origin = _cachedTransform != null ? (Vector2)_cachedTransform.position : (Vector2)transform.position; // 读取子弹出生点
 
-        var data = new BulletSpawnData // 组装子弹生成数据
-        {
-            Position = origin, // 子弹出生位置
-            Direction = direction, // 子弹飞行方向
-            Speed = _bulletSpeed, // 子弹速度（0 表示使用子弹默认速度）
-            Lifetime = 0f, // 生命周期为 0 表示使用子弹默认寿命
-            Damage = damage, // 子弹伤害
-            Camp = _camp, // 子弹阵营
-            Owner = this, // 子弹拥有者
-            IsCrit = isCrit // 是否暴击
-        };
+        var spawnData = BulletEntity.RentSpawnUserData(); // 申请子弹生成数据
+        spawnData.Position = origin; // 子弹出生位置
+        spawnData.Direction = direction; // 子弹飞行方向
+        spawnData.Speed = _bulletSpeed; // 子弹速度（0 表示使用子弹默认速度）
+        spawnData.Lifetime = 0f; // 生命周期为 0 表示使用子弹默认寿命
+        spawnData.Damage = damage; // 子弹伤害
+        spawnData.Camp = _camp; // 子弹阵营
+        spawnData.Owner = this; // 子弹拥有者
+        spawnData.IsCrit = isCrit; // 是否暴击
 
-        var bullet = CY.Entity.SpawnEntity<BulletEntity, BulletSpawnData>(bulletPrefabPath, bulletPrefabPath, EntityGroup.Projectiles, ref data); // 使用预显示数据生成子弹
+        var bullet = CY.Entity.SpawnEntity<BulletEntity>(bulletPrefabPath, bulletPrefabPath, EntityGroup.Projectiles, spawnData); // 使用 userData 生成子弹
         if (bullet == null)
         {
+            BulletEntity.ReturnSpawnUserData(spawnData); // 生成失败回收数据
             return false; // 子弹生成失败时返回失败
         }
 

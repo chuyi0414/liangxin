@@ -4,18 +4,20 @@ using System; // System 基础类型引用
 using CYFramework; // CYFramework 入口引用
 // 引用实体系统命名空间，使用 EntityBase 等类型
 using CYFramework.Core.Entity; // 实体系统类型引用
+// 引用对象池命名空间，复用生成数据
+using CYFramework.Core.Pool; // 对象池类型引用
 // 引用 UnityEngine 命名空间，使用 Rigidbody2D/Collider2D 等类型
 using UnityEngine; // Unity 引擎基础类型引用
 
 /// <summary>
-/// 子弹生成数据：用于无 GC 初始化与传参。
+/// 子弹生成用户数据（类 + 对象池，避免频繁分配）。
 /// </summary>
 [Serializable] // 序列化支持
-public struct BulletSpawnData // 子弹生成数据结构体
+public sealed class BulletSpawnUserData // 子弹生成用户数据类
 {
     /// <summary>子弹出生位置（XY 平面）。</summary>
     public Vector2 Position; // 出生位置
-    /// <summary>子弹方向（会被归一化，零向量回退默认）。</summary>
+    /// <summary>子弹方向（会在实体内归一化）。</summary>
     public Vector2 Direction; // 方向向量
     /// <summary>子弹速度（<=0 使用默认速度）。</summary>
     public float Speed; // 速度值
@@ -29,6 +31,21 @@ public struct BulletSpawnData // 子弹生成数据结构体
     public UnitEntity Owner; // 拥有者引用
     /// <summary>是否暴击。</summary>
     public bool IsCrit; // 暴击标记
+
+    /// <summary>
+    /// 重置数据内容（用于对象池复用）。
+    /// </summary>
+    public void Reset() // 数据重置入口
+    {
+        Position = Vector2.zero; // 清理位置
+        Direction = Vector2.zero; // 清理方向
+        Speed = 0f; // 清理速度
+        Lifetime = 0f; // 清理寿命
+        Damage = 0; // 清理伤害
+        Camp = UnitCamp.Neutral; // 清理阵营
+        Owner = null; // 清理拥有者
+        IsCrit = false; // 清理暴击
+    }
 }
 
 /// <summary>
@@ -37,7 +54,7 @@ public struct BulletSpawnData // 子弹生成数据结构体
 [RequireComponent(typeof(Rigidbody2D))] // 约束必须挂载刚体组件
 [RequireComponent(typeof(Collider2D))] // 约束必须挂载碰撞体组件
 [EntityPrefab("Prefabs/Entities/Projectiles/BulletBase", "BulletBase", "Projectiles")] // 绑定子弹预制体路径
-public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // 子弹实体定义
+public class BulletEntity : EntityBase // 子弹实体定义
 {
     [Header("基础参数")] // Inspector 分组：基础参数
     /// <summary>默认移动速度。</summary>
@@ -50,8 +67,8 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     [SerializeField] private bool _useRigidbodyVelocity = true; // 使用速度驱动
     /// <summary>是否对齐朝向到飞行方向。</summary>
     [SerializeField] private bool _alignToDirection = true; // 朝向对齐开关
-    /// <summary>是否允许同阵营伤害。</summary>
-    [SerializeField] private bool _allowFriendlyFire = false; // 友伤开关
+    /// <summary>是否允许同阵营伤害（已由阵营规则替代，保留仅用于兼容旧资源）。</summary>
+    [SerializeField] private bool _allowFriendlyFire = false; // 友伤开关（兼容字段）
     /// <summary>命中后是否自动回收。</summary>
     [SerializeField] private bool _recycleOnHit = true; // 命中回收开关
     /// <summary>是否只命中一次。</summary>
@@ -65,6 +82,10 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     private Rigidbody2D _rigidbody2D; // 刚体缓存
     /// <summary>Collider2D 缓存。</summary>
     private Collider2D _collider2D; // 碰撞体缓存
+    /// <summary>子弹生成数据对象池（全局复用）。</summary>
+    private static ObjectPool<BulletSpawnUserData> _spawnUserDataPool; // 生成数据对象池
+    /// <summary>当前实体持有的生成数据（用于回收）。</summary>
+    private BulletSpawnUserData _spawnUserData; // 生成数据引用
     /// <summary>默认方向（由初始朝向决定）。</summary>
     private Vector2 _defaultDirection; // 默认方向
 
@@ -94,8 +115,6 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     private Vector2 _cachedVelocityBeforePause; // 暂停速度缓存
     /// <summary>是否有暂停速度缓存。</summary>
     private bool _hasPauseVelocity; // 暂停缓存标记
-    /// <summary>是否已应用预显示数据。</summary>
-    private bool _hasPreShowData; // 预显示数据标记
 
     /// <summary>当前方向（只读）。</summary>
     public Vector2 Direction => _direction; // 方向只读访问
@@ -113,27 +132,40 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     public bool IsCrit => _isCrit; // 暴击只读访问
 
     /// <summary>
-    /// 使用生成数据初始化子弹（推荐：避免 userData 装箱）。
+    /// 获取生成数据对象池（延迟创建）。
     /// </summary>
-    /// <param name="data">生成数据（按需设置）。</param>
-    public void Setup(ref BulletSpawnData data) // 外部初始化入口
+    private static ObjectPool<BulletSpawnUserData> GetSpawnUserDataPool() // 对象池获取入口
     {
-        DisableCachedRenderers(); // 初始化前先隐藏渲染
-        ResetRuntimeState(); // 重置运行时状态
-        ApplySpawnData(ref data); // 应用生成数据
-        ApplySpawnVelocity(); // 应用初始速度
-        RestoreCachedRenderersToDefault(); // 初始化完成后恢复渲染
+        if (_spawnUserDataPool == null)
+        {
+            _spawnUserDataPool = new ObjectPool<BulletSpawnUserData>(() => new BulletSpawnUserData()); // 创建对象池
+        }
+
+        return _spawnUserDataPool; // 返回对象池
     }
 
     /// <summary>
-    /// 预显示数据应用（激活前调用）。
+    /// 申请一个生成数据对象（供外部填充）。
     /// </summary>
-    /// <param name="data">预显示数据。</param>
-    public void ApplyPreShowData(ref BulletSpawnData data) // 预显示数据应用入口
+    public static BulletSpawnUserData RentSpawnUserData() // 生成数据申请入口
     {
-        ResetRuntimeState(); // 重置运行时状态
-        ApplySpawnData(ref data); // 应用生成数据
-        _hasPreShowData = true; // 标记已应用预显示数据
+        var data = GetSpawnUserDataPool().Get(); // 从池中获取
+        data.Reset(); // 清理旧数据
+        return data; // 返回生成数据
+    }
+
+    /// <summary>
+    /// 归还生成数据对象（供外部回收）。
+    /// </summary>
+    public static void ReturnSpawnUserData(BulletSpawnUserData data) // 生成数据归还入口
+    {
+        if (data == null)
+        {
+            return; // 空引用直接返回
+        }
+
+        data.Reset(); // 清理数据
+        GetSpawnUserDataPool().Return(data); // 放回对象池
     }
 
     /// <summary>
@@ -147,6 +179,7 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
         _rigidbody2D = GetComponent<Rigidbody2D>(); // 缓存刚体组件
         _collider2D = GetComponent<Collider2D>(); // 缓存碰撞体组件
         _defaultDirection = _cachedTransform != null ? (Vector2)_cachedTransform.right : Vector2.right; // 记录默认方向
+        var spriteRenderer = GetComponent<SpriteRenderer>(); // 获取精灵渲染器（用于可视化检查）
 
         if (_rigidbody2D == null)
         {
@@ -157,44 +190,34 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
         {
             CY.LogError("[BulletEntity] 缺少 Collider2D 组件。"); // 输出碰撞体缺失错误
         }
-    }
 
-    /// <summary>
-    /// 实体预显示：在激活前应用出生数据。
-    /// </summary>
-    /// <param name="userData">预显示阶段数据。</param>
-    protected override void OnEntityPreShow(object userData) // 实体预显示入口
-    {
-        base.OnEntityPreShow(userData); // 调用父类预显示
-        if (userData is BulletSpawnData data)
+        if (spriteRenderer == null)
         {
-            ApplyPreShowData(ref data); // 使用用户数据应用预显示数据
+            CY.LogWarning("[BulletEntity] 缺少 SpriteRenderer 组件，可能无法显示子弹。"); // 输出渲染器缺失警告
         }
     }
 
     /// <summary>
-    /// 实体显示：重置状态并应用生成数据。
+    /// 实体显示：应用出生数据与初始速度。
     /// </summary>
     /// <param name="userData">显示时传入的数据。</param>
     protected override void OnEntityShow(object userData) // 实体显示入口
     {
         base.OnEntityShow(userData); // 调用父类显示
-        if (!_hasPreShowData)
-        {
-            ResetRuntimeState(); // 未应用预显示数据时重置状态
+        ReleaseSpawnUserData(); // 显示前回收旧数据
+        ResetRuntimeState(); // 重置运行时状态
 
-            if (userData is BulletSpawnData data)
-            {
-                ApplySpawnData(ref data); // 应用生成数据
-            }
-            else if (userData != null)
-            {
-                CY.LogWarning("[BulletEntity] UserData 类型不正确，已使用默认参数。"); // 输出类型不匹配警告
-            }
+        if (userData is BulletSpawnUserData spawnData)
+        {
+            _spawnUserData = spawnData; // 缓存当前生成数据引用
+            ApplySpawnData(spawnData); // 应用生成数据
+        }
+        else if (userData != null)
+        {
+            CY.LogWarning("[BulletEntity] UserData 类型不正确，已使用默认参数。"); // 输出类型不匹配警告
         }
 
         ApplySpawnVelocity(); // 应用初始速度
-        _hasPreShowData = false; // 清理预显示数据标记
     }
 
     /// <summary>
@@ -202,12 +225,12 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     /// </summary>
     protected override void OnEntityHide() // 实体隐藏入口
     {
+        ReleaseSpawnUserData(); // 回收生成数据
         ResetPhysicsState(); // 重置物理状态
         _isActive = false; // 关闭激活标记
         _canHit = false; // 关闭命中
         _owner = null; // 清理拥有者引用
         _hasHit = false; // 清理命中标记
-        _hasPreShowData = false; // 清理预显示数据标记
         base.OnEntityHide(); // 调用父类隐藏
     }
 
@@ -216,13 +239,27 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     /// </summary>
     protected override void OnEntityRecycle() // 实体回收入口
     {
+        ReleaseSpawnUserData(); // 回收生成数据
         ResetPhysicsState(); // 重置物理状态
         _isActive = false; // 关闭激活标记
         _canHit = false; // 关闭命中
         _owner = null; // 清理拥有者引用
         _hasHit = false; // 清理命中标记
-        _hasPreShowData = false; // 清理预显示数据标记
         base.OnEntityRecycle(); // 调用父类回收
+    }
+
+    /// <summary>
+    /// 回收当前持有的生成数据对象。
+    /// </summary>
+    private void ReleaseSpawnUserData() // 生成数据回收入口
+    {
+        if (_spawnUserData == null)
+        {
+            return; // 未持有数据时返回
+        }
+
+        ReturnSpawnUserData(_spawnUserData); // 归还到对象池
+        _spawnUserData = null; // 清理引用
     }
 
     /// <summary>
@@ -283,7 +320,7 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     /// 应用生成数据到运行时状态。
     /// </summary>
     /// <param name="data">生成数据。</param>
-    private void ApplySpawnData(ref BulletSpawnData data) // 生成数据应用入口
+    private void ApplySpawnData(BulletSpawnUserData data) // 生成数据应用入口
     {
         SetSpawnPosition(data.Position); // 设置出生位置
         SetDirection(data.Direction); // 设置方向
@@ -310,17 +347,11 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     }
 
     /// <summary>
-    /// 设置出生位置（优先写入刚体位置）。
+    /// 设置出生位置。
     /// </summary>
     /// <param name="position">目标位置。</param>
     private void SetSpawnPosition(Vector2 position) // 位置设置入口
     {
-        if (_rigidbody2D != null)
-        {
-            _rigidbody2D.position = position; // 刚体位置赋值
-            return; // 已处理则返回
-        }
-
         if (_cachedTransform != null)
         {
             _cachedTransform.position = new Vector3(position.x, position.y, _cachedTransform.position.z); // Transform 位置赋值
@@ -471,6 +502,7 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
         _rigidbody2D.angularVelocity = 0f; // 清零角速度
     }
 
+
     /// <summary>
     /// 通过实体系统回收自身。
     /// </summary>
@@ -565,6 +597,31 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
     }
 
     /// <summary>
+    /// 判断当前阵营是否允许攻击目标阵营。
+    /// </summary>
+    /// <param name="attackerCamp">攻击方阵营。</param>
+    /// <param name="targetCamp">目标方阵营。</param>
+    private bool CanAttackCamp(UnitCamp attackerCamp, UnitCamp targetCamp) // 阵营攻击规则入口
+    {
+        if (attackerCamp == UnitCamp.Neutral)
+        {
+            return false; // 中立不能攻击任何单位
+        }
+
+        if (attackerCamp == UnitCamp.Player || attackerCamp == UnitCamp.Employee)
+        {
+            return targetCamp == UnitCamp.Enemy; // 玩家/员工只能攻击敌人
+        }
+
+        if (attackerCamp == UnitCamp.Enemy)
+        {
+            return targetCamp == UnitCamp.Player || targetCamp == UnitCamp.Employee || targetCamp == UnitCamp.Neutral; // 敌人可攻击玩家/员工/中立
+        }
+
+        return false; // 其他情况默认不攻击
+    }
+
+    /// <summary>
     /// 判断是否允许命中目标单位。
     /// </summary>
     /// <param name="target">目标单位。</param>
@@ -580,9 +637,9 @@ public class BulletEntity : EntityBase, IEntityPreShowData<BulletSpawnData> // �
             return false; // 目标死亡时返回
         }
 
-        if (!_allowFriendlyFire && _camp != UnitCamp.Neutral && target.Camp == _camp)
+        if (!CanAttackCamp(_camp, target.Camp))
         {
-            return false; // 同阵营且不允许友伤时返回
+            return false; // 阵营规则不允许时返回
         }
 
         if (_owner != null && _owner == target)
