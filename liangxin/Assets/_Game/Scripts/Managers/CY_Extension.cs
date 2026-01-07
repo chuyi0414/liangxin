@@ -23,5 +23,8 @@ namespace CYFramework
 
         /// <summary>波次管理器（负责波次/刷怪流程）。</summary>
         public static WaveManager Wave => ServiceLocator.Get<WaveManager>();
+
+        /// <summary>相机管理器（负责相机跟随与缓存）。</summary>
+        public static CameraManager Camera => ServiceLocator.Get<CameraManager>(); // 相机管理器访问入口
     }
 }

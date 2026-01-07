@@ -33,12 +33,21 @@ public sealed class EnemyAIBasic : EnemyAIBase // 基础敌人 AI 定义
             return; // 公司不存在时退出
         }
 
+        var attackRange = enemy.BaseStats.AttackRange; // 获取攻击范围
         var companyPos = (Vector2)company.transform.position; // 获取公司坐标
         var companyChaseDistance = company.ForceChaseDistance; // 获取公司强制追击距离
         var companyChaseSqr = companyChaseDistance * companyChaseDistance; // 计算追击距离平方
         var companyDistSqr = (companyPos - currentPos).sqrMagnitude; // 计算与公司距离平方
         if (companyDistSqr <= companyChaseSqr)
         {
+            if (attackRange > 0f &&
+                enemy.TryGetCompanyDistanceSqr(company, currentPos, out var companyAttackDistSqr) && // 计算公司距离平方
+                companyAttackDistSqr <= attackRange * attackRange)
+            {
+                enemy.TryAttackCompanyWithLock(company); // 进入攻击范围则尝试攻击公司
+                return; // 攻击公司后退出
+            }
+
             var destination = enemy.AdjustStandOffDestination(currentPos, companyPos); // 计算公司身位目标点
             enemy.MoveTo(destination); // 近距离直接追公司
             return; // 近距离追公司后退出
@@ -47,12 +56,19 @@ public sealed class EnemyAIBasic : EnemyAIBase // 基础敌人 AI 定义
         var sightRange = enemy.SightRange; // 获取可视范围
         if (sightRange <= 0f)
         {
+            if (attackRange > 0f &&
+                enemy.TryGetCompanyDistanceSqr(company, currentPos, out var companyAttackDistSqr) && // 计算公司距离平方
+                companyAttackDistSqr <= attackRange * attackRange)
+            {
+                enemy.TryAttackCompanyWithLock(company); // 进入攻击范围则尝试攻击公司
+                return; // 攻击公司后退出
+            }
+
             var destination = enemy.AdjustStandOffDestination(currentPos, companyPos); // 计算公司身位目标点
             enemy.MoveTo(destination); // 无可视范围时追公司
             return; // 追公司后退出
         }
 
-        var attackRange = enemy.BaseStats.AttackRange; // 获取攻击范围
         var target = enemy.FindChaseTargetInRange(currentPos, sightRange); // 在可视范围内寻找目标
         if (target != null)
         {
@@ -70,6 +86,14 @@ public sealed class EnemyAIBasic : EnemyAIBase // 基础敌人 AI 定义
         }
         else
         {
+            if (attackRange > 0f &&
+                enemy.TryGetCompanyDistanceSqr(company, currentPos, out var companyAttackDistSqr) && // 计算公司距离平方
+                companyAttackDistSqr <= attackRange * attackRange)
+            {
+                enemy.TryAttackCompanyWithLock(company); // 进入攻击范围则尝试攻击公司
+                return; // 攻击公司后退出
+            }
+
             var destination = enemy.AdjustStandOffDestination(currentPos, companyPos); // 计算公司身位目标点
             enemy.MoveTo(destination); // 无目标时继续追公司
         }

@@ -27,11 +27,29 @@ public class GameProcedure : ProcedureBase
         CY.UI.Close<GameUIPanel>();
         PauseWaveSystem(); // 退出游戏流程时暂停波次系统
 
-        if (_levelEntity != null)
+        var unitManager = CY.Unit; // 获取单位管理器
+        var entityManager = CY.Entity; // 获取实体管理器
+        if (entityManager != null)
         {
-            CY.Entity.RecycleEntity(_levelEntity);
-            _levelEntity = null;
+            entityManager.RecycleAllEntities("Level"); // 回收关卡实体
+            entityManager.RecycleAllEntities("CompanyEntity"); // 回收公司实体
+            entityManager.RecycleAllEntities("EnemyEntity"); // 回收敌人实体
+            entityManager.RecycleAllEntities("Players"); // 回收玩家实体
+            if (unitManager != null && unitManager.TryGetDefaultPlayerRow(out var playerRow))
+            {
+                if (!string.IsNullOrEmpty(playerRow.BulletPrefabPath))
+                {
+                    entityManager.RecycleAllEntities(playerRow.BulletPrefabPath); // 回收玩家子弹实体
+                }
+            }
         }
+
+        if (unitManager != null)
+        {
+            unitManager.ClearAll(); // 清空单位缓存引用
+        }
+
+        _levelEntity = null; // 清空关卡实体引用
     }
 
     /// <summary>

@@ -330,6 +330,32 @@ public abstract class UnitEntity : EntityBase
     }
 
     /// <summary>
+    /// 尝试消耗攻击冷却（用于非 UnitEntity 目标的攻击）。
+    /// </summary>
+    /// <param name="damage">本次攻击伤害（用于校验）。</param>
+    protected bool TryConsumeAttackCooldown(int damage) // 攻击冷却消耗入口
+    {
+        if (_lifeState == UnitLifeState.Dead)
+        {
+            return false; // 死亡时不可攻击
+        }
+
+        if (_attackCooldown > 0f)
+        {
+            return false; // 冷却未结束时返回
+        }
+
+        if (damage <= 0)
+        {
+            return false; // 伤害无效时返回
+        }
+
+        var interval = _baseStats.AttackInterval; // 读取攻击间隔
+        _attackCooldown = interval > 0f ? interval : 0f; // 写入冷却时间
+        return true; // 返回可攻击
+    }
+
+    /// <summary>
     /// 按方向尝试远程攻击（按 AttackInterval 冷却）。
     /// </summary>
     /// <param name="direction">发射方向。</param>
@@ -433,7 +459,7 @@ public abstract class UnitEntity : EntityBase
 
         var origin = _cachedTransform != null ? (Vector2)_cachedTransform.position : (Vector2)transform.position; // 读取子弹出生点
 
-        var spawnData = BulletEntity.RentSpawnUserData(); // 申请子弹生成数据
+        var spawnData = CY.Pool.GetOrCreatePool<BulletSpawnUserData>(() => new BulletSpawnUserData()).Get(); // 通过框架对象池申请子弹生成数据
         spawnData.Position = origin; // 子弹出生位置
         spawnData.Direction = direction; // 子弹飞行方向
         spawnData.Speed = _bulletSpeed; // 子弹速度（0 表示使用子弹默认速度）
@@ -446,7 +472,7 @@ public abstract class UnitEntity : EntityBase
         var bullet = CY.Entity.SpawnEntity<BulletEntity>(bulletPrefabPath, bulletPrefabPath, EntityGroup.Projectiles, spawnData); // 使用 userData 生成子弹
         if (bullet == null)
         {
-            BulletEntity.ReturnSpawnUserData(spawnData); // 生成失败回收数据
+            CY.Pool.GetOrCreatePool<BulletSpawnUserData>(() => new BulletSpawnUserData()).Return(spawnData); // 通过框架对象池回收数据
             return false; // 子弹生成失败时返回失败
         }
 

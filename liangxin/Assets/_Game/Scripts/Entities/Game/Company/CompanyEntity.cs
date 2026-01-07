@@ -13,12 +13,26 @@ public class CompanyEntity : EntityBase // 公司实体定义
 {
     /// <summary>当前场景中的公司实体（方便敌人获取位置）。</summary>
     public static CompanyEntity Current { get; private set; } // 当前公司实体静态引用
+    /// <summary>公司碰撞体缓存（用于距离计算）。</summary>
+    private Collider2D _cachedCollider2D; // 碰撞体缓存
 
     /// <summary>公司强制追击距离（<=该距离时敌人强制追公司）。</summary>
     [SerializeField] private float _forceChaseDistance = 2f; // 公司强制追击距离
 
     /// <summary>公司强制追击距离（只读）。</summary>
     public float ForceChaseDistance => _forceChaseDistance; // 对外只读访问
+    /// <summary>公司碰撞体缓存（只读）。</summary>
+    public Collider2D CachedCollider2D => _cachedCollider2D; // 对外只读访问
+
+    /// <summary>
+    /// 实体初始化：缓存组件引用。
+    /// </summary>
+    /// <param name="userData">初始化传入的数据。</param>
+    protected override void OnEntityInit(object userData) // 实体初始化入口
+    {
+        base.OnEntityInit(userData); // 调用父类初始化
+        _cachedCollider2D = GetComponent<Collider2D>(); // 缓存碰撞体组件
+    }
 
     /// <summary>
     /// 实体显示：注册当前公司实体引用。

@@ -32,6 +32,10 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
     [SerializeField] private float _sightRange = 6f; // 可视范围配置
     /// <summary>攻击停顿时长（秒）。</summary>
     [SerializeField] private float _attackStopDuration = 0.5f; // 攻击停顿配置
+    /// <summary>污染伤害最小值（绝对值）。</summary>
+    [SerializeField] private float _pollutionDamageMin = 0f; // 污染伤害最小值
+    /// <summary>污染伤害最大值（绝对值）。</summary>
+    [SerializeField] private float _pollutionDamageMax = 0f; // 污染伤害最大值
 
     [Header("AI配置")] // Inspector 分组：AI 配置
     [SerializeField] private EnemyAIBase _defaultAI; // 默认敌人 AI 资产
@@ -121,6 +125,8 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
 
         _sightRange = row.SightRange; // 写入可视范围
         _attackStopDuration = row.AttackStopDuration; // 写入攻击停顿
+        _pollutionDamageMin = Mathf.Max(0f, row.PollutionDamageMin); // 写入污染伤害最小值
+        _pollutionDamageMax = Mathf.Max(_pollutionDamageMin, row.PollutionDamageMax); // 写入污染伤害最大值
         ApplyBaseData(row.Id, row.Code, row.Name, row.Camp, row.LifeState, row.Level, stats); // 写入单位基础数据
     }
 
@@ -206,6 +212,48 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
         var duration = _attackStopDuration; // 读取攻击停顿时长
         BeginAttackLock(duration); // 进入攻击停顿期
         return true; // 攻击成功
+    }
+
+    /// <summary>
+    /// 尝试攻击公司并进入停顿期。
+    /// </summary>
+    /// <param name="company">公司实体。</param>
+    public bool TryAttackCompanyWithLock(CompanyEntity company) // 攻击公司入口
+    {
+        if (company == null)
+        {
+            return false; // 公司为空时返回失败
+        }
+
+        var manager = CY.BattleDataManager; // 获取战斗数据管理器
+        if (manager == null)
+        {
+            return false; // 管理器缺失时返回失败
+        }
+
+        var conscienceDamage = BaseStats.Attack; // 使用攻击力作为良心伤害
+        if (!TryConsumeAttackCooldown(conscienceDamage))
+        {
+            return false; // 无法进入攻击冷却时返回失败
+        }
+
+        var pollutionDamage = GetRandomPollutionDamage(); // 计算污染伤害
+        manager.ApplyCompanyDamage(conscienceDamage, pollutionDamage); // 应用公司伤害
+        BeginAttackLock(_attackStopDuration); // 进入攻击停顿期
+        return true; // 返回攻击成功
+    }
+
+    /// <summary>
+    /// 获取随机污染伤害（使用配置区间）。
+    /// </summary>
+    private float GetRandomPollutionDamage() // 污染伤害随机入口
+    {
+        if (_pollutionDamageMax <= _pollutionDamageMin)
+        {
+            return _pollutionDamageMin; // 区间无效时使用最小值
+        }
+
+        return Random.Range(_pollutionDamageMin, _pollutionDamageMax); // 返回随机污染伤害
     }
 
     /// <summary>
@@ -328,6 +376,33 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
     {
         company = CompanyEntity.Current; // 读取当前公司实体
         return company != null; // 返回是否存在
+    }
+
+    /// <summary>
+    /// 获取当前点到公司碰撞体的最近距离平方。
+    /// </summary>
+    /// <param name="company">公司实体。</param>
+    /// <param name="currentPos">当前坐标。</param>
+    /// <param name="distanceSqr">输出距离平方。</param>
+    internal bool TryGetCompanyDistanceSqr(CompanyEntity company, Vector2 currentPos, out float distanceSqr) // 公司距离计算入口
+    {
+        distanceSqr = float.MaxValue; // 初始化距离
+        if (company == null)
+        {
+            return false; // 公司为空时返回失败
+        }
+
+        var collider = company.CachedCollider2D; // 获取公司碰撞体缓存
+        if (collider != null && collider.enabled)
+        {
+            var closest = collider.ClosestPoint(currentPos); // 计算最近点
+            distanceSqr = (closest - currentPos).sqrMagnitude; // 计算距离平方
+            return true; // 使用碰撞体边界距离
+        }
+
+        var companyPos = (Vector2)company.transform.position; // 回退到中心点距离
+        distanceSqr = (companyPos - currentPos).sqrMagnitude; // 计算中心点距离平方
+        return true; // 返回成功
     }
 
     /// <summary>

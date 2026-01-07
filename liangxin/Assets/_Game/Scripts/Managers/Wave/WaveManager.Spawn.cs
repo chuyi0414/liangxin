@@ -161,7 +161,11 @@ public sealed partial class WaveManager // 波次管理器分部定义
                     continue; // 无可用敌人时跳过
                 }
 
-                var position = ComputeSpawnPosition(spawnTypeId, true); // 计算生成位置
+                if (!TryComputeSpawnPosition(spawnTypeId, true, out var position))
+                {
+                    continue; // 刷新点无效时跳过本次生成
+                }
+
                 SpawnEnemy(runtime, spawnTypeId, enemyId, position); // 生成敌人
             }
 
@@ -193,7 +197,11 @@ public sealed partial class WaveManager // 波次管理器分部定义
                 continue; // 无可用敌人时跳过
             }
 
-            var position = ComputeSpawnPosition(spawnTypeId, false); // 计算生成位置
+            if (!TryComputeSpawnPosition(spawnTypeId, false, out var position))
+            {
+                continue; // 刷新点无效时跳过本次生成
+            }
+
             SpawnEnemy(runtime, spawnTypeId, enemyId, position); // 生成敌人
         }
 
@@ -474,57 +482,54 @@ public sealed partial class WaveManager // 波次管理器分部定义
     }
 
     /// <summary>
-    /// 计算生成位置（优先使用命名点，未配置则回退公司中心）。
+    /// 尝试计算生成位置（仅允许命名点，失败时返回 false）。
     /// </summary>
-    /// <param name="spawnType">生成类型配置。</param>
-    private Vector2 ComputeSpawnPosition(int spawnTypeId, bool isAssault) // 生成位置计算入口
+    /// <param name="spawnTypeId">生成类型 Id。</param>
+    /// <param name="isAssault">是否奇袭生成类型。</param>
+    /// <param name="position">输出位置。</param>
+    private bool TryComputeSpawnPosition(int spawnTypeId, bool isAssault, out Vector2 position) // 生成位置计算入口
     {
-        var center = GetCompanyCenter(); // 获取公司中心
+        position = Vector2.zero; // 默认输出
         if (spawnTypeId <= 0)
         {
-            return center; // 空配置时回退中心点
+            CY.LogError("[WaveManager] 生成类型 Id 非法，无法计算刷新点。"); // 输出生成类型错误
+            return false; // 生成类型非法时失败
         }
 
         if (isAssault)
         {
-            if (_assaultSpawnTypePointPoolMap.TryGetValue(spawnTypeId, out var assaultPool) && assaultPool.PointIds.Count > 0)
+            if (!_assaultSpawnTypePointPoolMap.TryGetValue(spawnTypeId, out var assaultPool) || assaultPool.PointIds.Count == 0)
             {
-                var index = Random.Range(0, assaultPool.PointIds.Count); // 随机索引
-                var pointId = assaultPool.PointIds[index]; // 取出点 Id
-                if (WaveSpawnPoint.TryGetRandomPoint(pointId, out var position))
-                {
-                    return position; // 命中命名点时返回随机位置
-                }
+                CY.LogError($"[WaveManager] 奇袭生成类型未配置刷新点，SpawnTypeId={spawnTypeId}"); // 输出刷新点缺失错误
+                return false; // 未配置刷新点时失败
             }
 
-            return center; // 未命中命名点时回退中心点
-        }
-
-        if (_spawnTypePointPoolMap.TryGetValue(spawnTypeId, out var pool) && pool.PointIds.Count > 0)
-        {
-            var index = Random.Range(0, pool.PointIds.Count); // 随机索引
-            var pointId = pool.PointIds[index]; // 取出点 Id
-            if (WaveSpawnPoint.TryGetRandomPoint(pointId, out var position))
+            var index = Random.Range(0, assaultPool.PointIds.Count); // 随机索引
+            var pointId = assaultPool.PointIds[index]; // 取出点 Id
+            if (!WaveSpawnPoint.TryGetRandomPoint(pointId, out position))
             {
-                return position; // 命中命名点时返回随机位置
+                CY.LogError($"[WaveManager] 刷新点未注册或已失效，PointId={pointId}, SpawnTypeId={spawnTypeId}"); // 输出刷新点无效错误
+                return false; // 刷新点无效时失败
             }
+
+            return true; // 命中有效刷新点时返回成功
         }
 
-        return center; // 未命中命名点时回退中心点
-    }
-
-    /// <summary>
-    /// 获取公司中心点。
-    /// </summary>
-    private Vector2 GetCompanyCenter() // 公司中心获取入口
-    {
-        var company = CompanyEntity.Current; // 获取公司实体
-        if (company == null)
+        if (!_spawnTypePointPoolMap.TryGetValue(spawnTypeId, out var pool) || pool.PointIds.Count == 0)
         {
-            return Vector2.zero; // 无公司时返回原点
+            CY.LogError($"[WaveManager] 生成类型未配置刷新点，SpawnTypeId={spawnTypeId}"); // 输出刷新点缺失错误
+            return false; // 未配置刷新点时失败
         }
 
-        return company.transform.position; // 返回公司位置
+        var normalIndex = Random.Range(0, pool.PointIds.Count); // 随机索引
+        var normalPointId = pool.PointIds[normalIndex]; // 取出点 Id
+        if (!WaveSpawnPoint.TryGetRandomPoint(normalPointId, out position))
+        {
+            CY.LogError($"[WaveManager] 刷新点未注册或已失效，PointId={normalPointId}, SpawnTypeId={spawnTypeId}"); // 输出刷新点无效错误
+            return false; // 刷新点无效时失败
+        }
+
+        return true; // 命中有效刷新点时返回成功
     }
 
     /// <summary>

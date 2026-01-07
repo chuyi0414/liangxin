@@ -13,7 +13,7 @@ using UnityEngine; // Unity 引擎基础类型引用
 /// 子弹生成用户数据（类 + 对象池，避免频繁分配）。
 /// </summary>
 [Serializable] // 序列化支持
-public sealed class BulletSpawnUserData // 子弹生成用户数据类
+public sealed class BulletSpawnUserData : IPoolable // 子弹生成用户数据类（实现可池化接口）
 {
     /// <summary>子弹出生位置（XY 平面）。</summary>
     public Vector2 Position; // 出生位置
@@ -45,6 +45,22 @@ public sealed class BulletSpawnUserData // 子弹生成用户数据类
         Camp = UnitCamp.Neutral; // 清理阵营
         Owner = null; // 清理拥有者
         IsCrit = false; // 清理暴击
+    }
+
+    /// <summary>
+    /// 从池中取出时回调（无需处理，数据回收时已清理）。
+    /// </summary>
+    public void OnSpawn() // 对象取出回调入口
+    {
+        // 取出时无需处理，回收阶段已完成清理
+    }
+
+    /// <summary>
+    /// 归还到池时回调（清理引用，避免残留）。
+    /// </summary>
+    public void OnDespawn() // 对象回收回调入口
+    {
+        Reset(); // 回收时重置数据
     }
 }
 
@@ -82,8 +98,6 @@ public class BulletEntity : EntityBase // 子弹实体定义
     private Rigidbody2D _rigidbody2D; // 刚体缓存
     /// <summary>Collider2D 缓存。</summary>
     private Collider2D _collider2D; // 碰撞体缓存
-    /// <summary>子弹生成数据对象池（全局复用）。</summary>
-    private static ObjectPool<BulletSpawnUserData> _spawnUserDataPool; // 生成数据对象池
     /// <summary>当前实体持有的生成数据（用于回收）。</summary>
     private BulletSpawnUserData _spawnUserData; // 生成数据引用
     /// <summary>默认方向（由初始朝向决定）。</summary>
@@ -130,43 +144,6 @@ public class BulletEntity : EntityBase // 子弹实体定义
     public bool IsActive => _isActive; // 激活状态只读访问
     /// <summary>是否暴击（只读）。</summary>
     public bool IsCrit => _isCrit; // 暴击只读访问
-
-    /// <summary>
-    /// 获取生成数据对象池（延迟创建）。
-    /// </summary>
-    private static ObjectPool<BulletSpawnUserData> GetSpawnUserDataPool() // 对象池获取入口
-    {
-        if (_spawnUserDataPool == null)
-        {
-            _spawnUserDataPool = new ObjectPool<BulletSpawnUserData>(() => new BulletSpawnUserData()); // 创建对象池
-        }
-
-        return _spawnUserDataPool; // 返回对象池
-    }
-
-    /// <summary>
-    /// 申请一个生成数据对象（供外部填充）。
-    /// </summary>
-    public static BulletSpawnUserData RentSpawnUserData() // 生成数据申请入口
-    {
-        var data = GetSpawnUserDataPool().Get(); // 从池中获取
-        data.Reset(); // 清理旧数据
-        return data; // 返回生成数据
-    }
-
-    /// <summary>
-    /// 归还生成数据对象（供外部回收）。
-    /// </summary>
-    public static void ReturnSpawnUserData(BulletSpawnUserData data) // 生成数据归还入口
-    {
-        if (data == null)
-        {
-            return; // 空引用直接返回
-        }
-
-        data.Reset(); // 清理数据
-        GetSpawnUserDataPool().Return(data); // 放回对象池
-    }
 
     /// <summary>
     /// 实体初始化：缓存组件引用并记录默认朝向。
@@ -258,7 +235,7 @@ public class BulletEntity : EntityBase // 子弹实体定义
             return; // 未持有数据时返回
         }
 
-        ReturnSpawnUserData(_spawnUserData); // 归还到对象池
+        CY.Pool.GetOrCreatePool<BulletSpawnUserData>(() => new BulletSpawnUserData()).Return(_spawnUserData); // 通过框架对象池归还数据
         _spawnUserData = null; // 清理引用
     }
 

@@ -49,6 +49,38 @@ public sealed class WaveSpawnPoint : MonoBehaviour // 刷新命名点组件
     }
 
     /// <summary>
+    /// 强制刷新指定根节点下的所有命名点注册（避免时序导致注册丢失）。
+    /// </summary>
+    /// <param name="root">命名点根节点。</param>
+    public static void RefreshAll(Transform root) // 全量刷新入口
+    {
+        if (root == null)
+        {
+            return; // 根节点为空时直接退出
+        }
+
+        ForceUnregisterAll(); // 先强制清空旧注册
+
+        var points = root.GetComponentsInChildren<WaveSpawnPoint>(true); // 获取根节点下的所有刷新点
+        if (points == null || points.Length == 0)
+        {
+            return; // 未找到刷新点时直接退出
+        }
+
+        for (int i = 0; i < points.Length; i++)
+        {
+            var point = points[i]; // 取出当前刷新点
+            if (point == null)
+            {
+                continue; // 刷新点为空时跳过
+            }
+
+            point.Unregister(); // 先注销，确保注册状态一致
+            point.Register(); // 重新注册到命名点表
+        }
+    }
+
+    /// <summary>
     /// 获取指定命名点的随机位置（使用子物体 localScale 作为圆形范围）。
     /// </summary>
     /// <param name="pointId">命名点 Id。</param>
@@ -66,15 +98,26 @@ public sealed class WaveSpawnPoint : MonoBehaviour // 刷新命名点组件
             return false; // 未找到命名点时返回失败
         }
 
-        var index = Random.Range(0, list.Count); // 随机索引
-        var point = list[index]; // 获取命名点
-        if (point == null)
+        for (int attempt = list.Count - 1; attempt >= 0; attempt--)
         {
-            return false; // 命名点为空时返回失败
+            var index = Random.Range(0, list.Count); // 随机索引
+            var point = list[index]; // 获取命名点
+            if (point == null)
+            {
+                list.RemoveAt(index); // 移除空引用
+                continue; // 继续尝试
+            }
+
+            position = point.GetRandomPointInCircle(); // 输出圆形范围内的随机坐标
+            return true; // 返回成功
         }
 
-        position = point.GetRandomPointInCircle(); // 输出圆形范围内的随机坐标
-        return true; // 返回成功
+        if (list.Count == 0)
+        {
+            Points.Remove(pointId); // 移除空列表
+        }
+
+        return false; // 未找到有效命名点时返回失败
     }
 
     /// <summary>
@@ -163,5 +206,38 @@ public sealed class WaveSpawnPoint : MonoBehaviour // 刷新命名点组件
         }
 
         _registered = false; // 清理注册标记
+    }
+
+    /// <summary>
+    /// 强制清空全部命名点注册（用于重新构建注册表）。
+    /// </summary>
+    private static void ForceUnregisterAll() // 强制清空入口
+    {
+        if (Points.Count == 0)
+        {
+            return; // 注册表为空时直接退出
+        }
+
+        foreach (var pair in Points)
+        {
+            var list = pair.Value; // 获取命名点列表
+            if (list == null)
+            {
+                continue; // 列表为空时跳过
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var point = list[i]; // 取出命名点
+                if (point == null)
+                {
+                    continue; // 命名点为空时跳过
+                }
+
+                point._registered = false; // 强制重置注册标记
+            }
+        }
+
+        Points.Clear(); // 清空注册表
     }
 }

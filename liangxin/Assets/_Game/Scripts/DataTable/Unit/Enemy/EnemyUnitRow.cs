@@ -22,6 +22,10 @@ public sealed class EnemyUnitRow : IDataRow
     public int MaxHp;
     /// <summary>攻击力。</summary>
     public int Attack;
+    /// <summary>污染伤害最小值。</summary>
+    public float PollutionDamageMin;
+    /// <summary>污染伤害最大值。</summary>
+    public float PollutionDamageMax;
     /// <summary>防御力。</summary>
     public int Defense;
     /// <summary>固定防御穿透值。</summary>
@@ -52,24 +56,26 @@ public sealed class EnemyUnitRow : IDataRow
     /// </summary>
     public void ParseRow(string[] values)
     {
-        Id = int.Parse(values[0]);
-        Code = values[1];
-        Name = values[2];
-        Camp = (UnitCamp)int.Parse(values[3]);
-        LifeState = (UnitLifeState)int.Parse(values[4]);
-        Level = int.Parse(values[5]);
-        MaxHp = int.Parse(values[6]);
-        Attack = int.Parse(values[7]);
-        Defense = int.Parse(values[8]);
-        DefensePenetration = int.Parse(values[9]);
-        DefensePenetrationRate = float.Parse(values[10], CultureInfo.InvariantCulture);
-        CritRate = float.Parse(values[11], CultureInfo.InvariantCulture);
-        DodgeRate = float.Parse(values[12], CultureInfo.InvariantCulture);
-        IsRanged = bool.Parse(values[13]);
-        MoveSpeed = float.Parse(values[14], CultureInfo.InvariantCulture);
-        AttackRange = float.Parse(values[15], CultureInfo.InvariantCulture);
-        SightRange = float.Parse(values[16], CultureInfo.InvariantCulture);
-        AttackInterval = float.Parse(values[17], CultureInfo.InvariantCulture);
-        AttackStopDuration = float.Parse(values[18], CultureInfo.InvariantCulture);
+        Id = int.Parse(values[0]); // 解析 Id
+        Code = values[1]; // 解析单位编码
+        Name = values[2]; // 解析单位名称
+        Camp = (UnitCamp)int.Parse(values[3]); // 解析阵营
+        LifeState = (UnitLifeState)int.Parse(values[4]); // 解析生命状态
+        Level = int.Parse(values[5]); // 解析等级
+        MaxHp = int.Parse(values[6]); // 解析最大生命值
+        Attack = int.Parse(values[7]); // 解析攻击力
+        PollutionDamageMin = float.Parse(values[8], CultureInfo.InvariantCulture); // 解析污染伤害最小值
+        PollutionDamageMax = float.Parse(values[9], CultureInfo.InvariantCulture); // 解析污染伤害最大值
+        Defense = int.Parse(values[10]); // 解析防御力
+        DefensePenetration = int.Parse(values[11]); // 解析固定防御穿透
+        DefensePenetrationRate = float.Parse(values[12], CultureInfo.InvariantCulture); // 解析百分比防御穿透
+        CritRate = float.Parse(values[13], CultureInfo.InvariantCulture); // 解析暴击率
+        DodgeRate = float.Parse(values[14], CultureInfo.InvariantCulture); // 解析闪避率
+        IsRanged = bool.Parse(values[15]); // 解析远程标记
+        MoveSpeed = float.Parse(values[16], CultureInfo.InvariantCulture); // 解析移动速度
+        AttackRange = float.Parse(values[17], CultureInfo.InvariantCulture); // 解析攻击范围
+        SightRange = float.Parse(values[18], CultureInfo.InvariantCulture); // 解析可视范围
+        AttackInterval = float.Parse(values[19], CultureInfo.InvariantCulture); // 解析攻击间隔
+        AttackStopDuration = float.Parse(values[20], CultureInfo.InvariantCulture); // 解析攻击停顿时长
     }
 }

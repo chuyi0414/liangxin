@@ -3,5 +3,7 @@
     "Conscience": 100,
     "BlackHeart": 0,
     "CompanyConscience": 100,
-    "CompanyPollution": 20
+    "CompanyConscienceDamagePerPoint": 10,
+    "CompanyPollution": 20,
+    "CompanyPollutionDamagePerPoint": 5
 }

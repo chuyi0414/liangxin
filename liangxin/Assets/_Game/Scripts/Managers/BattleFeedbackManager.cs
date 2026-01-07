@@ -36,8 +36,8 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
 
     /// <summary>UI 层级名称（与 Main/Popup/Tips 同级）。</summary>
     private const string UiLayerName = "BattleFeedback";
-    /// <summary>UI 层级排序（固定使用 150）。</summary>
-    private const int UiLayerOrder = 150;
+    /// <summary>UI 层级排序（固定使用 50）。</summary>
+    private const int UiLayerOrder = 50;
     /// <summary>血条对象池 Key。</summary>
     private const string HpBarPoolKey = "BattleFeedback_HpBar";
     /// <summary>飘字对象池 Key。</summary>

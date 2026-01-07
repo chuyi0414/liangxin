@@ -32,10 +32,6 @@ public class GameUIPanel : UIPanel
     /// </summary>
     [SerializeField] private Slider _sliderCompanyPollution;
     /// <summary>
-    /// 当前污染度
-    /// </summary>
-    [SerializeField] private float _floatCompanyPollution;
-    /// <summary>
     /// 波次倒计时
     /// </summary>
     [SerializeField] private TMP_Text _txtWaveCountdown;
@@ -45,6 +41,8 @@ public class GameUIPanel : UIPanel
     [SerializeField] private TMP_Text _txtStage;
     /// <summary>波次 UI 刷新计时器。</summary>
     private Timer _waveUiTimer;
+    /// <summary>是否已订阅公司数据事件。</summary>
+    private bool _companyEventsSubscribed; // 公司事件订阅标记
 
     protected override void OnBindUI()
     {
@@ -69,7 +67,7 @@ public class GameUIPanel : UIPanel
     protected override void OnOpen(object userData)
     {
         base.OnOpen(userData);
-        _floatCompanyPollution = 0;
+        EnsureCompanyDataSubscribed(); // 确保订阅公司数据事件
         RefreshBattleData();
         StartWaveUiTimer();
     }
@@ -91,7 +89,57 @@ public class GameUIPanel : UIPanel
             _btnPause.onClick.RemoveListener(OnBtnPauseClick);
         }
 
+        UnsubscribeCompanyDataEvents(); // 取消公司数据事件订阅
         StopWaveUiTimer();
+    }
+
+    /// <summary>
+    /// 确保订阅公司数据事件。
+    /// </summary>
+    private void EnsureCompanyDataSubscribed() // 公司事件订阅入口
+    {
+        if (_companyEventsSubscribed)
+        {
+            return; // 已订阅时直接返回
+        }
+
+        CY.Event.Subscribe<CompanyConscienceChangedEvent>(OnCompanyConscienceChanged, this); // 订阅公司良心变化事件
+        CY.Event.Subscribe<CompanyPollutionChangedEvent>(OnCompanyPollutionChanged, this); // 订阅公司污染变化事件
+        _companyEventsSubscribed = true; // 标记已订阅
+    }
+
+    /// <summary>
+    /// 取消订阅公司数据事件。
+    /// </summary>
+    private void UnsubscribeCompanyDataEvents() // 公司事件取消订阅入口
+    {
+        if (!_companyEventsSubscribed)
+        {
+            return; // 未订阅时直接返回
+        }
+
+        CY.Event.UnsubscribeAll(this); // 取消当前面板的事件订阅
+        _companyEventsSubscribed = false; // 标记已取消订阅
+    }
+
+    /// <summary>
+    /// 公司良心变化事件回调。
+    /// </summary>
+    /// <param name="evt">良心变化事件。</param>
+    private void OnCompanyConscienceChanged(ref CompanyConscienceChangedEvent evt) // 良心事件回调入口
+    {
+        SetValueText(_txtCompanyConscience, evt.CurrentValue); // 刷新公司良心显示
+    }
+
+    /// <summary>
+    /// 公司污染变化事件回调。
+    /// </summary>
+    /// <param name="evt">污染变化事件。</param>
+    private void OnCompanyPollutionChanged(ref CompanyPollutionChangedEvent evt) // 污染事件回调入口
+    {
+        var percent = ToPercent(evt.CurrentValue, evt.ThresholdValue); // 计算污染百分比
+        SetValueText(_txtCompanyPollution, percent, true); // 刷新公司污染显示
+        SetCompanyPollutionScrollbar(percent); // 刷新污染滑动条
     }
 
     /// <summary>
@@ -116,8 +164,12 @@ public class GameUIPanel : UIPanel
         SetValueText(_txtMoney, data.Money);
         SetValueText(_txtConscience, data.Conscience);
         SetValueText(_txtBlackHeart, data.BlackHeart);
-        SetValueText(_txtCompanyConscience, data.CompanyConscience);
-        var pollutionPercent = ToPercent(Mathf.RoundToInt(_floatCompanyPollution), data.CompanyPollution);
+        var companyConscience = manager.CompanyConscienceCurrent; // 读取公司良心当前值
+        var companyPollution = manager.CompanyPollutionCurrent; // 读取公司污染当前值
+        var companyPollutionMax = data.CompanyPollution; // 读取公司污染阈值
+
+        SetValueText(_txtCompanyConscience, companyConscience); // 刷新公司良心显示
+        var pollutionPercent = ToPercent(companyPollution, companyPollutionMax); // 计算污染百分比
         SetValueText(_txtCompanyPollution, pollutionPercent, true);
         SetCompanyPollutionScrollbar(pollutionPercent);
         
