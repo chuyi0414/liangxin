@@ -37,6 +37,8 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
     private CompanyEntity _companyEntity; // 公司实体引用
     /// <summary>玩家实体缓存。</summary>
     private PlayerEntity _playerEntity; // 玩家实体引用
+    /// <summary>是否已请求下一帧设置相机跟随。</summary>
+    private bool _pendingFollowPlayer; // 相机跟随请求标记
     /// <summary>NavMeshSurface 组件缓存。</summary>
     private NavMeshSurface _navMeshSurface; // NavMeshSurface 缓存
     /// <summary>NavMesh 烘焙计时器。</summary>
@@ -146,19 +148,23 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
         PlayerUnitRow row; // 玩家数据行声明
         if (unitManager != null && unitManager.TryGetDefaultPlayerRow(out row))
         {
-            _playerEntity = CY.Entity.SpawnEntity<PlayerEntity>(row); // 生成玩家实体
+            var playerPreShowData = new PlayerPreShowData(); // 创建玩家预显示数据
+            if (_playerSpawnPoint != null)
+            {
+                playerPreShowData.HasPosition = true; // 标记预显示位置有效
+                playerPreShowData.Position = _playerSpawnPoint.position; // 写入玩家出生点位置
+            }
+            else
+            {
+                playerPreShowData.HasPosition = true; // 出生点缺失时仍提供位置
+                playerPreShowData.Position = Vector3.zero; // 回退到原点避免对象池远距离
+            }
+
+            _playerEntity = CY.Entity.SpawnEntity<PlayerEntity, PlayerPreShowData>(ref playerPreShowData, row); // 使用预显示数据生成玩家实体
             if (_playerEntity != null)
             {
-                ApplySpawnPosition(_playerEntity, _playerSpawnPoint); // 应用玩家出生点位置
                 unitManager.SetPlayer(_playerEntity); // 设置当前玩家引用
-                if (ServiceLocator.TryGet<CameraManager>(out var cameraManager))
-                {
-                    cameraManager.SetFollowTarget(_playerEntity.transform, true); // 设置相机跟随玩家并立即对齐
-                }
-                else
-                {
-                    CY.LogWarning("[LevelEntity] CameraManager 未注册，无法设置相机跟随。"); // 输出相机管理器缺失提示
-                }
+                RequestFollowPlayerNextFrame(); // 下一帧设置相机跟随，避免对象池远距离位置抖动
             }
         }
         else
@@ -204,9 +210,9 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
     /// </summary>
     private void CleanupEntities() // 回收关卡实体入口
     {
+        _pendingFollowPlayer = false; // 清理等待跟随标记
         if (_playerEntity != null)
         {
-            CY.Entity.RecycleEntity(_playerEntity); // 回收玩家实体
             var unitManager = CY.Unit; // 获取单位管理器
             if (unitManager != null)
             {
@@ -218,6 +224,7 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
                 cameraManager.ClearFollowTarget(); // 清理相机跟随目标
             }
 
+            CY.Entity.RecycleEntity(_playerEntity); // 回收玩家实体
             _playerEntity = null; // 清空玩家引用
         }
 
@@ -225,6 +232,41 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
         {
             CY.Entity.RecycleEntity(_companyEntity); // 回收公司实体
             _companyEntity = null; // 清空公司引用
+        }
+    }
+
+    /// <summary>
+    /// 请求下一帧设置相机跟随，确保玩家位置已应用。
+    /// </summary>
+    private void RequestFollowPlayerNextFrame() // 下一帧跟随请求入口
+    {
+        if (_pendingFollowPlayer)
+        {
+            return; // 已请求时直接退出
+        }
+
+        _pendingFollowPlayer = true; // 标记已请求
+        CY.Timer.NextFrame(ApplyFollowPlayer); // 下一帧执行跟随
+    }
+
+    /// <summary>
+    /// 执行相机跟随（下一帧回调）。
+    /// </summary>
+    private void ApplyFollowPlayer() // 跟随执行入口
+    {
+        _pendingFollowPlayer = false; // 清理请求标记
+        if (_playerEntity == null)
+        {
+            return; // 玩家已被回收则退出
+        }
+
+        if (ServiceLocator.TryGet<CameraManager>(out var cameraManager))
+        {
+            cameraManager.SetFollowTarget(_playerEntity.transform, true); // 设置相机跟随并立即对齐
+        }
+        else
+        {
+            CY.LogWarning("[LevelEntity] CameraManager 未注册，无法设置相机跟随。"); // 输出相机管理器缺失提示
         }
     }
 

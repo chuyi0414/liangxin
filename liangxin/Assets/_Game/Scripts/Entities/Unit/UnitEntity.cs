@@ -399,6 +399,17 @@ public abstract class UnitEntity : EntityBase
     }
 
     /// <summary>
+    /// 获取攻击发射起点（默认使用单位中心，子类可覆盖为武器/攻击点）。
+    /// </summary>
+    /// <param name="origin">输出攻击起点世界坐标。</param>
+    protected virtual bool TryGetAttackOrigin(out Vector2 origin) // 攻击起点获取入口
+    {
+        var t = _cachedTransform != null ? _cachedTransform : transform; // 获取可用 Transform
+        origin = (Vector2)t.position; // 输出世界坐标
+        return true; // 默认起点始终有效
+    }
+
+    /// <summary>
     /// 远程攻击：生成子弹并朝目标方向发射。
     /// </summary>
     /// <param name="target">攻击目标。</param>
@@ -416,7 +427,11 @@ public abstract class UnitEntity : EntityBase
             return false; // 伤害无效时返回失败
         }
 
-        var origin = _cachedTransform != null ? (Vector2)_cachedTransform.position : (Vector2)transform.position; // 读取子弹出生点
+        if (!TryGetAttackOrigin(out var origin))
+        {
+            return false; // 起点无效时返回失败
+        }
+
         var targetPos = origin; // 初始化目标点为出生点
         if (target.CachedCollider2D != null)
         {
@@ -457,7 +472,10 @@ public abstract class UnitEntity : EntityBase
 
         direction.Normalize(); // 归一化方向向量
 
-        var origin = _cachedTransform != null ? (Vector2)_cachedTransform.position : (Vector2)transform.position; // 读取子弹出生点
+        if (!TryGetAttackOrigin(out var origin))
+        {
+            return false; // 起点无效时返回失败
+        }
 
         var spawnData = CY.Pool.GetOrCreatePool<BulletSpawnUserData>(() => new BulletSpawnUserData()).Get(); // 通过框架对象池申请子弹生成数据
         spawnData.Position = origin; // 子弹出生位置

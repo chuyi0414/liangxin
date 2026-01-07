@@ -1,5 +1,6 @@
 using CYFramework;
 using CYFramework.Core.Procedure;
+using CYFramework.Infrastructure;
 using UnityEngine;
 
 [AutoRegisterProcedure(name: "Game", order: 20)]
@@ -26,6 +27,12 @@ public class GameProcedure : ProcedureBase
         base.OnLeave(nextProcedure);
         CY.UI.Close<GameUIPanel>();
         PauseWaveSystem(); // 退出游戏流程时暂停波次系统
+
+        if (ServiceLocator.TryGet<CameraManager>(out var cameraManager))
+        {
+            cameraManager.ClearFollowTarget(); // 清理相机跟随目标
+            cameraManager.ResetWorldCameraPosition(Vector2.zero); // 重置相机到原点（保持 Z 不变）
+        }
 
         var unitManager = CY.Unit; // 获取单位管理器
         var entityManager = CY.Entity; // 获取实体管理器

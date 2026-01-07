@@ -212,6 +212,14 @@ namespace CYFramework.Core.Entity
         /// </summary>
         private bool _autoRestoreRenderers = true; // 自动恢复渲染开关
         /// <summary>
+        /// 2D 刚体组件缓存（用于显示/回收阶段同步位置，避免对象池隐藏坐标抖动）。
+        /// </summary>
+        private Rigidbody2D _cachedRigidbody2D; // 2D 刚体缓存引用
+        /// <summary>
+        /// 3D 刚体组件缓存（用于显示/回收阶段同步位置，避免对象池隐藏坐标抖动）。
+        /// </summary>
+        private Rigidbody _cachedRigidbody; // 3D 刚体缓存引用
+        /// <summary>
         /// 回收隐藏位置（用于对象池回收后远离场景）。
         /// </summary>
         private static readonly Vector3 HiddenWorldPosition = new Vector3(100000f, 100000f, 0f); // 回收隐藏位置
@@ -234,6 +242,7 @@ namespace CYFramework.Core.Entity
             UserData = userData;
             IsPaused = false;
             CacheRenderersIfNeeded(); // 缓存渲染默认状态
+            CachePhysicsIfNeeded(); // 缓存物理组件，避免频繁 GetComponent
             OnEntityInit(userData);
         }
         
@@ -247,6 +256,7 @@ namespace CYFramework.Core.Entity
             IsPaused = false;
             ApplyPreShowTransform(userData); // 应用预显示变换
             OnEntityPreShow(userData); // 预显示钩子
+            SyncTransformAndRigidbodyBeforeShow(); // 显示前同步位置，避免隐藏坐标抖动
             DisableCachedRenderers(); // 先隐藏渲染避免旧状态闪烁
             gameObject.SetActive(true);
             OnEntityShow(userData);
@@ -373,6 +383,100 @@ namespace CYFramework.Core.Entity
         }
 
         /// <summary>
+        /// 缓存物理组件（仅在首次需要时获取，避免重复 GetComponent）。
+        /// </summary>
+        private void CachePhysicsIfNeeded() // 物理缓存初始化入口
+        {
+            if (_cachedRigidbody2D == null)
+            {
+                _cachedRigidbody2D = GetComponent<Rigidbody2D>(); // 缓存 2D 刚体组件
+            }
+
+            if (_cachedRigidbody == null)
+            {
+                _cachedRigidbody = GetComponent<Rigidbody>(); // 缓存 3D 刚体组件
+            }
+        }
+
+        /// <summary>
+        /// 显示前同步 Transform 与刚体位置，避免对象池隐藏坐标导致首帧闪动。
+        /// </summary>
+        private void SyncTransformAndRigidbodyBeforeShow() // 显示前位置同步入口
+        {
+            CachePhysicsIfNeeded(); // 确保物理组件已缓存
+            var t = transform; // 获取 Transform
+            if (t == null)
+            {
+                return; // Transform 为空时直接退出
+            }
+
+            var transformPosition = t.position; // 读取 Transform 世界坐标
+            var hasRigidbody2D = _cachedRigidbody2D != null; // 标记是否存在 2D 刚体
+            var hasRigidbody = _cachedRigidbody != null; // 标记是否存在 3D 刚体
+
+            var transformHidden = IsHiddenPosition(transformPosition); // 判断 Transform 是否在隐藏坐标
+            var rigidbody2DHidden = hasRigidbody2D && IsHiddenPosition(_cachedRigidbody2D.position); // 判断 2D 刚体是否在隐藏坐标
+            var rigidbodyHidden = hasRigidbody && IsHiddenPosition(_cachedRigidbody.position); // 判断 3D 刚体是否在隐藏坐标
+
+            var finalPosition = transformPosition; // 默认使用 Transform 位置
+            if (transformHidden)
+            {
+                if (hasRigidbody2D && !rigidbody2DHidden)
+                {
+                    var rb2DPosition = _cachedRigidbody2D.position; // 读取 2D 刚体位置
+                    finalPosition = new Vector3(rb2DPosition.x, rb2DPosition.y, transformPosition.z); // 使用 2D 刚体 XY 并保持 Z
+                }
+                else if (hasRigidbody && !rigidbodyHidden)
+                {
+                    finalPosition = _cachedRigidbody.position; // 使用 3D 刚体位置
+                }
+            }
+
+            if (hasRigidbody2D)
+            {
+                var finalPosition2D = new Vector2(finalPosition.x, finalPosition.y); // 构建 2D 位置
+                _cachedRigidbody2D.position = finalPosition2D; // 同步 2D 刚体位置
+                _cachedRigidbody2D.velocity = Vector2.zero; // 清空 2D 刚体速度
+                _cachedRigidbody2D.angularVelocity = 0f; // 清空 2D 刚体角速度
+            }
+
+            if (hasRigidbody)
+            {
+                _cachedRigidbody.position = finalPosition; // 同步 3D 刚体位置
+                _cachedRigidbody.velocity = Vector3.zero; // 清空 3D 刚体速度
+                _cachedRigidbody.angularVelocity = Vector3.zero; // 清空 3D 刚体角速度
+            }
+
+            if (hasRigidbody)
+            {
+                t.position = finalPosition; // 3D 刚体存在时使用完整位置
+                return; // 3D 刚体同步完成后直接退出
+            }
+
+            t.position = new Vector3(finalPosition.x, finalPosition.y, transformPosition.z); // 仅覆盖 XY 并保持 Z
+        }
+
+        /// <summary>
+        /// 判断 3D 位置是否为隐藏坐标（仅比较 XY）。
+        /// </summary>
+        /// <param name="position">需要判断的世界坐标。</param>
+        /// <returns>是否处于隐藏坐标。</returns>
+        private static bool IsHiddenPosition(Vector3 position) // 3D 隐藏坐标判断入口
+        {
+            return position.x == HiddenWorldPosition.x && position.y == HiddenWorldPosition.y; // 比较 XY 是否匹配隐藏坐标
+        }
+
+        /// <summary>
+        /// 判断 2D 位置是否为隐藏坐标（仅比较 XY）。
+        /// </summary>
+        /// <param name="position">需要判断的 2D 坐标。</param>
+        /// <returns>是否处于隐藏坐标。</returns>
+        private static bool IsHiddenPosition(Vector2 position) // 2D 隐藏坐标判断入口
+        {
+            return position.x == HiddenWorldPosition.x && position.y == HiddenWorldPosition.y; // 比较 XY 是否匹配隐藏坐标
+        }
+
+        /// <summary>
         /// 缓存渲染组件与默认启用状态（仅初始化一次）。
         /// </summary>
         private void CacheRenderersIfNeeded() // 渲染缓存初始化入口
@@ -468,6 +572,20 @@ namespace CYFramework.Core.Entity
             pos.x = HiddenWorldPosition.x; // 写入隐藏 X
             pos.y = HiddenWorldPosition.y; // 写入隐藏 Y
             t.position = pos; // 写回世界坐标
+            CachePhysicsIfNeeded(); // 确保物理组件已缓存
+            if (_cachedRigidbody2D != null)
+            {
+                _cachedRigidbody2D.position = new Vector2(pos.x, pos.y); // 同步 2D 刚体位置
+                _cachedRigidbody2D.velocity = Vector2.zero; // 清空 2D 刚体速度
+                _cachedRigidbody2D.angularVelocity = 0f; // 清空 2D 刚体角速度
+            }
+
+            if (_cachedRigidbody != null)
+            {
+                _cachedRigidbody.position = pos; // 同步 3D 刚体位置
+                _cachedRigidbody.velocity = Vector3.zero; // 清空 3D 刚体速度
+                _cachedRigidbody.angularVelocity = Vector3.zero; // 清空 3D 刚体角速度
+            }
         }
         
         // 子类重写

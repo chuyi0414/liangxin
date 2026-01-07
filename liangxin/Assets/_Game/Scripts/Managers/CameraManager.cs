@@ -27,6 +27,8 @@ public sealed class CameraManager : MonoBehaviour, IInitializable, IUpdateable, 
     private Transform _followTarget; // 跟随目标缓存
     /// <summary>平滑移动速度缓存。</summary>
     private Vector3 _followVelocity; // 平滑速度缓存
+    /// <summary>是否等待相机就绪后执行一次立即对齐。</summary>
+    private bool _pendingSnap; // 延迟对齐标记
     /// <summary>是否已注册到 ServiceLocator。</summary>
     private bool _registered; // 注册标记
     /// <summary>是否已初始化。</summary>
@@ -170,10 +172,23 @@ public sealed class CameraManager : MonoBehaviour, IInitializable, IUpdateable, 
     {
         _followTarget = target; // 写入跟随目标
         _followVelocity = Vector3.zero; // 清空平滑速度缓存
-        if (snap)
+        if (!snap)
         {
-            SnapToTarget(); // 立即对齐到目标位置
+            return; // 不需要对齐时直接退出
         }
+
+        if (_worldCamera == null)
+        {
+            CacheCameras(); // 尝试缓存相机
+            if (_worldCamera == null)
+            {
+                _pendingSnap = true; // 标记等待相机就绪后对齐
+                return; // 相机仍为空时退出
+            }
+        }
+
+        _pendingSnap = false; // 清理等待标记
+        SnapToTarget(); // 立即对齐到目标位置
     }
 
     /// <summary>
@@ -182,6 +197,30 @@ public sealed class CameraManager : MonoBehaviour, IInitializable, IUpdateable, 
     public void ClearFollowTarget() // 跟随目标清理入口
     {
         _followTarget = null; // 清空跟随目标
+        _followVelocity = Vector3.zero; // 清空平滑速度缓存
+        _pendingSnap = false; // 清理等待对齐标记
+    }
+
+    /// <summary>
+    /// 重置世界相机位置（仅重置 XY，保持 Z 不变）。
+    /// </summary>
+    /// <param name="positionXY">目标 XY 坐标。</param>
+    public void ResetWorldCameraPosition(Vector2 positionXY) // 相机重置入口
+    {
+        if (_worldCamera == null)
+        {
+            CacheCameras(); // 尝试缓存相机
+            if (_worldCamera == null)
+            {
+                return; // 相机仍为空时退出
+            }
+        }
+
+        var cameraTransform = _worldCamera.transform; // 获取相机 Transform
+        cameraTransform.position = new Vector3( // 仅重置 XY，保持原 Z
+            positionXY.x, // 目标 X
+            positionXY.y, // 目标 Y
+            cameraTransform.position.z); // 保持 Z 不变
         _followVelocity = Vector3.zero; // 清空平滑速度缓存
     }
 
@@ -209,6 +248,12 @@ public sealed class CameraManager : MonoBehaviour, IInitializable, IUpdateable, 
         {
             CY.LogWarning("[CameraManager] 未找到 UI 相机（Overlay 可为空）。"); // 输出缺失提示
             _warnedUiCamera = true; // 标记已提示
+        }
+
+        if (_worldCamera != null && _pendingSnap && _followTarget != null)
+        {
+            _pendingSnap = false; // 清理等待标记
+            SnapToTarget(); // 相机就绪后立即对齐
         }
     }
 

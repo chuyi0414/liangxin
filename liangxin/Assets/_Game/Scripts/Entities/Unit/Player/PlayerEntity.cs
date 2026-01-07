@@ -2,12 +2,22 @@ using CYFramework;
 using CYFramework.Core.Entity;
 using UnityEngine;
 /// <summary>
+/// 玩家预显示数据：用于在激活前设置出生位置。
+/// </summary>
+public struct PlayerPreShowData // 玩家预显示数据结构
+{
+    /// <summary>是否提供了有效位置。</summary>
+    public bool HasPosition; // 位置有效标记
+    /// <summary>预显示位置（世界坐标）。</summary>
+    public Vector3 Position; // 预显示位置
+}
+/// <summary>
 /// 老板单位实体（继承通用 UnitEntity）。
 /// 仅作为类型标识，具体行为由后续系统扩展。
 /// </summary>
 [RequireComponent(typeof(HybridNavigationAgent))]
 [EntityPrefab("Prefabs/Entities/Unit/Player/PlayerEntity", "Players", "Players")]
-public sealed class PlayerEntity : UnitEntity
+public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowData> // 玩家实体定义
 {
     /// <summary>缓存 Transform，减少高频访问开销。</summary>
     private Transform _cachedTransform;
@@ -27,7 +37,10 @@ public sealed class PlayerEntity : UnitEntity
     [SerializeField] private bool _showAttackRangeAlways = true; // 是否常显攻击范围
     /// <summary>攻击范围 Gizmos 颜色。</summary>
     [SerializeField] private Color _attackRangeGizmosColor = new Color(0.2f, 1f, 0.2f, 0.8f); // 攻击范围颜色
-
+    [Header("攻击配置")]
+    [SerializeField] private GameObject AttackLocation; // 攻击点
+    /// <summary>攻击点 Transform 缓存。</summary>
+    private Transform _attackLocationTransform; // 攻击点 Transform 缓存
     /// <summary>
     /// 初始化时缓存组件，避免在 Update 中重复查询。
     /// </summary>
@@ -36,11 +49,35 @@ public sealed class PlayerEntity : UnitEntity
         base.OnEntityInit(userData);
         _cachedTransform = transform;
         _rigidbody2D = GetComponent<Rigidbody2D>();
+        _attackLocationTransform = AttackLocation != null ? AttackLocation.transform : null; // 缓存攻击点 Transform
         _cachedCamera = Camera.main; // 缓存主摄像机
         if (_cachedCamera == null)
         {
             _cachedCamera = FindObjectOfType<Camera>(); // 回退获取场景中的任意摄像机（低频）
         }
+    }
+
+    /// <summary>
+    /// 应用预显示数据（激活前调用）。
+    /// </summary>
+    /// <param name="data">预显示数据（引用传递）。</param>
+    public void ApplyPreShowData(ref PlayerPreShowData data) // 预显示数据应用入口
+    {
+        if (!data.HasPosition)
+        {
+            return; // 无有效位置时直接退出
+        }
+
+        if (_rigidbody2D != null)
+        {
+            _rigidbody2D.position = new Vector2(data.Position.x, data.Position.y); // 使用刚体设置位置
+            _rigidbody2D.velocity = Vector2.zero; // 清空线速度
+            _rigidbody2D.angularVelocity = 0f; // 清空角速度
+            return; // 使用刚体时直接返回
+        }
+
+        var t = _cachedTransform != null ? _cachedTransform : transform; // 获取可用 Transform
+        t.position = new Vector3(data.Position.x, data.Position.y, t.position.z); // 设置位置并保持 Z
     }
 
     /// <summary>
@@ -117,6 +154,7 @@ public sealed class PlayerEntity : UnitEntity
     protected override void OnEntityRecycle()
     {
         base.OnEntityRecycle();
+        CY.Camera.ClearFollowTarget();//清理相机跟随目标
     }
 
     /// <summary>
@@ -167,6 +205,26 @@ public sealed class PlayerEntity : UnitEntity
     }
 
     /// <summary>
+    /// 获取攻击起点：优先使用攻击点，缺失则回退到单位中心。
+    /// </summary>
+    /// <param name="origin">输出攻击起点世界坐标。</param>
+    protected override bool TryGetAttackOrigin(out Vector2 origin) // 攻击起点覆盖入口
+    {
+        if (_attackLocationTransform == null && AttackLocation != null)
+        {
+            _attackLocationTransform = AttackLocation.transform; // 缓存攻击点 Transform
+        }
+
+        if (_attackLocationTransform != null)
+        {
+            origin = _attackLocationTransform.position; // 使用攻击点世界坐标
+            return true; // 攻击点有效时返回
+        }
+
+        return base.TryGetAttackOrigin(out origin); // 回退到单位中心起点
+    }
+
+    /// <summary>
     /// 处理攻击输入：按键长按，根据鼠标方向发射子弹。
     /// </summary>
     private void TryHandleAttackInput()
@@ -198,9 +256,17 @@ public sealed class PlayerEntity : UnitEntity
             return; // 摄像机为空时无法计算世界坐标
         }
 
-        var origin = _cachedTransform != null ? _cachedTransform.position : transform.position; // 获取自身位置
+        if (!TryGetAttackOrigin(out var origin))
+        {
+            return; // 起点无效时退出
+        }
+
+        var originZ = _attackLocationTransform != null
+            ? _attackLocationTransform.position.z // 优先使用攻击点的 Z 坐标
+            : (_cachedTransform != null ? _cachedTransform.position.z : transform.position.z); // 回退到玩家本体 Z
+
         var screenPos = Input.mousePosition; // 读取鼠标屏幕坐标
-        screenPos.z = Mathf.Abs(_cachedCamera.transform.position.z - origin.z); // 设置投射深度
+        screenPos.z = Mathf.Abs(_cachedCamera.transform.position.z - originZ); // 设置投射深度
         var mouseWorld = _cachedCamera.ScreenToWorldPoint(screenPos); // 计算鼠标世界坐标
         var direction = (Vector2)mouseWorld - (Vector2)origin; // 计算发射方向
         if (direction.sqrMagnitude <= 0f)

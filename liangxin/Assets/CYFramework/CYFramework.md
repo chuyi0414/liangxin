@@ -216,6 +216,7 @@ public T LoadConfig<T>(string path) where T : ScriptableObject
   - **实体池手动控制**：`EntityBase.AutoRestoreRenderers = false` 后，自行调用 `RestoreCachedRenderersToDefault()`。
   - **GameObject 池手动控制**：实现 `IPoolRendererControl` 并返回 `AutoRestoreRenderers = false`，自行决定启用时机。
 - **回收位置**：归还池时自动移动到远离场景的隐藏坐标，避免复用闪烁与误碰撞。
+- **隐藏同步**：回收/显示阶段会同步 Transform 与 Rigidbody(2D/3D) 位置，优先采用非隐藏坐标并清零速度，避免从隐藏坐标拉回导致画面闪动。
 - **实体预显示**：实体生成支持“激活前”注入出生数据，确保位置/朝向在 `SetActive(true)` 之前完成。
   - **推荐**：`SpawnEntity<T, TData>(..., ref data)` + 实体实现 `IEntityPreShowData<TData>`。
   - **兼容**：`userData` 实现 `IEntityPreShowTransform` 时，`EntityBase` 会在激活前应用位置/旋转。

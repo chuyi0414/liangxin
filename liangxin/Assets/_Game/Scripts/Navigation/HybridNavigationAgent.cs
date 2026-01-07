@@ -33,6 +33,7 @@ public enum NavMeshPlane // NavMesh 平面枚举
 [RequireComponent(typeof(Rigidbody2D))] // 强制挂载 Rigidbody2D，确保可移动
 public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理组件
 {
+    
     [Header("移动配置")] // Inspector 分组：移动配置
     [SerializeField] private float _moveSpeed = 5f; // 移动速度
     [SerializeField] private float _stoppingDistance = 0.1f; // 停止距离阈值
