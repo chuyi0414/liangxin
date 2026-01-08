@@ -14,6 +14,8 @@ public sealed class BattleData : IDataRow
     public int Conscience;
     /// <summary>黑心</summary>
     public int BlackHeart;
+    /// <summary>黑心自动转换为良心的时间间隔（秒，<=0 表示禁用自动转换）。</summary>
+    public float BlackHeartConvertTime;
     /// <summary>公司良心</summary>
     public int CompanyConscience;
     /// <summary>

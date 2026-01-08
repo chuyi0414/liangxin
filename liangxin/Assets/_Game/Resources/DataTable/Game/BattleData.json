@@ -2,6 +2,7 @@
     "Money": 1000,
     "Conscience": 100,
     "BlackHeart": 0,
+    "BlackHeartConvertTime": 2,
     "CompanyConscience": 100,
     "CompanyConscienceDamagePerPoint": 10,
     "CompanyPollution": 20,

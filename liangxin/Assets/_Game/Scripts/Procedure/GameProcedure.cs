@@ -11,7 +11,26 @@ public class GameProcedure : ProcedureBase
     protected override void OnEnter(ProcedureBase previousProcedure)
     {
         base.OnEnter(previousProcedure);
-        CY.UI.Open<GameUIPanel>();
+        var battleDataManager = CY.BattleDataManager; // 获取战斗数据管理器
+        if (battleDataManager != null)
+        {
+            var resetCompleted = battleDataManager.ResetRuntimeForNewGame(false); // 进入游戏流程时先重置运行时数据，确保 UI 打开时读取到初始值
+            CY.UI.Open<GameUIPanel>(); // 打开游戏 UI 面板
+            if (!resetCompleted)
+            {
+                battleDataManager.ResetRuntimeForNewGame(true); // 数据尚未加载时改为“加载完成后派发事件”，避免 UI 长期显示为 --
+            }
+
+            SpawnDefaultLevel();
+            CY.Timer.NextFrame(ResumeWaveSystem); // 下一帧再启动波次系统，确保 UI 初始化完成
+            return; // 已处理打开 UI 与初始化逻辑后直接返回
+        }
+        else
+        {
+            CY.LogWarning("[GameProcedure] BattleDataManager 未就绪，无法在进入游戏流程时重置 UI 数据。"); // 输出警告
+        }
+
+        CY.UI.Open<GameUIPanel>(); // BattleDataManager 未就绪时仍然打开 UI（会显示 --）
         SpawnDefaultLevel();
         CY.Timer.NextFrame(ResumeWaveSystem); // 下一帧再启动波次系统，确保 UI 初始化完成
     }

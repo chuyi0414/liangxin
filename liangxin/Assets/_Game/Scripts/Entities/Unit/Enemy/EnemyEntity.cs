@@ -48,6 +48,12 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
     [SerializeField] private int _blackHeartDropMin = 0; // 黑心掉落最小数量
     /// <summary>黑心掉落最大数量。</summary>
     [SerializeField] private int _blackHeartDropMax = 0; // 黑心掉落最大数量
+    /// <summary>掉落散射半径（世界单位）。</summary>
+    [SerializeField] private float _dropScatterRadius = 2f; // 掉落散射半径
+    /// <summary>掉落抛物线移动时长（秒）。</summary>
+    [SerializeField] private float _dropMoveDuration = 0.35f; // 掉落移动时长
+    /// <summary>掉落抛物线高度（Y 轴峰值高度）。</summary>
+    [SerializeField] private float _dropArcHeight = 1.2f; // 掉落抛物线高度
 
     [Header("AI配置")] // Inspector 分组：AI 配置
     [SerializeField] private EnemyAIBase _defaultAI; // 默认敌人 AI 资产
@@ -259,6 +265,24 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
         }
 
         var basePosition = _cachedTransform != null ? _cachedTransform.position : transform.position; // 读取掉落基准位置
+        var scatterRadius = _dropScatterRadius; // 读取掉落散射半径
+        if (scatterRadius <= 0f)
+        {
+            scatterRadius = 0f; // 散射半径无效时使用 0（表示落在原地）
+        }
+
+        var dropDuration = _dropMoveDuration; // 读取掉落移动时长
+        if (dropDuration < 0f)
+        {
+            dropDuration = 0f; // 时长非法时使用 0（表示直接到终点）
+        }
+
+        var dropHeight = _dropArcHeight; // 读取抛物线高度
+        if (dropHeight < 0f)
+        {
+            dropHeight = 0f; // 高度非法时使用 0（表示无抛物线高度）
+        }
+
         for (int i = 0; i < count; i++) // 按数量生成金币实体
         {
             var moneyEntity = CY.Entity.SpawnEntity<MoneyEntity>(); // 生成金币实体
@@ -268,8 +292,10 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
             }
 
             var moneyTransform = moneyEntity.transform; // 获取金币 Transform
-            var randomOffset = Random.insideUnitCircle * 2f; // 生成半径为 2 的随机偏移
-            moneyTransform.position = new Vector3(basePosition.x + randomOffset.x, basePosition.y + randomOffset.y, moneyTransform.position.z); // 设置金币位置并保留 Z
+            var startPosition = new Vector3(basePosition.x, basePosition.y, moneyTransform.position.z); // 计算掉落起点并保持 Z
+            var randomOffset = Random.insideUnitCircle * scatterRadius; // 生成随机散射偏移（XY 平面）
+            var endPosition = new Vector3(basePosition.x + randomOffset.x, basePosition.y + randomOffset.y, moneyTransform.position.z); // 计算掉落终点并保持 Z
+            moneyEntity.PlayDropParabola(startPosition, endPosition, dropDuration, dropHeight); // 播放掉落抛物线动画
         }
     }
 
@@ -313,6 +339,24 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
         }
 
         var basePosition = _cachedTransform != null ? _cachedTransform.position : transform.position; // 读取掉落基准位置
+        var scatterRadius = _dropScatterRadius; // 读取掉落散射半径
+        if (scatterRadius <= 0f)
+        {
+            scatterRadius = 0f; // 散射半径无效时使用 0（表示落在原地）
+        }
+
+        var dropDuration = _dropMoveDuration; // 读取掉落移动时长
+        if (dropDuration < 0f)
+        {
+            dropDuration = 0f; // 时长非法时使用 0（表示直接到终点）
+        }
+
+        var dropHeight = _dropArcHeight; // 读取抛物线高度
+        if (dropHeight < 0f)
+        {
+            dropHeight = 0f; // 高度非法时使用 0（表示无抛物线高度）
+        }
+
         for (int i = 0; i < count; i++) // 按数量生成黑心实体
         {
             var blackHeartEntity = CY.Entity.SpawnEntity<BlackHeartEntity>(); // 生成黑心实体
@@ -322,8 +366,10 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
             }
 
             var blackHeartTransform = blackHeartEntity.transform; // 获取黑心 Transform
-            var randomOffset = Random.insideUnitCircle * 2f; // 生成半径为 2 的随机偏移
-            blackHeartTransform.position = new Vector3(basePosition.x + randomOffset.x, basePosition.y + randomOffset.y, blackHeartTransform.position.z); // 设置黑心位置并保留 Z
+            var startPosition = new Vector3(basePosition.x, basePosition.y, blackHeartTransform.position.z); // 计算掉落起点并保持 Z
+            var randomOffset = Random.insideUnitCircle * scatterRadius; // 生成随机散射偏移（XY 平面）
+            var endPosition = new Vector3(basePosition.x + randomOffset.x, basePosition.y + randomOffset.y, blackHeartTransform.position.z); // 计算掉落终点并保持 Z
+            blackHeartEntity.PlayDropParabola(startPosition, endPosition, dropDuration, dropHeight); // 播放掉落抛物线动画
         }
     }
 

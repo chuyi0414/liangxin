@@ -106,6 +106,7 @@ public class GameUIPanel : UIPanel
         CY.Event.Subscribe<CompanyConscienceChangedEvent>(OnCompanyConscienceChanged, this); // 订阅公司良心变化事件
         CY.Event.Subscribe<CompanyPollutionChangedEvent>(OnCompanyPollutionChanged, this); // 订阅公司污染变化事件
         CY.Event.Subscribe<MoneyChangedEvent>(OnMoneyChanged, this); // 订阅资金变化事件
+        CY.Event.Subscribe<ConscienceChangedEvent>(OnConscienceChanged, this); // 订阅良心变化事件
         CY.Event.Subscribe<BlackHeartChangedEvent>(OnBlackHeartChanged, this); // 订阅黑心变化事件
         _battleDataEventsSubscribed = true; // 标记已订阅
     }
@@ -154,6 +155,15 @@ public class GameUIPanel : UIPanel
     }
 
     /// <summary>
+    /// 良心变化事件回调。
+    /// </summary>
+    /// <param name="evt">良心变化事件。</param>
+    private void OnConscienceChanged(ref ConscienceChangedEvent evt) // 良心事件回调入口
+    {
+        SetValueText(_txtConscience, evt.CurrentValue); // 刷新良心显示
+    }
+
+    /// <summary>
     /// 黑心变化事件回调。
     /// </summary>
     /// <param name="evt">黑心变化事件。</param>
@@ -182,7 +192,7 @@ public class GameUIPanel : UIPanel
         }
 
         SetValueText(_txtMoney, manager.MoneyCurrent); // 刷新资金显示
-        SetValueText(_txtConscience, data.Conscience);
+        SetValueText(_txtConscience, manager.ConscienceCurrent); // 刷新良心显示
         SetValueText(_txtBlackHeart, manager.BlackHeartCurrent); // 刷新黑心显示
         var companyConscience = manager.CompanyConscienceCurrent; // 读取公司良心当前值
         var companyPollution = manager.CompanyPollutionCurrent; // 读取公司污染当前值

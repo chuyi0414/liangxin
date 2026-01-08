@@ -47,6 +47,17 @@ public struct MoneyChangedEvent // 资金变化事件结构体
 }
 
 /// <summary>
+/// 良心变化事件：用于刷新良心显示。
+/// </summary>
+public struct ConscienceChangedEvent // 良心变化事件结构体
+{
+    /// <summary>当前良心。</summary>
+    public int CurrentValue; // 当前良心
+    /// <summary>本次变化量。</summary>
+    public int Delta; // 变化量
+}
+
+/// <summary>
 /// 黑心变化事件：用于刷新黑心显示。
 /// </summary>
 public struct BlackHeartChangedEvent // 黑心变化事件结构体

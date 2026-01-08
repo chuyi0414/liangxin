@@ -203,18 +203,16 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             return; // 不是金币实体时退出
         }
 
-        var battleDataManager = CY.BattleDataManager; // 获取战斗数据管理器
-        if (battleDataManager == null)
+        if (CY.BattleDataManager == null) // 战斗数据管理器未就绪时不允许拾取，避免结算阶段无法入账
         {
             return; // 管理器为空时退出
         }
 
-        if (!moneyEntity.TryPickup(out var amount))
+        if (!moneyEntity.TryPickup(out _))
         {
             return; // 拾取失败时退出
         }
 
-        battleDataManager.AddMoney(amount); // 增加资金并派发事件
         var playerTransform = _cachedTransform != null ? _cachedTransform : transform; // 获取玩家 Transform
         moneyEntity.PlayPickupToTarget(playerTransform); // 播放拾取动画并在结束回收
     }
@@ -349,18 +347,16 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
                 continue; // 未进入拾取范围时跳过
             }
 
-            var battleDataManager = CY.BattleDataManager; // 获取战斗数据管理器
-            if (battleDataManager == null)
+            if (CY.BattleDataManager == null) // 战斗数据管理器未就绪时不允许拾取，避免结算阶段无法入账
             {
                 return; // 管理器为空时退出
             }
 
-            if (!blackHeartEntity.TryPickup(out var amount))
+            if (!blackHeartEntity.TryPickup(out _))
             {
                 return; // 拾取失败时退出
             }
 
-            battleDataManager.AddBlackHeart(amount); // 增加黑心并派发事件
             blackHeartEntity.PlayPickupToTarget(playerTransform); // 播放拾取动画并回收
             return; // 成功拾取后退出
         }

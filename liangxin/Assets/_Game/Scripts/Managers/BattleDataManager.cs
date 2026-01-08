@@ -1,4 +1,5 @@
 using CYFramework;
+using CYFramework.Core.Timer;
 using CYFramework.Infrastructure;
 using UnityEngine;
 
@@ -23,11 +24,19 @@ public sealed class BattleDataManager : MonoBehaviour,
     private bool _registered;
     private bool _disposed;
     private bool _needRetryLoad;
+    /// <summary>是否有“新游戏重置”待执行（用于数据表尚未加载的场景）。</summary>
+    private bool _pendingResetForNewGame; // 新游戏重置待执行标记
+    /// <summary>待执行的新游戏重置是否需要派发事件。</summary>
+    private bool _pendingResetPostEvents; // 新游戏重置事件派发标记
     private BattleData _battleData;
     /// <summary>资金当前值（运行时）。</summary>
     private int _moneyCurrent; // 资金当前值
+    /// <summary>良心当前值（运行时）。</summary>
+    private int _conscienceCurrent; // 良心当前值
     /// <summary>黑心当前值（运行时）。</summary>
     private int _blackHeartCurrent; // 黑心当前值
+    /// <summary>黑心自动转换计时器（用于按配置时间自动转良心）。</summary>
+    private Timer _blackHeartConvertTimer; // 黑心转换计时器
     /// <summary>公司良心当前值（运行时）。</summary>
     private int _companyConscienceCurrent;
     /// <summary>公司污染当前进度（运行时，0~阈值-1）。</summary>
@@ -43,6 +52,8 @@ public sealed class BattleDataManager : MonoBehaviour,
     public BattleData BattleData => _battleData;
     /// <summary>资金当前值（只读）。</summary>
     public int MoneyCurrent => _moneyCurrent; // 对外只读资金
+    /// <summary>良心当前值（只读）。</summary>
+    public int ConscienceCurrent => _conscienceCurrent; // 对外只读良心
     /// <summary>黑心当前值（只读）。</summary>
     public int BlackHeartCurrent => _blackHeartCurrent; // 对外只读黑心
     /// <summary>公司良心当前值（只读）。</summary>
@@ -53,6 +64,45 @@ public sealed class BattleDataManager : MonoBehaviour,
     public int CompanyPollutionCurrent => _companyPollutionCurrent;
     /// <summary>公司污染阈值（只读）。</summary>
     public int CompanyPollutionThreshold => _battleData != null ? _battleData.CompanyPollution : 0;
+
+    /// <summary>
+    /// 为“新游戏”重置运行时数值（资金/良心/黑心/公司良心/公司污染）。
+    /// </summary>
+    /// <param name="postEvents">是否派发变化事件（用于同步 UI/系统状态）。</param>
+    /// <returns>是否已立即完成重置；若数据表未加载则返回 false 并延迟到加载完成后执行。</returns>
+    public bool ResetRuntimeForNewGame(bool postEvents) // 新游戏运行时重置入口
+    {
+        if (_battleData == null) // 战斗数据未加载时无法立即重置
+        {
+            _pendingResetForNewGame = true; // 标记需要在数据加载后重置
+            _pendingResetPostEvents = postEvents; // 记录是否需要派发事件
+            _needRetryLoad = true; // 强制进入重试加载，确保尽快获得数据表
+            return false; // 返回延迟执行
+        }
+
+        var previousMoney = _moneyCurrent; // 缓存重置前资金
+        var previousConscience = _conscienceCurrent; // 缓存重置前良心
+        var previousBlackHeart = _blackHeartCurrent; // 缓存重置前黑心
+        var previousCompanyConscience = _companyConscienceCurrent; // 缓存重置前公司良心
+        var previousCompanyPollution = _companyPollutionCurrent; // 缓存重置前公司污染进度
+
+        ResetCompanyRuntimeState(); // 重置公司运行时状态
+        ResetMoneyRuntimeState(); // 重置资金运行时状态
+        ResetConscienceRuntimeState(); // 重置良心运行时状态
+        ResetBlackHeartRuntimeState(); // 重置黑心运行时状态
+
+        if (!postEvents)
+        {
+            return true; // 不需要派发事件时直接返回完成
+        }
+
+        PostMoneyChanged(previousMoney, _moneyCurrent); // 派发资金变化事件（允许 delta=0）
+        PostConscienceChanged(previousConscience, _conscienceCurrent); // 派发良心变化事件（允许 delta=0）
+        PostBlackHeartChanged(previousBlackHeart, _blackHeartCurrent); // 派发黑心变化事件（允许 delta=0）
+        PostCompanyConscienceChanged(previousCompanyConscience, _companyConscienceCurrent); // 派发公司良心变化事件（允许 delta=0）
+        PostCompanyPollutionChanged(previousCompanyPollution, _companyPollutionCurrent, GetCompanyPollutionThreshold()); // 派发公司污染变化事件（允许 delta=0）
+        return true; // 返回已完成
+    }
 
     private void Awake()
     {
@@ -136,6 +186,30 @@ public sealed class BattleDataManager : MonoBehaviour,
     }
 
     /// <summary>
+    /// 增加良心并派发变化事件。
+    /// </summary>
+    /// <param name="amount">增加数量（必须大于 0）。</param>
+    public void AddConscience(int amount) // 良心增加入口
+    {
+        if (_battleData == null)
+        {
+            return; // 未加载战斗数据时直接返回
+        }
+
+        if (amount <= 0)
+        {
+            return; // 无效增量时直接返回
+        }
+
+        var previous = _conscienceCurrent; // 缓存旧良心值
+        _conscienceCurrent += amount; // 累加良心
+        if (_conscienceCurrent != previous)
+        {
+            PostConscienceChanged(previous, _conscienceCurrent); // 派发良心变化事件
+        }
+    }
+
+    /// <summary>
     /// 增加黑心并派发变化事件。
     /// </summary>
     /// <param name="amount">增加数量（必须大于 0）。</param>
@@ -157,6 +231,8 @@ public sealed class BattleDataManager : MonoBehaviour,
         {
             PostBlackHeartChanged(previous, _blackHeartCurrent); // 派发黑心变化事件
         }
+
+        EnsureBlackHeartConvertTimerState(); // 刷新黑心自动转换计时器状态
     }
 
     /// <summary>
@@ -243,12 +319,99 @@ public sealed class BattleDataManager : MonoBehaviour,
     }
 
     /// <summary>
+    /// 重置良心运行时数据（在数据表加载完成后调用）。
+    /// </summary>
+    private void ResetConscienceRuntimeState() // 良心运行时重置入口
+    {
+        var initialConscience = _battleData != null ? _battleData.Conscience : 0; // 读取初始良心
+        _conscienceCurrent = Mathf.Max(0, initialConscience); // 重置良心当前值
+    }
+
+    /// <summary>
     /// 重置黑心运行时数据（在数据表加载完成后调用）。
     /// </summary>
     private void ResetBlackHeartRuntimeState() // 黑心运行时重置入口
     {
         var initialBlackHeart = _battleData != null ? _battleData.BlackHeart : 0; // 读取初始黑心
         _blackHeartCurrent = Mathf.Max(0, initialBlackHeart); // 重置黑心当前值
+        EnsureBlackHeartConvertTimerState(); // 刷新黑心自动转换计时器状态
+    }
+
+    /// <summary>
+    /// 获取黑心转换时间（秒，<=0 表示禁用自动转换）。
+    /// </summary>
+    private float GetBlackHeartConvertTime() // 黑心转换时间读取入口
+    {
+        var value = _battleData != null ? _battleData.BlackHeartConvertTime : 0f; // 读取配置值
+        return value > 0f ? value : 0f; // 返回有效值
+    }
+
+    /// <summary>
+    /// 刷新黑心自动转换计时器状态（有黑心且配置有效时启动，否则停止）。
+    /// </summary>
+    private void EnsureBlackHeartConvertTimerState() // 黑心自动转换计时器刷新入口
+    {
+        var convertTime = GetBlackHeartConvertTime(); // 读取转换时间
+        if (convertTime <= 0f)
+        {
+            StopBlackHeartConvertTimer(); // 配置无效时停止计时器
+            return; // 直接退出
+        }
+
+        if (_blackHeartCurrent <= 0)
+        {
+            StopBlackHeartConvertTimer(); // 无黑心时停止计时器
+            return; // 直接退出
+        }
+
+        if (_blackHeartConvertTimer != null)
+        {
+            return; // 计时器已在运行时直接返回
+        }
+
+        _blackHeartConvertTimer = CY.Timer.Loop(convertTime, ConvertOneBlackHeartToConscience); // 启动黑心自动转换循环计时器
+    }
+
+    /// <summary>
+    /// 停止黑心自动转换计时器。
+    /// </summary>
+    private void StopBlackHeartConvertTimer() // 黑心自动转换计时器停止入口
+    {
+        if (_blackHeartConvertTimer == null)
+        {
+            return; // 计时器为空时直接退出
+        }
+
+        _blackHeartConvertTimer.Stop(); // 停止计时器
+        _blackHeartConvertTimer = null; // 清空计时器引用
+    }
+
+    /// <summary>
+    /// 将 1 点黑心自动转换为 1 点良心（按配置周期触发）。
+    /// </summary>
+    private void ConvertOneBlackHeartToConscience() // 黑心自动转换入口
+    {
+        if (_battleData == null)
+        {
+            StopBlackHeartConvertTimer(); // 数据未加载时停止计时器，避免空引用
+            return; // 直接退出
+        }
+
+        if (_blackHeartCurrent <= 0)
+        {
+            StopBlackHeartConvertTimer(); // 无黑心时停止计时器，避免空转
+            return; // 直接退出
+        }
+
+        var previousBlackHeart = _blackHeartCurrent; // 缓存转换前黑心
+        _blackHeartCurrent = Mathf.Max(0, _blackHeartCurrent - 1); // 扣除 1 点黑心并做下限保护
+        if (_blackHeartCurrent != previousBlackHeart)
+        {
+            PostBlackHeartChanged(previousBlackHeart, _blackHeartCurrent); // 派发黑心变化事件
+        }
+
+        AddConscience(1); // 增加 1 点良心并派发事件
+        EnsureBlackHeartConvertTimerState(); // 刷新计时器状态（黑心归零时停止）
     }
 
     /// <summary>
@@ -342,6 +505,21 @@ public sealed class BattleDataManager : MonoBehaviour,
     }
 
     /// <summary>
+    /// 派发良心变化事件。
+    /// </summary>
+    /// <param name="previous">变化前良心。</param>
+    /// <param name="current">变化后良心。</param>
+    private void PostConscienceChanged(int previous, int current) // 良心事件派发入口
+    {
+        var evt = new ConscienceChangedEvent // 创建事件结构体
+        {
+            CurrentValue = current, // 写入当前良心
+            Delta = current - previous // 写入变化量
+        };
+        CY.Event.Post(ref evt); // 派发事件
+    }
+
+    /// <summary>
     /// 派发黑心变化事件。
     /// </summary>
     /// <param name="previous">变化前黑心。</param>
@@ -379,6 +557,7 @@ public sealed class BattleDataManager : MonoBehaviour,
     {
         if (_disposed) return;
         _disposed = true;
+        StopBlackHeartConvertTimer(); // 销毁时停止黑心自动转换计时器，避免回调访问已销毁对象
         // TODO: 清理资源
     }
 
@@ -409,7 +588,17 @@ public sealed class BattleDataManager : MonoBehaviour,
         _battleData = row; // 缓存战斗数据
         ResetCompanyRuntimeState(); // 重置公司运行时状态
         ResetMoneyRuntimeState(); // 重置资金运行时状态
+        ResetConscienceRuntimeState(); // 重置良心运行时状态
         ResetBlackHeartRuntimeState(); // 重置黑心运行时状态
+
+        if (_pendingResetForNewGame) // 存在“新游戏重置”延迟请求时执行
+        {
+            var shouldPostEvents = _pendingResetPostEvents; // 缓存是否需要派发事件
+            _pendingResetForNewGame = false; // 清除延迟重置标记
+            _pendingResetPostEvents = false; // 清除派发标记
+            ResetRuntimeForNewGame(shouldPostEvents); // 在数据加载完成后执行一次新游戏重置
+        }
+
         return true;
     }
 }
