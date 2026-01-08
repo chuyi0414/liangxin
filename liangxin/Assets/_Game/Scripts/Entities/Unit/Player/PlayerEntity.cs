@@ -42,6 +42,12 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
     /// <summary>攻击点 Transform 缓存。</summary>
     private Transform _attackLocationTransform; // 攻击点 Transform 缓存
     /// <summary>
+    /// 拾取范围
+    /// </summary>
+    [SerializeField] private CircleCollider2D _selectionRange; // 拾取范围碰撞体
+    /// <summary>黑心点击检测命中缓存（避免运行时分配）。</summary>
+    private static readonly Collider2D[] _blackHeartClickHits = new Collider2D[16]; // 黑心点击命中缓存
+    /// <summary>
     /// 初始化时缓存组件，避免在 Update 中重复查询。
     /// </summary>
     protected override void OnEntityInit(object userData)
@@ -68,16 +74,17 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             return; // 无有效位置时直接退出
         }
 
+        var cachedTransform = _cachedTransform != null ? _cachedTransform : transform; // 获取可用 Transform
         if (_rigidbody2D != null)
         {
+            cachedTransform.position = new Vector3(data.Position.x, data.Position.y, cachedTransform.position.z); // 同步 Transform 坐标并保持 Z
             _rigidbody2D.position = new Vector2(data.Position.x, data.Position.y); // 使用刚体设置位置
             _rigidbody2D.velocity = Vector2.zero; // 清空线速度
             _rigidbody2D.angularVelocity = 0f; // 清空角速度
             return; // 使用刚体时直接返回
         }
 
-        var t = _cachedTransform != null ? _cachedTransform : transform; // 获取可用 Transform
-        t.position = new Vector3(data.Position.x, data.Position.y, t.position.z); // 设置位置并保持 Z
+        cachedTransform.position = new Vector3(data.Position.x, data.Position.y, cachedTransform.position.z); // 设置位置并保持 Z
     }
 
     /// <summary>
@@ -149,6 +156,67 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
         }
 
         TryHandleAttackInput(); // 处理攻击输入
+        TryHandleBlackHeartClick(); // 处理黑心点击拾取
+    }
+
+    /// <summary>
+    /// 判断目标碰撞体是否在拾取范围内。
+    /// </summary>
+    /// <param name="targetCollider">目标碰撞体。</param>
+    public bool IsInSelectionRange(Collider2D targetCollider) // 拾取范围检测入口
+    {
+        if (_selectionRange == null)
+        {
+            return false; // 未配置拾取范围时返回 false
+        }
+
+        if (targetCollider == null)
+        {
+            return false; // 目标碰撞体为空时返回 false
+        }
+
+        var selectionPosition = (Vector2)_selectionRange.transform.position; // 读取拾取范围中心
+        var targetClosest = targetCollider.ClosestPoint(selectionPosition); // 获取目标碰撞体最近点
+        var rangeClosest = _selectionRange.ClosestPoint(targetClosest); // 获取拾取范围最近点
+        var delta = targetClosest - rangeClosest; // 计算最近点偏差
+        return delta.sqrMagnitude <= 0.0001f; // 判断是否在拾取范围内
+    }
+
+    /// <summary>
+    /// 触发拾取范围时尝试拾取金币。
+    /// </summary>
+    /// <param name="other">进入触发器的碰撞体。</param>
+    private void OnTriggerEnter2D(Collider2D other) // 拾取触发入口
+    {
+        if (_selectionRange == null)
+        {
+            return; // 未配置拾取范围时退出
+        }
+
+        if (!_selectionRange.IsTouching(other))
+        {
+            return; // 未进入拾取范围时退出
+        }
+
+        if (!other.TryGetComponent<MoneyEntity>(out var moneyEntity))
+        {
+            return; // 不是金币实体时退出
+        }
+
+        var battleDataManager = CY.BattleDataManager; // 获取战斗数据管理器
+        if (battleDataManager == null)
+        {
+            return; // 管理器为空时退出
+        }
+
+        if (!moneyEntity.TryPickup(out var amount))
+        {
+            return; // 拾取失败时退出
+        }
+
+        battleDataManager.AddMoney(amount); // 增加资金并派发事件
+        var playerTransform = _cachedTransform != null ? _cachedTransform : transform; // 获取玩家 Transform
+        moneyEntity.PlayPickupToTarget(playerTransform); // 播放拾取动画并在结束回收
     }
 
     protected override void OnEntityRecycle()
@@ -193,7 +261,7 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             return; // 近战不显示攻击范围
         }
 
-        var t = _cachedTransform != null ? _cachedTransform : transform; // 获取可用 Transform
+        var cachedTransform = _cachedTransform != null ? _cachedTransform : transform; // 获取可用 Transform
         var attackRange = BaseStats.AttackRange; // 获取攻击范围
         if (attackRange <= 0f)
         {
@@ -201,7 +269,101 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
         }
 
         Gizmos.color = _attackRangeGizmosColor; // 设置攻击范围颜色
-        Gizmos.DrawWireSphere(t.position, attackRange); // 绘制攻击范围圆
+        Gizmos.DrawWireSphere(cachedTransform.position, attackRange); // 绘制攻击范围圆
+    }
+
+    /// <summary>
+    /// 处理黑心点击拾取。
+    /// </summary>
+    private void TryHandleBlackHeartClick() // 黑心点击拾取入口
+    {
+        if (!Input.GetMouseButtonDown(0))
+        {
+            return; // 未点击左键时退出
+        }
+
+        if (_selectionRange == null)
+        {
+            return; // 拾取范围未配置时退出
+        }
+
+        var cameraManager = CY.Camera; // 获取相机管理器
+        var worldCamera = cameraManager != null ? cameraManager.WorldCamera : null; // 获取世界相机
+        if (worldCamera != null)
+        {
+            _cachedCamera = worldCamera; // 同步缓存相机引用
+        }
+        else
+        {
+            worldCamera = _cachedCamera; // 回退使用缓存相机
+        }
+
+        if (worldCamera == null)
+        {
+            _cachedCamera = Camera.main; // 回退获取主相机
+            worldCamera = _cachedCamera; // 更新当前相机
+        }
+
+        if (worldCamera == null)
+        {
+            if (!_hasLoggedMissingCamera)
+            {
+                CY.LogError("[PlayerEntity] 未找到可用摄像机（需要 MainCamera 标签或场景摄像机）。"); // 输出摄像机缺失错误
+                _hasLoggedMissingCamera = true; // 标记已输出日志
+            }
+
+            return; // 摄像机为空时退出
+        }
+
+        var playerTransform = _cachedTransform != null ? _cachedTransform : transform; // 获取玩家 Transform
+        var playerPosition = playerTransform.position; // 获取玩家位置
+        var screenPosition = Input.mousePosition; // 获取鼠标屏幕坐标
+        screenPosition.z = Mathf.Abs(worldCamera.transform.position.z - playerPosition.z); // 设置投射深度
+        var worldPosition = (Vector2)worldCamera.ScreenToWorldPoint(screenPosition); // 计算鼠标世界坐标
+        var hitCount = Physics2D.OverlapPointNonAlloc(worldPosition, _blackHeartClickHits); // 获取命中碰撞体数量
+        if (hitCount <= 0)
+        {
+            return; // 未命中任何碰撞体时退出
+        }
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            var hitCollider = _blackHeartClickHits[i]; // 获取命中的碰撞体
+            if (hitCollider == null)
+            {
+                continue; // 碰撞体为空时跳过
+            }
+
+            if (!BlackHeartEntity.TryGetEntityByCollider(hitCollider, out var blackHeartEntity))
+            {
+                continue; // 非黑心实体时跳过
+            }
+
+            if (blackHeartEntity == null)
+            {
+                continue; // 黑心实体为空时跳过
+            }
+
+            if (!IsInSelectionRange(hitCollider))
+            {
+                continue; // 未进入拾取范围时跳过
+            }
+
+            var battleDataManager = CY.BattleDataManager; // 获取战斗数据管理器
+            if (battleDataManager == null)
+            {
+                return; // 管理器为空时退出
+            }
+
+            if (!blackHeartEntity.TryPickup(out var amount))
+            {
+                return; // 拾取失败时退出
+            }
+
+            battleDataManager.AddBlackHeart(amount); // 增加黑心并派发事件
+            blackHeartEntity.PlayPickupToTarget(playerTransform); // 播放拾取动画并回收
+            return; // 成功拾取后退出
+        }
     }
 
     /// <summary>

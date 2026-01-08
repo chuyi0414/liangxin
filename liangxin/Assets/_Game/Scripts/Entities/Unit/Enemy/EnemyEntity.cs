@@ -36,6 +36,18 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
     [SerializeField] private float _pollutionDamageMin = 0f; // 污染伤害最小值
     /// <summary>污染伤害最大值（绝对值）。</summary>
     [SerializeField] private float _pollutionDamageMax = 0f; // 污染伤害最大值
+    /// <summary>金钱掉落概率（0-1）。</summary>
+    [SerializeField] private float _moneyDropProb = 0f; // 金钱掉落概率
+    /// <summary>金钱掉落最小数量。</summary>
+    [SerializeField] private int _moneyDropMin = 0; // 金钱掉落最小数量
+    /// <summary>金钱掉落最大数量。</summary>
+    [SerializeField] private int _moneyDropMax = 0; // 金钱掉落最大数量
+    /// <summary>黑心掉落概率（0-1）。</summary>
+    [SerializeField] private float _blackHeartDropProb = 0f; // 黑心掉落概率
+    /// <summary>黑心掉落最小数量。</summary>
+    [SerializeField] private int _blackHeartDropMin = 0; // 黑心掉落最小数量
+    /// <summary>黑心掉落最大数量。</summary>
+    [SerializeField] private int _blackHeartDropMax = 0; // 黑心掉落最大数量
 
     [Header("AI配置")] // Inspector 分组：AI 配置
     [SerializeField] private EnemyAIBase _defaultAI; // 默认敌人 AI 资产
@@ -127,6 +139,12 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
         _attackStopDuration = row.AttackStopDuration; // 写入攻击停顿
         _pollutionDamageMin = Mathf.Max(0f, row.PollutionDamageMin); // 写入污染伤害最小值
         _pollutionDamageMax = Mathf.Max(_pollutionDamageMin, row.PollutionDamageMax); // 写入污染伤害最大值
+        _moneyDropProb = Mathf.Clamp01(row.MoneyDropProb); // 写入金钱掉落概率
+        _moneyDropMin = Mathf.Max(0, row.MoneyDropMin); // 写入金钱掉落最小数量
+        _moneyDropMax = Mathf.Max(_moneyDropMin, row.MoneyDropMax); // 写入金钱掉落最大数量
+        _blackHeartDropProb = Mathf.Clamp01(row.BlackHeartDropProb); // 写入黑心掉落概率
+        _blackHeartDropMin = Mathf.Max(0, row.BlackHeartDropMin); // 写入黑心掉落最小数量
+        _blackHeartDropMax = Mathf.Max(_blackHeartDropMin, row.BlackHeartDropMax); // 写入黑心掉落最大数量
         ApplyBaseData(row.Id, row.Code, row.Name, row.Camp, row.LifeState, row.Level, stats); // 写入单位基础数据
     }
 
@@ -192,9 +210,120 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
             _unitManager.RemoveEnemy(this); // 从敌人列表移除
         }
 
+        TryDropMoney(); // 尝试掉落金钱
+        TryDropBlackHeart(); // 尝试掉落黑心
+
         if (Id > 0) // 实体 Id 有效时才回收
         {
             CY.Entity.RecycleEntity(Id); // 交给实体系统回收
+        }
+    }
+
+    /// <summary>
+    /// 尝试掉落金钱实体。
+    /// </summary>
+    private void TryDropMoney() // 金钱掉落入口
+    {
+        if (_moneyDropProb <= 0f) // 掉落概率无效时退出
+        {
+            return; // 概率无效直接返回
+        }
+
+        var roll = Random.value; // 获取随机概率
+        if (roll > _moneyDropProb) // 未命中掉落概率时退出
+        {
+            return; // 概率未命中直接返回
+        }
+
+        var min = _moneyDropMin; // 读取最小数量
+        var max = _moneyDropMax; // 读取最大数量
+        if (max < min) // 最大值小于最小值时纠正
+        {
+            max = min; // 将最大值修正为最小值
+        }
+
+        if (max <= 0) // 最大数量无效时退出
+        {
+            return; // 数量无效直接返回
+        }
+
+        var count = min == max ? min : Random.Range(min, max + 1); // 计算掉落数量
+        if (count <= 0) // 掉落数量无效时退出
+        {
+            return; // 掉落数量无效直接返回
+        }
+
+        if (_cachedTransform == null) // Transform 缓存缺失时重新获取
+        {
+            _cachedTransform = transform; // 重新缓存 Transform
+        }
+
+        var basePosition = _cachedTransform != null ? _cachedTransform.position : transform.position; // 读取掉落基准位置
+        for (int i = 0; i < count; i++) // 按数量生成金币实体
+        {
+            var moneyEntity = CY.Entity.SpawnEntity<MoneyEntity>(); // 生成金币实体
+            if (moneyEntity == null) // 生成失败时跳过
+            {
+                continue; // 生成失败直接跳过
+            }
+
+            var moneyTransform = moneyEntity.transform; // 获取金币 Transform
+            var randomOffset = Random.insideUnitCircle * 2f; // 生成半径为 2 的随机偏移
+            moneyTransform.position = new Vector3(basePosition.x + randomOffset.x, basePosition.y + randomOffset.y, moneyTransform.position.z); // 设置金币位置并保留 Z
+        }
+    }
+
+    /// <summary>
+    /// 尝试掉落黑心实体。
+    /// </summary>
+    private void TryDropBlackHeart() // 黑心掉落入口
+    {
+        if (_blackHeartDropProb <= 0f) // 掉落概率无效时退出
+        {
+            return; // 概率无效直接返回
+        }
+
+        var roll = Random.value; // 获取随机概率
+        if (roll > _blackHeartDropProb) // 未命中掉落概率时退出
+        {
+            return; // 概率未命中直接返回
+        }
+
+        var min = _blackHeartDropMin; // 读取最小数量
+        var max = _blackHeartDropMax; // 读取最大数量
+        if (max < min) // 最大值小于最小值时纠正
+        {
+            max = min; // 将最大值修正为最小值
+        }
+
+        if (max <= 0) // 最大数量无效时退出
+        {
+            return; // 数量无效直接返回
+        }
+
+        var count = min == max ? min : Random.Range(min, max + 1); // 计算掉落数量
+        if (count <= 0) // 掉落数量无效时退出
+        {
+            return; // 掉落数量无效直接返回
+        }
+
+        if (_cachedTransform == null) // Transform 缓存缺失时重新获取
+        {
+            _cachedTransform = transform; // 重新缓存 Transform
+        }
+
+        var basePosition = _cachedTransform != null ? _cachedTransform.position : transform.position; // 读取掉落基准位置
+        for (int i = 0; i < count; i++) // 按数量生成黑心实体
+        {
+            var blackHeartEntity = CY.Entity.SpawnEntity<BlackHeartEntity>(); // 生成黑心实体
+            if (blackHeartEntity == null) // 生成失败时跳过
+            {
+                continue; // 生成失败直接跳过
+            }
+
+            var blackHeartTransform = blackHeartEntity.transform; // 获取黑心 Transform
+            var randomOffset = Random.insideUnitCircle * 2f; // 生成半径为 2 的随机偏移
+            blackHeartTransform.position = new Vector3(basePosition.x + randomOffset.x, basePosition.y + randomOffset.y, blackHeartTransform.position.z); // 设置黑心位置并保留 Z
         }
     }
 

@@ -34,3 +34,25 @@ public struct CompanyPollutionReachedEvent // 公司污染触发事件结构体
     /// <summary>污染触发阈值。</summary>
     public int ThresholdValue; // 污染阈值
 }
+
+/// <summary>
+/// 资金变化事件：用于刷新资金显示。
+/// </summary>
+public struct MoneyChangedEvent // 资金变化事件结构体
+{
+    /// <summary>当前资金。</summary>
+    public int CurrentValue; // 当前资金
+    /// <summary>本次变化量。</summary>
+    public int Delta; // 变化量
+}
+
+/// <summary>
+/// 黑心变化事件：用于刷新黑心显示。
+/// </summary>
+public struct BlackHeartChangedEvent // 黑心变化事件结构体
+{
+    /// <summary>当前黑心。</summary>
+    public int CurrentValue; // 当前黑心
+    /// <summary>本次变化量。</summary>
+    public int Delta; // 变化量
+}

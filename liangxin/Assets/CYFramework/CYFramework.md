@@ -220,6 +220,8 @@ public T LoadConfig<T>(string path) where T : ScriptableObject
 - **实体预显示**：实体生成支持“激活前”注入出生数据，确保位置/朝向在 `SetActive(true)` 之前完成。
   - **推荐**：`SpawnEntity<T, TData>(..., ref data)` + 实体实现 `IEntityPreShowData<TData>`。
   - **兼容**：`userData` 实现 `IEntityPreShowTransform` 时，`EntityBase` 会在激活前应用位置/旋转。
+- **显示时序**：`SpawnEntity` 先执行 `OnInit`，`OnShow` 统一延迟到下一帧由 EntityManager 队列驱动，避免同帧峰值。
+  - **分帧上限**：可通过 `EntityManagerConfig.MaxShowPerFrame` 控制每帧显示数量。
 - **UI 元素池**：`CY.UI.GetOrCreateUIElementPool(key, prefab, config)`，用于非 UIPanel 的 UI 元素复用（如血条、飘字），池根挂在 `[ObjectPools]/UI`，取出后自动修正 `RectTransform.anchoredPosition3D.z = 0`。
 
 #### 3.1.7 音频系统 (Audio System) [NEW]

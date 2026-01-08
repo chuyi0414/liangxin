@@ -48,6 +48,18 @@ public sealed class EnemyUnitRow : IDataRow
     public float AttackInterval;
     /// <summary>攻击停顿时长（秒）。</summary>
     public float AttackStopDuration;
+    /// <summary>掉落金钱概率（0-1）。</summary>
+    public float MoneyDropProb;
+    /// <summary>掉落金钱最小数量。</summary>
+    public int MoneyDropMin;
+    /// <summary>掉落金钱最大数量。</summary>
+    public int MoneyDropMax;
+    /// <summary>掉落黑心概率（0-1）。</summary>
+    public float BlackHeartDropProb;
+    /// <summary>掉落黑心最小数量。</summary>
+    public int BlackHeartDropMin;
+    /// <summary>掉落黑心最大数量。</summary>
+    public int BlackHeartDropMax;
 
     int IDataRow.Id => Id;
 
@@ -77,5 +89,11 @@ public sealed class EnemyUnitRow : IDataRow
         SightRange = float.Parse(values[18], CultureInfo.InvariantCulture); // 解析可视范围
         AttackInterval = float.Parse(values[19], CultureInfo.InvariantCulture); // 解析攻击间隔
         AttackStopDuration = float.Parse(values[20], CultureInfo.InvariantCulture); // 解析攻击停顿时长
+        MoneyDropProb = float.Parse(values[21], CultureInfo.InvariantCulture); // 解析掉落概率
+        MoneyDropMin = int.Parse(values[22]); // 解析掉落最小数量
+        MoneyDropMax = int.Parse(values[23]); // 解析掉落最大数量
+        BlackHeartDropProb = float.Parse(values[24], CultureInfo.InvariantCulture); // 解析黑心掉落概率
+        BlackHeartDropMin = int.Parse(values[25]); // 解析黑心掉落最小数量
+        BlackHeartDropMax = int.Parse(values[26]); // 解析黑心掉落最大数量
     }
 }

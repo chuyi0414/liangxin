@@ -41,8 +41,8 @@ public class GameUIPanel : UIPanel
     [SerializeField] private TMP_Text _txtStage;
     /// <summary>波次 UI 刷新计时器。</summary>
     private Timer _waveUiTimer;
-    /// <summary>是否已订阅公司数据事件。</summary>
-    private bool _companyEventsSubscribed; // 公司事件订阅标记
+    /// <summary>是否已订阅战斗数据事件。</summary>
+    private bool _battleDataEventsSubscribed; // 战斗数据事件订阅标记
 
     protected override void OnBindUI()
     {
@@ -67,7 +67,7 @@ public class GameUIPanel : UIPanel
     protected override void OnOpen(object userData)
     {
         base.OnOpen(userData);
-        EnsureCompanyDataSubscribed(); // 确保订阅公司数据事件
+        EnsureBattleDataSubscribed(); // 确保订阅战斗数据事件
         RefreshBattleData();
         StartWaveUiTimer();
     }
@@ -89,37 +89,39 @@ public class GameUIPanel : UIPanel
             _btnPause.onClick.RemoveListener(OnBtnPauseClick);
         }
 
-        UnsubscribeCompanyDataEvents(); // 取消公司数据事件订阅
+        UnsubscribeBattleDataEvents(); // 取消战斗数据事件订阅
         StopWaveUiTimer();
     }
 
     /// <summary>
-    /// 确保订阅公司数据事件。
+    /// 确保订阅战斗数据事件。
     /// </summary>
-    private void EnsureCompanyDataSubscribed() // 公司事件订阅入口
+    private void EnsureBattleDataSubscribed() // 战斗数据事件订阅入口
     {
-        if (_companyEventsSubscribed)
+        if (_battleDataEventsSubscribed)
         {
             return; // 已订阅时直接返回
         }
 
         CY.Event.Subscribe<CompanyConscienceChangedEvent>(OnCompanyConscienceChanged, this); // 订阅公司良心变化事件
         CY.Event.Subscribe<CompanyPollutionChangedEvent>(OnCompanyPollutionChanged, this); // 订阅公司污染变化事件
-        _companyEventsSubscribed = true; // 标记已订阅
+        CY.Event.Subscribe<MoneyChangedEvent>(OnMoneyChanged, this); // 订阅资金变化事件
+        CY.Event.Subscribe<BlackHeartChangedEvent>(OnBlackHeartChanged, this); // 订阅黑心变化事件
+        _battleDataEventsSubscribed = true; // 标记已订阅
     }
 
     /// <summary>
-    /// 取消订阅公司数据事件。
+    /// 取消订阅战斗数据事件。
     /// </summary>
-    private void UnsubscribeCompanyDataEvents() // 公司事件取消订阅入口
+    private void UnsubscribeBattleDataEvents() // 战斗数据事件取消订阅入口
     {
-        if (!_companyEventsSubscribed)
+        if (!_battleDataEventsSubscribed)
         {
             return; // 未订阅时直接返回
         }
 
         CY.Event.UnsubscribeAll(this); // 取消当前面板的事件订阅
-        _companyEventsSubscribed = false; // 标记已取消订阅
+        _battleDataEventsSubscribed = false; // 标记已取消订阅
     }
 
     /// <summary>
@@ -143,6 +145,24 @@ public class GameUIPanel : UIPanel
     }
 
     /// <summary>
+    /// 资金变化事件回调。
+    /// </summary>
+    /// <param name="evt">资金变化事件。</param>
+    private void OnMoneyChanged(ref MoneyChangedEvent evt) // 资金事件回调入口
+    {
+        SetValueText(_txtMoney, evt.CurrentValue); // 刷新资金显示
+    }
+
+    /// <summary>
+    /// 黑心变化事件回调。
+    /// </summary>
+    /// <param name="evt">黑心变化事件。</param>
+    private void OnBlackHeartChanged(ref BlackHeartChangedEvent evt) // 黑心事件回调入口
+    {
+        SetValueText(_txtBlackHeart, evt.CurrentValue); // 刷新黑心显示
+    }
+
+    /// <summary>
     /// 读取 BattleDataManager 中的缓存数据并刷新文本
     /// </summary>
     private void RefreshBattleData()
@@ -161,9 +181,9 @@ public class GameUIPanel : UIPanel
             return;
         }
 
-        SetValueText(_txtMoney, data.Money);
+        SetValueText(_txtMoney, manager.MoneyCurrent); // 刷新资金显示
         SetValueText(_txtConscience, data.Conscience);
-        SetValueText(_txtBlackHeart, data.BlackHeart);
+        SetValueText(_txtBlackHeart, manager.BlackHeartCurrent); // 刷新黑心显示
         var companyConscience = manager.CompanyConscienceCurrent; // 读取公司良心当前值
         var companyPollution = manager.CompanyPollutionCurrent; // 读取公司污染当前值
         var companyPollutionMax = data.CompanyPollution; // 读取公司污染阈值

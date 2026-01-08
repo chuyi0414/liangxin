@@ -187,6 +187,18 @@ public sealed partial class WaveManager : MonoBehaviour, IInitializable, IUpdate
     }
 
     /// <summary>
+    /// 重置运行时波次状态（保留配置缓存）。
+    /// </summary>
+    public void ResetRuntime() // 运行时重置入口
+    {
+        _currentWaveId = 0; // 重置当前展示波次
+        _lastWaveId = 0; // 重置最近波次
+        _activeWaves.Clear(); // 清空活动波次列表
+        _activeWaveMap.Clear(); // 清空主线波次映射
+        _activeAssaultWaveMap.Clear(); // 清空奇袭波次映射
+    }
+
+    /// <summary>
     /// 释放清理。
     /// </summary>
     public void Dispose() // 释放入口

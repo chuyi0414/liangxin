@@ -24,6 +24,10 @@ public sealed class BattleDataManager : MonoBehaviour,
     private bool _disposed;
     private bool _needRetryLoad;
     private BattleData _battleData;
+    /// <summary>资金当前值（运行时）。</summary>
+    private int _moneyCurrent; // 资金当前值
+    /// <summary>黑心当前值（运行时）。</summary>
+    private int _blackHeartCurrent; // 黑心当前值
     /// <summary>公司良心当前值（运行时）。</summary>
     private int _companyConscienceCurrent;
     /// <summary>公司污染当前进度（运行时，0~阈值-1）。</summary>
@@ -37,6 +41,10 @@ public sealed class BattleDataManager : MonoBehaviour,
     /// 当前战斗初始数据（已缓存）。
     /// </summary>
     public BattleData BattleData => _battleData;
+    /// <summary>资金当前值（只读）。</summary>
+    public int MoneyCurrent => _moneyCurrent; // 对外只读资金
+    /// <summary>黑心当前值（只读）。</summary>
+    public int BlackHeartCurrent => _blackHeartCurrent; // 对外只读黑心
     /// <summary>公司良心当前值（只读）。</summary>
     public int CompanyConscienceCurrent => _companyConscienceCurrent;
     /// <summary>公司良心最大值（只读）。</summary>
@@ -100,6 +108,54 @@ public sealed class BattleDataManager : MonoBehaviour,
         if (_needRetryLoad)
         {
             _needRetryLoad = !TryCacheBattleData();
+        }
+    }
+
+    /// <summary>
+    /// 增加资金并派发变化事件。
+    /// </summary>
+    /// <param name="amount">增加数量（必须大于 0）。</param>
+    public void AddMoney(int amount) // 资金增加入口
+    {
+        if (_battleData == null)
+        {
+            return; // 未加载战斗数据时直接返回
+        }
+
+        if (amount <= 0)
+        {
+            return; // 无效增量时直接返回
+        }
+
+        var previous = _moneyCurrent; // 缓存旧资金值
+        _moneyCurrent += amount; // 累加资金
+        if (_moneyCurrent != previous)
+        {
+            PostMoneyChanged(previous, _moneyCurrent); // 派发资金变化事件
+        }
+    }
+
+    /// <summary>
+    /// 增加黑心并派发变化事件。
+    /// </summary>
+    /// <param name="amount">增加数量（必须大于 0）。</param>
+    public void AddBlackHeart(int amount) // 黑心增加入口
+    {
+        if (_battleData == null)
+        {
+            return; // 未加载战斗数据时直接返回
+        }
+
+        if (amount <= 0)
+        {
+            return; // 无效增量时直接返回
+        }
+
+        var previous = _blackHeartCurrent; // 缓存旧黑心值
+        _blackHeartCurrent += amount; // 累加黑心
+        if (_blackHeartCurrent != previous)
+        {
+            PostBlackHeartChanged(previous, _blackHeartCurrent); // 派发黑心变化事件
         }
     }
 
@@ -178,6 +234,24 @@ public sealed class BattleDataManager : MonoBehaviour,
     }
 
     /// <summary>
+    /// 重置资金运行时数据（在数据表加载完成后调用）。
+    /// </summary>
+    private void ResetMoneyRuntimeState() // 资金运行时重置入口
+    {
+        var initialMoney = _battleData != null ? _battleData.Money : 0; // 读取初始资金
+        _moneyCurrent = Mathf.Max(0, initialMoney); // 重置资金当前值
+    }
+
+    /// <summary>
+    /// 重置黑心运行时数据（在数据表加载完成后调用）。
+    /// </summary>
+    private void ResetBlackHeartRuntimeState() // 黑心运行时重置入口
+    {
+        var initialBlackHeart = _battleData != null ? _battleData.BlackHeart : 0; // 读取初始黑心
+        _blackHeartCurrent = Mathf.Max(0, initialBlackHeart); // 重置黑心当前值
+    }
+
+    /// <summary>
     /// 获取良心每点扣减所需累计伤害（带下限保护）。
     /// </summary>
     private int GetCompanyConscienceDamagePerPoint() // 良心阈值读取入口
@@ -253,6 +327,36 @@ public sealed class BattleDataManager : MonoBehaviour,
     }
 
     /// <summary>
+    /// 派发资金变化事件。
+    /// </summary>
+    /// <param name="previous">变化前资金。</param>
+    /// <param name="current">变化后资金。</param>
+    private void PostMoneyChanged(int previous, int current) // 资金事件派发入口
+    {
+        var evt = new MoneyChangedEvent // 创建事件结构体
+        {
+            CurrentValue = current, // 写入当前资金
+            Delta = current - previous // 写入变化量
+        };
+        CY.Event.Post(ref evt); // 派发事件
+    }
+
+    /// <summary>
+    /// 派发黑心变化事件。
+    /// </summary>
+    /// <param name="previous">变化前黑心。</param>
+    /// <param name="current">变化后黑心。</param>
+    private void PostBlackHeartChanged(int previous, int current) // 黑心事件派发入口
+    {
+        var evt = new BlackHeartChangedEvent // 创建事件结构体
+        {
+            CurrentValue = current, // 写入当前黑心
+            Delta = current - previous // 写入变化量
+        };
+        CY.Event.Post(ref evt); // 派发事件
+    }
+
+    /// <summary>
     /// 暂停回调（切后台）。
     /// </summary>
     public void OnPause()
@@ -304,6 +408,8 @@ public sealed class BattleDataManager : MonoBehaviour,
 
         _battleData = row; // 缓存战斗数据
         ResetCompanyRuntimeState(); // 重置公司运行时状态
+        ResetMoneyRuntimeState(); // 重置资金运行时状态
+        ResetBlackHeartRuntimeState(); // 重置黑心运行时状态
         return true;
     }
 }

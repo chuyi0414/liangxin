@@ -491,6 +491,12 @@ namespace CYFramework.Core.Config
         /// </summary>
         [Tooltip("实体更新间隔(帧), 1=每帧更新")]
         public int UpdateInterval = 1;
+
+        /// <summary>
+        /// 每帧最大显示实体数量（<=0 使用默认值）。
+        /// </summary>
+        [Tooltip("每帧最大显示实体数量（<=0 使用默认值）")]
+        public int MaxShowPerFrame = 64;
         
         [Header("实体分组")]
         /// <summary>

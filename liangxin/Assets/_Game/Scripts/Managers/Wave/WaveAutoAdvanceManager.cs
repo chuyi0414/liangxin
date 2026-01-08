@@ -102,6 +102,21 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
     }
 
     /// <summary>
+    /// 重置自动推进运行时状态（用于流程切换复位）。
+    /// </summary>
+    public void ResetRuntime() // 自动推进运行时重置入口
+    {
+        if (_disposed)
+        {
+            return; // 已释放时直接退出
+        }
+
+        _assaultTimer = 0f; // 重置奇袭计时器
+        _assaultProbLevel = 0; // 重置概率层级
+        _assaultRunning = false; // 清理奇袭运行标记
+    }
+
+    /// <summary>
     /// 每帧更新（驱动奇袭计时器）。
     /// </summary>
     /// <param name="deltaTime">帧间隔时间。</param>

@@ -726,6 +726,30 @@ namespace CYFramework.Core.Entity
         // 更新遍历缓冲：避免在实体 Update/Tick 中增删实体导致 Dictionary 遍历抛异常（InvalidOperationException）。
         // 说明：EntityManager 允许在实体逻辑内 Spawn/Recycle 其他实体，因此必须避免直接 foreach Dictionary.Values。
         private readonly List<IEntity> _updateBuffer = new(256);
+
+        /// <summary>
+        /// 显示请求结构体（用于延迟一帧显示）。
+        /// </summary>
+        private struct ShowRequest // 显示请求结构体
+        {
+            /// <summary>待显示实体。</summary>
+            public IEntity Entity; // 待显示实体引用
+            /// <summary>显示时用户数据。</summary>
+            public object UserData; // 显示时用户数据
+        }
+
+        /// <summary>
+        /// 延迟显示请求队列（上一帧收集）。
+        /// </summary>
+        private List<ShowRequest> _showRequests = new(64); // 待处理显示请求队列
+        /// <summary>
+        /// 延迟显示请求队列（当前帧收集，下一帧处理）。
+        /// </summary>
+        private List<ShowRequest> _showRequestsNext = new(64); // 下一帧显示请求队列
+        /// <summary>
+        /// 每帧最大处理的显示请求数量。
+        /// </summary>
+        private int _maxShowPerFrame = 64; // 每帧显示上限
         
         /// <summary>
         /// 下一个实体 ID
@@ -806,6 +830,10 @@ namespace CYFramework.Core.Entity
                     _defaultPreloadCount = config.DefaultPreloadCount;
                     _maxPoolSize = config.MaxPoolSize;
                     _updateInterval = Mathf.Max(1, config.UpdateInterval);
+                    if (config.MaxShowPerFrame > 0) // 配置存在有效显示上限时使用
+                    {
+                        _maxShowPerFrame = config.MaxShowPerFrame; // 写入每帧显示上限
+                    }
                     if (config.EntityGroups != null && config.EntityGroups.Length > 0)
                     {
                         _entityGroupNames = config.EntityGroups;
@@ -1359,14 +1387,44 @@ namespace CYFramework.Core.Entity
             {
                 preShowData.ApplyPreShowData(ref data); // 激活前应用预显示数据
             }
-
-            // Spawn 时默认显示
-            entity.OnShow(userData); // 触发实体显示
-
+            
+            if (entity.GameObject != null && entity.GameObject.activeSelf) // 新创建实体可能处于激活状态
+            {
+                entity.GameObject.SetActive(false); // 关闭激活，等待下一帧统一显示
+            }
+            
             _entities[entityId] = entity; // 注册实体到实例表
             _entityGroups[entityType].Add(entity); // 注册实体到分组列表
 
+            EnqueueShowRequest(entity, userData); // 延迟显示实体，避免与 OnInit 同帧
+
             return entity; // 返回实体实例
+        }
+
+        /// <summary>
+        /// 入队显示请求，保证 OnShow 在下一帧统一执行。
+        /// </summary>
+        /// <param name="entity">待显示实体。</param>
+        /// <param name="userData">显示时用户数据。</param>
+        private void EnqueueShowRequest(IEntity entity, object userData) // 延迟显示入队入口
+        {
+            if (entity == null) // 实体为空时直接退出
+            {
+                return; // 空实体不入队
+            }
+
+            if (entity.IsVisible) // 已显示实体不重复入队
+            {
+                return; // 已可见时直接返回
+            }
+
+            var request = new ShowRequest // 构建显示请求结构体
+            {
+                Entity = entity, // 写入实体引用
+                UserData = userData // 写入用户数据
+            };
+
+            _showRequestsNext.Add(request); // 添加到下一帧显示队列
         }
 
         /// <summary>
@@ -1471,7 +1529,8 @@ namespace CYFramework.Core.Entity
         /// <remarks>
         /// 注意：该方法只适用于“仍在 _entities 表内的隐藏实体”。如果实体已被 <see cref="RecycleEntity"/> 回收，
         /// 它的 Id 会被重置且不会再被管理器驱动，此时请通过 <see cref="SpawnEntity"/>/<see cref="SpawnEntity(string,object)"/> 重新生成。
-        /// </summary>
+        /// 说明：显示会统一延迟到下一帧执行，避免与初始化同帧造成峰值。
+        /// </remarks>
         public void ShowEntity(IEntity entity, object userData = null)
         {
             if (entity == null || entity.IsVisible) return;
@@ -1482,7 +1541,7 @@ namespace CYFramework.Core.Entity
                 CYLog.Warning($"[EntityManager] ShowEntity 失败：实体不在管理器中（可能已回收），type={entity.EntityType}");
                 return;
             }
-            entity.OnShow(userData);
+            EnqueueShowRequest(entity, userData); // 延迟显示实体
         }
 
         /// <summary>
@@ -1694,6 +1753,60 @@ namespace CYFramework.Core.Entity
             
             return entity;
         }
+
+        /// <summary>
+        /// 处理延迟显示请求（保证 OnShow 至少延迟一帧）。
+        /// </summary>
+        private void ProcessShowRequests() // 延迟显示处理入口
+        {
+            if (_showRequests.Count > 0) // 存在待显示请求时处理
+            {
+                var shownCount = 0; // 已处理显示数量
+                for (int i = 0; i < _showRequests.Count; i++) // i 为索引
+                {
+                    var request = _showRequests[i]; // 当前显示请求
+                    var entity = request.Entity; // 当前请求实体
+                    if (entity == null) // 实体为空时跳过
+                    {
+                        continue; // 空实体不处理
+                    }
+
+                    if (entity.Id <= 0) // 实体已回收时跳过
+                    {
+                        continue; // 已回收实体不处理
+                    }
+
+                    if (!_entities.ContainsKey(entity.Id)) // 实体已不在管理器中时跳过
+                    {
+                        continue; // 非受管实体不处理
+                    }
+
+                    if (entity.IsVisible) // 已显示实体不重复显示
+                    {
+                        continue; // 已可见时跳过
+                    }
+
+                    entity.OnShow(request.UserData); // 执行显示回调
+                    shownCount++; // 累计已显示数量
+
+                    if (_maxShowPerFrame > 0 && shownCount >= _maxShowPerFrame) // 达到每帧显示上限
+                    {
+                        for (int j = i + 1; j < _showRequests.Count; j++) // j 为索引
+                        {
+                            _showRequestsNext.Add(_showRequests[j]); // 剩余请求推迟到下一帧
+                        }
+                        break; // 达到上限后退出循环
+                    }
+                }
+
+                _showRequests.Clear(); // 清空已处理请求
+            }
+
+            var temp = _showRequests; // 临时保存当前请求列表
+            _showRequests = _showRequestsNext; // 切换到下一帧请求列表
+            _showRequestsNext = temp; // 复用旧列表作为写入缓冲
+            _showRequestsNext.Clear(); // 清空写入缓冲，准备接收新请求
+        }
         
         /// <summary>
         /// 固定帧更新（物理/AI）
@@ -1722,6 +1835,8 @@ namespace CYFramework.Core.Entity
         /// </summary>
         public void OnUpdate(float deltaTime)
         {
+            ProcessShowRequests(); // 处理延迟显示请求
+
             if (_updateInterval > 1)
             {
                 _updateFrameCount++;
@@ -1801,6 +1916,8 @@ namespace CYFramework.Core.Entity
             _entities.Clear();
             _entityGroups.Clear();
             _entityPools.Clear();
+            _showRequests.Clear(); // 清空显示请求队列
+            _showRequestsNext.Clear(); // 清空下一帧显示队列
             
             if (_entityRoot != null)
             {

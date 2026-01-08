@@ -611,6 +611,9 @@ public interface IPoolable
 | `PauseAllEntities()` | 无 | `void` | 暂停所有实体 |
 | `ResumeAllEntities()` | 无 | `void` | 恢复所有实体 |
 
+> 说明：`SpawnEntity`/`ShowEntity` 的 `OnShow` 已统一延迟到下一帧执行，避免与 `OnInit` 同帧造成峰值，`IsVisible` 会在 `OnShow` 后才为 `true`。  
+> 分帧上限：可通过 `EntityManagerConfig.MaxShowPerFrame` 控制每帧显示数量（<=0 使用默认值）。
+
 #### IEntity 接口
 ```csharp
 public interface IEntity
