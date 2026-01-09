@@ -1,5 +1,6 @@
-using System.Globalization;
-using CYFramework.Core.DataTable;
+using System; // System 基础类型引用
+using System.Globalization; // CultureInfo 解析格式引用
+using CYFramework.Core.DataTable; // 数据表接口引用
 
 /// <summary>
 /// 敌人数据表行（对应 Enemy.csv）。
@@ -60,6 +61,13 @@ public sealed class EnemyUnitRow : IDataRow
     public int BlackHeartDropMin;
     /// <summary>掉落黑心最大数量。</summary>
     public int BlackHeartDropMax;
+    /// <summary>风格 Id 列表（用 | 分隔）。</summary>
+    public string StyleIds; // 风格列表字符串
+
+    /// <summary>缓存后的风格 Id 数组。</summary>
+    private int[] _cachedStyleIds; // 风格 Id 数组缓存
+    /// <summary>是否已缓存风格 Id 数组。</summary>
+    private bool _hasCachedStyleIds; // 风格 Id 缓存标记
 
     int IDataRow.Id => Id;
 
@@ -95,5 +103,85 @@ public sealed class EnemyUnitRow : IDataRow
         BlackHeartDropProb = float.Parse(values[24], CultureInfo.InvariantCulture); // 解析黑心掉落概率
         BlackHeartDropMin = int.Parse(values[25]); // 解析黑心掉落最小数量
         BlackHeartDropMax = int.Parse(values[26]); // 解析黑心掉落最大数量
+        StyleIds = values[27]; // 解析风格 Id 列表字符串
+    }
+
+    /// <summary>
+    /// 获取缓存后的风格 Id 数组（按需拆分并过滤空项）。
+    /// </summary>
+    /// <param name="styleIds">输出风格 Id 数组。</param>
+    /// <returns>是否获得有效风格 Id 数组。</returns>
+    public bool TryGetStyleIds(out int[] styleIds) // 风格 Id 数组获取入口
+    {
+        if (_hasCachedStyleIds)
+        {
+            styleIds = _cachedStyleIds; // 直接返回缓存数组
+            return styleIds != null && styleIds.Length > 0; // 返回缓存是否有效
+        }
+
+        if (string.IsNullOrEmpty(StyleIds))
+        {
+            _cachedStyleIds = Array.Empty<int>(); // 空字符串时缓存空数组
+            _hasCachedStyleIds = true; // 标记已缓存
+            styleIds = _cachedStyleIds; // 输出空数组
+            return false; // 返回无有效风格
+        }
+
+        var rawItems = StyleIds.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries); // 按 | 拆分字符串
+        if (rawItems == null || rawItems.Length == 0)
+        {
+            _cachedStyleIds = Array.Empty<int>(); // 无有效项时缓存空数组
+            _hasCachedStyleIds = true; // 标记已缓存
+            styleIds = _cachedStyleIds; // 输出空数组
+            return false; // 返回无有效风格
+        }
+
+        var temp = new int[rawItems.Length]; // 创建临时数组
+        var validCount = 0; // 记录有效数量
+        for (int i = 0; i < rawItems.Length; i++)
+        {
+            var item = rawItems[i]; // 获取当前项
+            if (string.IsNullOrEmpty(item))
+            {
+                continue; // 空字符串直接跳过
+            }
+
+            item = item.Trim(); // 去除首尾空格
+            if (string.IsNullOrEmpty(item))
+            {
+                continue; // 去空格后仍为空时跳过
+            }
+
+            if (!int.TryParse(item, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            {
+                continue; // 无法解析时跳过
+            }
+
+            temp[validCount] = value; // 写入解析后的风格 Id
+            validCount++; // 累计有效数量
+        }
+
+        if (validCount <= 0)
+        {
+            _cachedStyleIds = Array.Empty<int>(); // 无有效 Id 时缓存空数组
+            _hasCachedStyleIds = true; // 标记已缓存
+            styleIds = _cachedStyleIds; // 输出空数组
+            return false; // 返回无有效风格
+        }
+
+        if (validCount == temp.Length)
+        {
+            _cachedStyleIds = temp; // 全部有效时直接使用临时数组
+        }
+        else
+        {
+            var result = new int[validCount]; // 创建精确长度数组
+            Array.Copy(temp, result, validCount); // 拷贝有效 Id
+            _cachedStyleIds = result; // 缓存结果数组
+        }
+
+        _hasCachedStyleIds = true; // 标记已缓存
+        styleIds = _cachedStyleIds; // 输出结果数组
+        return styleIds.Length > 0; // 返回是否存在有效风格
     }
 }

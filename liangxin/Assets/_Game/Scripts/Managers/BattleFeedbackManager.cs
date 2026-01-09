@@ -28,7 +28,7 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     /// <summary>飘字预热数量。</summary>
     [SerializeField] private int _prewarmDamageCount = 32;
     /// <summary>血条基础世界偏移。</summary>
-    [SerializeField] private Vector2 _hpBarWorldOffset = new Vector2(0f, 0.6f);
+    [SerializeField] private Vector2 _hpBarWorldOffset = new Vector2(0f, 0.2f);
     /// <summary>飘字基础世界偏移。</summary>
     [SerializeField] private Vector2 _damageWorldOffset = new Vector2(0f, 0.2f);
     /// <summary>是否使用碰撞体顶部作为额外偏移。</summary>

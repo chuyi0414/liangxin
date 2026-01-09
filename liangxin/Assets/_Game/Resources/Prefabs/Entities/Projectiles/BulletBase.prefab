@@ -162,7 +162,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _defaultSpeed: 10
-  _defaultLifetime: 10
+  _defaultLifetime: 5
   _defaultDamage: 1
   _useRigidbodyVelocity: 1
   _alignToDirection: 1

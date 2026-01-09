@@ -1,8 +1,9 @@
 {
-    "Money": 1000,
-    "Conscience": 100,
+    "Money": 100,
+    "Conscience": 10,
     "BlackHeart": 0,
     "BlackHeartConvertTime": 2,
+    "BlackHeartAbsorbCount": 1,
     "CompanyConscience": 100,
     "CompanyConscienceDamagePerPoint": 10,
     "CompanyPollution": 20,

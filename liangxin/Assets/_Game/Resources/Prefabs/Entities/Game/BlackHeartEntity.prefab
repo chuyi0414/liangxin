@@ -145,4 +145,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _amount: 1
   _pickupMoveDuration: 0.75
-  _pickupMoveEase: 24
+  _pickupArriveEpsilon: 0.02
+  _pickupEaseInExponent: 2

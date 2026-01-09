@@ -16,6 +16,8 @@ public sealed class BattleData : IDataRow
     public int BlackHeart;
     /// <summary>黑心自动转换为良心的时间间隔（秒，<=0 表示禁用自动转换）。</summary>
     public float BlackHeartConvertTime;
+    /// <summary>黑心并发吸收槽位数量（<=0 时按 1 处理）。</summary>
+    public int BlackHeartAbsorbCount;
     /// <summary>公司良心</summary>
     public int CompanyConscience;
     /// <summary>

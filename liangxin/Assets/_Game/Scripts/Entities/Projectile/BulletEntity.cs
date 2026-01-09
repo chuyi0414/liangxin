@@ -76,7 +76,7 @@ public class BulletEntity : EntityBase // 子弹实体定义
     /// <summary>默认移动速度。</summary>
     [SerializeField] private float _defaultSpeed = 10f; // 默认速度
     /// <summary>默认存活时间（秒）。</summary>
-    [SerializeField] private float _defaultLifetime = 2f; // 默认存活时间
+    [SerializeField] private float _defaultLifetime = 5f; // 默认存活时间
     /// <summary>默认伤害值。</summary>
     [SerializeField] private int _defaultDamage = 1; // 默认伤害
     /// <summary>是否使用刚体速度驱动移动。</summary>

@@ -12,6 +12,12 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
 {
     /// <summary>玩家 CSV 数据表名。</summary>
     private const string PlayerTableName = "Player";
+    /// <summary>员工 CSV 数据表名。</summary>
+    private const string EmployeeTableName = "Employee";
+    /// <summary>单位风格 CSV 数据表名。</summary>
+    private const string UnitStyleTableName = "UnitStyle";
+    /// <summary>子弹数组 CSV 数据表名。</summary>
+    private const string BulletArrayTableName = "BulletArray";
     /// <summary>敌人 CSV 数据表名。</summary>
     private const string EnemyTableName = "Enemy";
 
@@ -37,6 +43,18 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
     private readonly Dictionary<int, EnemyUnitRow> _enemyRowMap = new Dictionary<int, EnemyUnitRow>(64);
     /// <summary>是否已缓存敌人数据表。</summary>
     private bool _hasEnemyRows;
+    /// <summary>员工数据缓存表（Id -> Row）。</summary>
+    private readonly Dictionary<int, EmployeeUnitRow> _employeeRowMap = new Dictionary<int, EmployeeUnitRow>(32);
+    /// <summary>是否已缓存员工数据表。</summary>
+    private bool _hasEmployeeRows;
+    /// <summary>单位风格数据缓存表（Id -> Row）。</summary>
+    private readonly Dictionary<int, UnitStyleRow> _unitStyleRowMap = new Dictionary<int, UnitStyleRow>(16);
+    /// <summary>是否已缓存单位风格数据表。</summary>
+    private bool _hasUnitStyleRows;
+    /// <summary>子弹数组数据缓存表（Id -> Row）。</summary>
+    private readonly Dictionary<int, BulletArrayRow> _bulletArrayRowMap = new Dictionary<int, BulletArrayRow>(32);
+    /// <summary>是否已缓存子弹数组数据表。</summary>
+    private bool _hasBulletArrayRows;
 
     /// <summary>是否已注册到 ServiceLocator。</summary>
     private bool _registered;
@@ -90,6 +108,84 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
         return _hasDefaultPlayerRow && row != null;
     }
 
+    /// <summary>
+    /// 获取员工数据（若未缓存会尝试读取，失败返回 false）。
+    /// </summary>
+    /// <param name="employeeId">员工配置 Id。</param>
+    /// <param name="row">输出员工数据行。</param>
+    public bool TryGetEmployeeRow(int employeeId, out EmployeeUnitRow row) // 员工数据查询入口
+    {
+        row = null; // 默认输出为空
+        if (employeeId <= 0) // Id 无效判定
+        {
+            return false; // Id 无效时直接返回
+        }
+
+        if (!_hasEmployeeRows) // 缓存缺失判定
+        {
+            TryCacheEmployeeRows(); // 未缓存时尝试读取
+        }
+
+        if (!_hasEmployeeRows) // 缓存失败判定
+        {
+            return false; // 缓存失败时返回 false
+        }
+
+        return _employeeRowMap.TryGetValue(employeeId, out row); // 返回查询结果
+    }
+
+    /// <summary>
+    /// 获取单位风格数据（若未缓存会尝试读取，失败返回 false）。
+    /// </summary>
+    /// <param name="styleId">风格配置 Id。</param>
+    /// <param name="row">输出风格数据行。</param>
+    public bool TryGetUnitStyleRow(int styleId, out UnitStyleRow row) // 单位风格查询入口
+    {
+        row = null; // 默认输出为空
+        if (styleId <= 0) // Id 无效判定
+        {
+            return false; // Id 无效时直接返回
+        }
+
+        if (!_hasUnitStyleRows) // 缓存缺失判定
+        {
+            TryCacheUnitStyleRows(); // 未缓存时尝试读取
+        }
+
+        if (!_hasUnitStyleRows) // 缓存失败判定
+        {
+            return false; // 缓存失败时返回 false
+        }
+
+        return _unitStyleRowMap.TryGetValue(styleId, out row); // 返回查询结果
+    }
+
+    /// <summary>
+    /// 获取子弹数组数据（若未缓存会尝试读取，失败返回 false）。
+    /// </summary>
+    /// <param name="bulletArrayId">子弹数组 Id。</param>
+    /// <param name="row">输出子弹数组数据行。</param>
+    public bool TryGetBulletArrayRow(int bulletArrayId, out BulletArrayRow row) // 子弹数组查询入口
+    {
+        row = null; // 默认输出为空
+        if (bulletArrayId <= 0)
+        {
+            return false; // Id 无效时直接返回
+        }
+
+        if (!_hasBulletArrayRows)
+        {
+            TryCacheBulletArrayRows(); // 未缓存时尝试读取
+        }
+
+        if (!_hasBulletArrayRows)
+        {
+            return false; // 缓存失败时返回 false
+        }
+
+        return _bulletArrayRowMap.TryGetValue(bulletArrayId, out row); // 返回查询结果
+    }
+
     private void Awake()
     {
         // 场景可能重复挂载，使用 ServiceLocator 保证单例并避免重复注册。
@@ -126,6 +222,9 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
     {
         TryCacheDefaultPlayerRow();
         TryCacheEnemyRows();
+        TryCacheEmployeeRows(); // 缓存员工数据表
+        TryCacheUnitStyleRows(); // 缓存单位风格数据表
+        TryCacheBulletArrayRows(); // 缓存子弹数组数据表
     }
 
     /// <summary>
@@ -144,6 +243,12 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
         _enemies.Clear();
         _enemyRowMap.Clear();
         _hasEnemyRows = false;
+        _employeeRowMap.Clear(); // 清空员工数据缓存
+        _hasEmployeeRows = false; // 重置员工数据缓存标记
+        _unitStyleRowMap.Clear(); // 清空单位风格缓存
+        _hasUnitStyleRows = false; // 重置单位风格缓存标记
+        _bulletArrayRowMap.Clear(); // 清空子弹数组缓存
+        _hasBulletArrayRows = false; // 重置子弹数组缓存标记
         _defaultPlayerRow = null;
         _hasDefaultPlayerRow = false;
     }
@@ -381,5 +486,131 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
         }
 
         _hasEnemyRows = true;
+    }
+
+    /// <summary>
+    /// 缓存员工数据表（按 Id 存储行，便于任意 Id 查询）。
+    /// </summary>
+    private void TryCacheEmployeeRows() // 员工数据缓存入口
+    {
+        _employeeRowMap.Clear(); // 清空旧缓存
+        _hasEmployeeRows = false; // 重置缓存标记
+
+        if (!CY.Data.HasDataTable(EmployeeTableName)) // 判断数据表是否已加载
+        {
+            CY.LogWarning("员工数据表未加载，无法读取员工配置。"); // 输出警告日志
+            return; // 数据表未加载时退出
+        }
+
+        var table = CY.Data.GetDataTable<EmployeeUnitRow>(EmployeeTableName); // 获取员工数据表
+        if (table == null) // 数据表为空判定
+        {
+            CY.LogWarning("员工数据表为空，无法读取员工配置。"); // 输出警告日志
+            return; // 数据表为空时退出
+        }
+
+        var rows = table.GetAllRows(); // 获取所有数据行
+        if (rows == null || rows.Count == 0) // 无有效行判定
+        {
+            CY.LogWarning("员工数据表无有效行，无法读取员工配置。"); // 输出警告日志
+            return; // 无有效行时退出
+        }
+
+        for (int i = 0; i < rows.Count; i++) // 遍历数据行
+        {
+            var row = rows[i]; // 获取当前数据行
+            if (row == null) // 空行判定
+            {
+                continue; // 空行时跳过
+            }
+
+            _employeeRowMap[row.Id] = row; // 写入缓存字典
+        }
+
+        _hasEmployeeRows = true; // 标记缓存完成
+    }
+
+    /// <summary>
+    /// 缓存单位风格数据表（按 Id 存储行，便于任意 Id 查询）。
+    /// </summary>
+    private void TryCacheUnitStyleRows() // 单位风格缓存入口
+    {
+        _unitStyleRowMap.Clear(); // 清空旧缓存
+        _hasUnitStyleRows = false; // 重置缓存标记
+
+        if (!CY.Data.HasDataTable(UnitStyleTableName)) // 判断数据表是否已加载
+        {
+            CY.LogWarning("单位风格数据表未加载，无法读取风格配置。"); // 输出警告日志
+            return; // 数据表未加载时退出
+        }
+
+        var table = CY.Data.GetDataTable<UnitStyleRow>(UnitStyleTableName); // 获取单位风格数据表
+        if (table == null) // 数据表为空判定
+        {
+            CY.LogWarning("单位风格数据表为空，无法读取风格配置。"); // 输出警告日志
+            return; // 数据表为空时退出
+        }
+
+        var rows = table.GetAllRows(); // 获取所有数据行
+        if (rows == null || rows.Count == 0) // 无有效行判定
+        {
+            CY.LogWarning("单位风格数据表无有效行，无法读取风格配置。"); // 输出警告日志
+            return; // 无有效行时退出
+        }
+
+        for (int i = 0; i < rows.Count; i++) // 遍历数据行
+        {
+            var row = rows[i]; // 获取当前数据行
+            if (row == null) // 空行判定
+            {
+                continue; // 空行时跳过
+            }
+
+            _unitStyleRowMap[row.Id] = row; // 写入缓存字典
+        }
+
+        _hasUnitStyleRows = true; // 标记缓存完成
+    }
+
+    /// <summary>
+    /// 缓存子弹数组数据表（按 Id 存储行，便于任意 Id 查询）。
+    /// </summary>
+    private void TryCacheBulletArrayRows() // 子弹数组缓存入口
+    {
+        _bulletArrayRowMap.Clear(); // 清空旧缓存
+        _hasBulletArrayRows = false; // 重置缓存标记
+
+        if (!CY.Data.HasDataTable(BulletArrayTableName))
+        {
+            CY.LogWarning("子弹数组数据表未加载，无法读取子弹数组配置。"); // 输出警告日志
+            return; // 数据表未加载时退出
+        }
+
+        var table = CY.Data.GetDataTable<BulletArrayRow>(BulletArrayTableName); // 获取子弹数组数据表
+        if (table == null)
+        {
+            CY.LogWarning("子弹数组数据表为空，无法读取子弹数组配置。"); // 输出警告日志
+            return; // 数据表为空时退出
+        }
+
+        var rows = table.GetAllRows(); // 获取所有数据行
+        if (rows == null || rows.Count == 0)
+        {
+            CY.LogWarning("子弹数组数据表无有效行，无法读取子弹数组配置。"); // 输出警告日志
+            return; // 无有效行时退出
+        }
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i]; // 获取当前数据行
+            if (row == null)
+            {
+                continue; // 空行时跳过
+            }
+
+            _bulletArrayRowMap[row.Id] = row; // 写入缓存字典
+        }
+
+        _hasBulletArrayRows = true; // 标记缓存完成
     }
 }

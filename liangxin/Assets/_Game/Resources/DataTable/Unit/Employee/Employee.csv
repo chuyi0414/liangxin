@@ -1,2 +1,2 @@
-Id,Code,Name,Camp,LifeState,Level,MaxHp,Attack,Defense,DefensePenetration,DefensePenetrationRate,CritRate,DodgeRate,IsRanged,MoveSpeed,AttackRange,AttackInterval
-1,F0001,保安,2,0,1,500,15,3,0,0,0.05,0.02,False,4.5,1.2,1.1
+Id,Code,Name,Camp,LifeState,Level,MaxHp,Attack,Defense,DefensePenetration,DefensePenetrationRate,CritRate,DodgeRate,IsRanged,MoveSpeed,AttackRange,AttackInterval,RecruitmentPrice,StyleIds
+1,F0001,保安,2,0,1,500,15,3,0,0,0.05,0.02,False,4.5,1.2,1.1,50,1|3

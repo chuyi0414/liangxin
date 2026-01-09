@@ -45,6 +45,13 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
     /// 拾取范围
     /// </summary>
     [SerializeField] private CircleCollider2D _selectionRange; // 拾取范围碰撞体
+    /// <summary>
+    /// 漂浮点
+    /// </summary>
+    [SerializeField] private GameObject _floatingPoint; // 漂浮点对象
+    /// <summary>漂浮点 Transform 缓存。</summary>
+    private Transform _floatingPointTransform; // 漂浮点 Transform 缓存
+
     /// <summary>黑心点击检测命中缓存（避免运行时分配）。</summary>
     private static readonly Collider2D[] _blackHeartClickHits = new Collider2D[16]; // 黑心点击命中缓存
     /// <summary>
@@ -56,6 +63,7 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
         _cachedTransform = transform;
         _rigidbody2D = GetComponent<Rigidbody2D>();
         _attackLocationTransform = AttackLocation != null ? AttackLocation.transform : null; // 缓存攻击点 Transform
+        _floatingPointTransform = _floatingPoint != null ? _floatingPoint.transform : null; // 缓存漂浮点 Transform
         _cachedCamera = Camera.main; // 缓存主摄像机
         if (_cachedCamera == null)
         {
@@ -115,9 +123,52 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
         };
 
         ApplyBaseData(row.Id, row.Code, row.Name, row.Camp, row.LifeState, row.Level, stats);
-        ApplyBulletPrefabPath(row.BulletPrefabPath); // 应用子弹预制体路径
         ApplyBulletSpeed(row.BulletSpeed); // 应用子弹飞行速度
+        ApplyBulletArrayConfigFromRow(row); // 应用子弹数组配置
         base.OnEntityShow(userData);
+    }
+
+    /// <summary>
+    /// 应用玩家子弹数组配置。
+    /// </summary>
+    /// <param name="row">玩家数据行。</param>
+    private void ApplyBulletArrayConfigFromRow(PlayerUnitRow row) // 子弹数组应用入口
+    {
+        if (row == null)
+        {
+            return; // 数据行为空时直接退出
+        }
+
+        var bulletArrayId = row.BulletArrayId; // 读取子弹数组配置 Id
+        if (bulletArrayId <= 0)
+        {
+            ApplyBulletArrayConfig(BulletSelectRule.Random, null); // Id 无效时清空子弹数组配置
+            return; // 直接退出
+        }
+
+        var unitManager = CY.Unit; // 获取单位管理器
+        if (unitManager == null)
+        {
+            CY.LogWarning("[PlayerEntity] UnitManager 未就绪，无法应用子弹数组配置。"); // 输出警告日志
+            ApplyBulletArrayConfig(BulletSelectRule.Random, null); // 清空子弹数组配置
+            return; // 直接退出
+        }
+
+        if (!unitManager.TryGetBulletArrayRow(bulletArrayId, out var bulletArrayRow))
+        {
+            CY.LogWarning($"[PlayerEntity] 未找到子弹数组配置，Id={bulletArrayId}"); // 输出缺失警告
+            ApplyBulletArrayConfig(BulletSelectRule.Random, null); // 清空子弹数组配置
+            return; // 直接退出
+        }
+
+        if (!bulletArrayRow.TryGetPrefabPaths(out var prefabPaths))
+        {
+            CY.LogWarning($"[PlayerEntity] 子弹数组配置无有效路径，Id={bulletArrayId}"); // 输出路径警告
+            ApplyBulletArrayConfig(BulletSelectRule.Random, null); // 清空子弹数组配置
+            return; // 直接退出
+        }
+
+        ApplyBulletArrayConfig(bulletArrayRow.SelectRule, prefabPaths); // 应用子弹数组配置
     }
 
     /// <summary>
@@ -271,6 +322,24 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
     }
 
     /// <summary>
+    /// 获取黑心漂浮目标 Transform（优先漂浮点，缺失则回退玩家本体）。
+    /// </summary>
+    private Transform GetBlackHeartFloatingTarget() // 黑心漂浮目标获取入口
+    {
+        if (_floatingPointTransform == null && _floatingPoint != null)
+        {
+            _floatingPointTransform = _floatingPoint.transform; // 缓存漂浮点 Transform
+        }
+
+        if (_floatingPointTransform != null)
+        {
+            return _floatingPointTransform; // 优先使用漂浮点
+        }
+
+        return _cachedTransform != null ? _cachedTransform : transform; // 回退到玩家 Transform
+    }
+
+    /// <summary>
     /// 处理黑心点击拾取。
     /// </summary>
     private void TryHandleBlackHeartClick() // 黑心点击拾取入口
@@ -357,7 +426,8 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
                 return; // 拾取失败时退出
             }
 
-            blackHeartEntity.PlayPickupToTarget(playerTransform); // 播放拾取动画并回收
+            var floatingTarget = GetBlackHeartFloatingTarget(); // 获取黑心漂浮目标
+            blackHeartEntity.PlayPickupToTarget(floatingTarget); // 播放漂浮移动动画并进入漂浮状态
             return; // 成功拾取后退出
         }
     }

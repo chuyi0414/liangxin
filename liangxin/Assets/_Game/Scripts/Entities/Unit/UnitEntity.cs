@@ -87,8 +87,12 @@ public abstract class UnitEntity : EntityBase
     private bool _hasDespawnedEvent;
     /// <summary>攻击冷却计时器（秒）。</summary>
     private float _attackCooldown;
-    /// <summary>子弹预制体路径（Resources 相对路径，不含 .prefab）。</summary>
-    private string _bulletPrefabPath; // 子弹预制体路径
+    /// <summary>子弹预制体路径数组（Resources 相对路径，不含 .prefab）。</summary>
+    private string[] _bulletPrefabPaths; // 子弹路径数组
+    /// <summary>子弹选择规则。</summary>
+    private BulletSelectRule _bulletSelectRule; // 子弹选择规则
+    /// <summary>顺序轮播索引。</summary>
+    private int _bulletSelectIndex; // 轮播索引
     /// <summary>子弹飞行速度（允许为 0，表示使用子弹默认速度）。</summary>
     private float _bulletSpeed; // 子弹速度
     /// <summary>Transform 缓存（避免高频访问开销）。</summary>
@@ -116,8 +120,6 @@ public abstract class UnitEntity : EntityBase
     public int MaxHp => _baseStats.MaxHp;
     /// <summary>攻击冷却剩余时间（只读）。</summary>
     public float AttackCooldown => _attackCooldown;
-    /// <summary>子弹预制体路径（只读）。</summary>
-    public string BulletPrefabPath => _bulletPrefabPath; // 子弹路径只读访问
     /// <summary>子弹飞行速度（只读，0 表示使用子弹默认速度）。</summary>
     public float BulletSpeed => _bulletSpeed; // 子弹速度只读访问
     /// <summary>Transform 缓存（只读）。</summary>
@@ -151,12 +153,21 @@ public abstract class UnitEntity : EntityBase
     }
 
     /// <summary>
-    /// 应用子弹预制体路径（来自配置表）。
+    /// 应用子弹数组配置（来自数据表）。
     /// </summary>
-    /// <param name="bulletPrefabPath">Resources 相对路径（不含 .prefab）。</param>
-    protected void ApplyBulletPrefabPath(string bulletPrefabPath)
+    /// <param name="selectRule">子弹选择规则。</param>
+    /// <param name="prefabPaths">子弹预制体路径数组。</param>
+    protected void ApplyBulletArrayConfig(BulletSelectRule selectRule, string[] prefabPaths) // 子弹数组配置应用入口
     {
-        _bulletPrefabPath = string.IsNullOrEmpty(bulletPrefabPath) ? string.Empty : bulletPrefabPath; // 写入子弹路径
+        _bulletSelectRule = selectRule; // 写入选择规则
+        _bulletSelectIndex = 0; // 重置顺序轮播索引
+        if (prefabPaths == null || prefabPaths.Length == 0)
+        {
+            _bulletPrefabPaths = Array.Empty<string>(); // 路径无效时写入空数组
+            return; // 直接退出
+        }
+
+        _bulletPrefabPaths = prefabPaths; // 写入路径数组
     }
 
     /// <summary>
@@ -463,11 +474,18 @@ public abstract class UnitEntity : EntityBase
     /// <param name="isCrit">是否暴击。</param>
     private bool TryFireBulletByDirection(Vector2 direction, int damage, bool isCrit)
     {
-        var bulletPrefabPath = _bulletPrefabPath; // 读取子弹预制体路径
+        var bulletPrefabPaths = _bulletPrefabPaths; // 读取子弹路径数组
+        if (bulletPrefabPaths == null || bulletPrefabPaths.Length == 0)
+        {
+            CY.LogError("[UnitEntity] 远程攻击缺少子弹数组配置。"); // 输出子弹数组缺失错误
+            return false; // 无路径时返回失败
+        }
+
+        var bulletPrefabPath = ResolveBulletPrefabPath(bulletPrefabPaths); // 解析要使用的子弹路径
         if (string.IsNullOrEmpty(bulletPrefabPath))
         {
-            CY.LogError("[UnitEntity] 远程攻击缺少子弹预制体路径。"); // 输出子弹路径缺失错误
-            return false; // 无路径时返回失败
+            CY.LogError("[UnitEntity] 子弹路径为空，无法发射。"); // 输出空路径错误
+            return false; // 路径无效时返回失败
         }
 
         direction.Normalize(); // 归一化方向向量
@@ -495,6 +513,43 @@ public abstract class UnitEntity : EntityBase
         }
 
         return true; // 返回发射成功
+    }
+
+    /// <summary>
+    /// 根据选择规则获取子弹预制体路径。
+    /// </summary>
+    /// <param name="bulletPrefabPaths">子弹路径数组。</param>
+    private string ResolveBulletPrefabPath(string[] bulletPrefabPaths) // 子弹路径解析入口
+    {
+        if (bulletPrefabPaths == null || bulletPrefabPaths.Length == 0)
+        {
+            return string.Empty; // 数组无效时返回空
+        }
+
+        if (_bulletSelectRule == BulletSelectRule.Sequential)
+        {
+            if (_bulletSelectIndex < 0)
+            {
+                _bulletSelectIndex = 0; // 轮播索引下限保护
+            }
+
+            if (_bulletSelectIndex >= bulletPrefabPaths.Length)
+            {
+                _bulletSelectIndex = 0; // 轮播索引上限回绕
+            }
+
+            var path = bulletPrefabPaths[_bulletSelectIndex]; // 获取当前轮播路径
+            _bulletSelectIndex++; // 递增轮播索引
+            if (_bulletSelectIndex >= bulletPrefabPaths.Length)
+            {
+                _bulletSelectIndex = 0; // 超过上限时回绕到 0
+            }
+
+            return path; // 返回轮播路径
+        }
+
+        var index = UnityEngine.Random.Range(0, bulletPrefabPaths.Length); // 生成随机索引
+        return bulletPrefabPaths[index]; // 返回随机路径
     }
 
     /// <summary>

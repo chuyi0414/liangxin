@@ -9,6 +9,12 @@ public class LoadProcedure : ProcedureBase
     private const string BattleDataJsonPath = "DataTable/Game/BattleData";
     private const string PlayerDataTableName = "Player";
     private const string PlayerDataCsvPath = "DataTable/Unit/Player/Player";
+    private const string EmployeeDataTableName = "Employee"; // 员工数据表名
+    private const string EmployeeDataCsvPath = "DataTable/Unit/Employee/Employee"; // 员工数据表路径
+    private const string UnitStyleTableName = "UnitStyle"; // 单位风格表名
+    private const string UnitStyleCsvPath = "DataTable/Unit/Employee/Style/UnitStyle"; // 单位风格表路径
+    private const string BulletArrayTableName = "BulletArray"; // 子弹数组表名
+    private const string BulletArrayCsvPath = "DataTable/Projectiles/BulletArray"; // 子弹数组表路径
     private const string EnemyDataTableName = "Enemy";
     private const string EnemyDataCsvPath = "DataTable/Unit/Enemy/Enemy";
     private const string SpawnTypeTableName = "SpawnType"; // 生成类型表名
@@ -23,6 +29,9 @@ public class LoadProcedure : ProcedureBase
         CY.UI.Open<LoadUIPanel>();
         LoadBattleData();
         LoadPlayerData();
+        LoadEmployeeData(); // 加载员工数据
+        LoadUnitStyleData(); // 加载单位风格数据
+        LoadBulletArrayData(); // 加载子弹数组数据
         LoadEnemyData();
         LoadSpawnTypeData(); // 加载生成类型
         LoadAssaultSpawnTypeData(); // 加载奇袭生成类型
@@ -78,6 +87,66 @@ public class LoadProcedure : ProcedureBase
         }
 
         CY.Data.LoadFromCsv<PlayerUnitRow>(csvAsset.text, PlayerDataTableName);
+    }
+
+    /// <summary>
+    /// 加载员工数据（CSV）。
+    /// </summary>
+    private void LoadEmployeeData() // 员工数据加载入口
+    {
+        if (CY.Data.HasDataTable(EmployeeDataTableName)) // 判断是否已加载
+        {
+            CY.Data.UnloadDataTable(EmployeeDataTableName); // 卸载旧表
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(EmployeeDataCsvPath); // 加载 CSV 资源
+        if (csvAsset == null) // 资源为空判定
+        {
+            CY.LogError($"[LoadProcedure] 加载员工数据失败：{EmployeeDataCsvPath}"); // 输出错误日志
+            return; // 资源为空时退出
+        }
+
+        CY.Data.LoadFromCsv<EmployeeUnitRow>(csvAsset.text, EmployeeDataTableName); // 解析员工数据表
+    }
+
+    /// <summary>
+    /// 加载单位风格数据（CSV）。
+    /// </summary>
+    private void LoadUnitStyleData() // 单位风格数据加载入口
+    {
+        if (CY.Data.HasDataTable(UnitStyleTableName)) // 判断是否已加载
+        {
+            CY.Data.UnloadDataTable(UnitStyleTableName); // 卸载旧表
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(UnitStyleCsvPath); // 加载 CSV 资源
+        if (csvAsset == null) // 资源为空判定
+        {
+            CY.LogError($"[LoadProcedure] 加载单位风格数据失败：{UnitStyleCsvPath}"); // 输出错误日志
+            return; // 资源为空时退出
+        }
+
+        CY.Data.LoadFromCsv<UnitStyleRow>(csvAsset.text, UnitStyleTableName); // 解析单位风格数据表
+    }
+
+    /// <summary>
+    /// 加载子弹数组数据（CSV，通用单位使用）。
+    /// </summary>
+    private void LoadBulletArrayData() // 子弹数组加载入口
+    {
+        if (CY.Data.HasDataTable(BulletArrayTableName))
+        {
+            CY.Data.UnloadDataTable(BulletArrayTableName); // 卸载旧表
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(BulletArrayCsvPath); // 加载 CSV 资源
+        if (csvAsset == null)
+        {
+            CY.LogError($"[LoadProcedure] 加载子弹数组失败：{BulletArrayCsvPath}"); // 输出错误日志
+            return; // 资源为空时退出
+        }
+
+        CY.Data.LoadFromCsv<BulletArrayRow>(csvAsset.text, BulletArrayTableName); // 解析子弹数组表
     }
 
     /// <summary>

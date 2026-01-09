@@ -66,9 +66,22 @@ public class GameProcedure : ProcedureBase
             entityManager.RecycleAllEntities("Players"); // 回收玩家实体
             if (unitManager != null && unitManager.TryGetDefaultPlayerRow(out var playerRow))
             {
-                if (!string.IsNullOrEmpty(playerRow.BulletPrefabPath))
+                var bulletArrayId = playerRow.BulletArrayId; // 读取玩家子弹数组 Id
+                if (bulletArrayId > 0 && unitManager.TryGetBulletArrayRow(bulletArrayId, out var bulletArrayRow))
                 {
-                    entityManager.RecycleAllEntities(playerRow.BulletPrefabPath); // 回收玩家子弹实体
+                    if (bulletArrayRow.TryGetPrefabPaths(out var prefabPaths))
+                    {
+                        for (int i = 0; i < prefabPaths.Length; i++)
+                        {
+                            var prefabPath = prefabPaths[i]; // 获取当前子弹路径
+                            if (string.IsNullOrEmpty(prefabPath))
+                            {
+                                continue; // 空路径时跳过
+                            }
+
+                            entityManager.RecycleAllEntities(prefabPath); // 回收玩家子弹实体
+                        }
+                    }
                 }
             }
         }

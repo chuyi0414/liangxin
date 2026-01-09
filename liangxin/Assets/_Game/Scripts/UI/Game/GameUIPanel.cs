@@ -1,6 +1,7 @@
-﻿using CYFramework;
+using CYFramework;
 using CYFramework.Core.Timer;
 using CYFramework.Core.UI;
+using PrimeTween; // PrimeTween 动画系统引用
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -44,12 +45,46 @@ public class GameUIPanel : UIPanel
     /// <summary>是否已订阅战斗数据事件。</summary>
     private bool _battleDataEventsSubscribed; // 战斗数据事件订阅标记
 
+    [Header("人才库")]
+    /// <summary>
+    /// 人才库物体
+    /// </summary>
+    [SerializeField] private GameObject _goTalentPool;
+    /// <summary>
+    /// 人才库按钮（显示/隐藏）
+    /// </summary>
+    [SerializeField] private Button _btnShowHide;
+    /// <summary>人才库 RectTransform 缓存。</summary>
+    private RectTransform _talentPoolRectTransform; // 人才库 RectTransform 缓存
+    /// <summary>人才库是否展开。</summary>
+    private bool _isTalentPoolExpanded; // 人才库展开状态标记
+    /// <summary>人才库展开目标本地坐标。</summary>
+    private static readonly Vector3 TalentPoolExpandedLocalPosition = new Vector3(0f, 0f, 0f); // 人才库展开位置
+    /// <summary>人才库收起目标本地坐标。</summary>
+    private static readonly Vector3 TalentPoolCollapsedLocalPosition = new Vector3(500f, 0f, 0f); // 人才库收起位置
+    /// <summary>人才库移动动画时长（秒）。</summary>
+    [SerializeField] private float _talentPoolMoveDuration = 0.3f; // 人才库移动时长
+    /// <summary>人才库移动 Tween 句柄。</summary>
+    private Tween _talentPoolTween; // 人才库移动 Tween 句柄
+    /// <summary>人才库 Tween 起点缓存。</summary>
+    private Vector3 _talentPoolTweenFrom; // 人才库 Tween 起点缓存
+    /// <summary>人才库 Tween 终点缓存。</summary>
+    private Vector3 _talentPoolTweenTo; // 人才库 Tween 终点缓存
+
     protected override void OnBindUI()
     {
         base.OnBindUI();
         if (_btnPause != null)
         {
             _btnPause.onClick.AddListener(OnBtnPauseClick);
+        }
+        if (_btnShowHide != null)
+        {
+            _btnShowHide.onClick.AddListener(OnBtnShowHideClick); // 绑定人才库显示/隐藏按钮事件
+        }
+        if (_goTalentPool != null)
+        {
+            _talentPoolRectTransform = _goTalentPool.GetComponent<RectTransform>(); // 缓存人才库 RectTransform
         }
     }
 
@@ -59,6 +94,108 @@ public class GameUIPanel : UIPanel
     private void OnBtnPauseClick()
     {
         CY.Procedure.ChangeProcedure<MainProcedure>();
+    }
+
+    /// <summary>
+    /// 人才库显示/隐藏按钮点击回调。
+    /// </summary>
+    private void OnBtnShowHideClick() // 人才库按钮点击入口
+    {
+        if (!TryGetTalentPoolRectTransform(out var rectTransform))
+        {
+            return; // 未获取到 RectTransform 时直接退出
+        }
+
+        _isTalentPoolExpanded = !_isTalentPoolExpanded; // 切换人才库展开状态
+        var targetPosition = _isTalentPoolExpanded ? TalentPoolExpandedLocalPosition : TalentPoolCollapsedLocalPosition; // 计算目标位置
+        PlayTalentPoolMoveTween(rectTransform, targetPosition); // 播放人才库移动动画
+    }
+
+    /// <summary>
+    /// 获取并缓存人才库 RectTransform。
+    /// </summary>
+    /// <param name="rectTransform">输出 RectTransform。</param>
+    /// <returns>是否获取成功。</returns>
+    private bool TryGetTalentPoolRectTransform(out RectTransform rectTransform) // 人才库 RectTransform 获取入口
+    {
+        rectTransform = _talentPoolRectTransform; // 优先使用缓存引用
+        if (rectTransform != null)
+        {
+            return true; // 缓存可用时直接返回成功
+        }
+
+        if (_goTalentPool == null)
+        {
+            return false; // 物体为空时返回失败
+        }
+
+        rectTransform = _goTalentPool.GetComponent<RectTransform>(); // 获取人才库 RectTransform
+        _talentPoolRectTransform = rectTransform; // 缓存 RectTransform 引用
+        return rectTransform != null; // 返回是否获取成功
+    }
+
+    /// <summary>
+    /// 播放人才库移动动画。
+    /// </summary>
+    /// <param name="rectTransform">人才库 RectTransform。</param>
+    /// <param name="targetLocalPosition">目标本地坐标。</param>
+    private void PlayTalentPoolMoveTween(RectTransform rectTransform, Vector3 targetLocalPosition) // 人才库移动动画入口
+    {
+        if (rectTransform == null)
+        {
+            return; // RectTransform 为空时直接退出
+        }
+
+        _talentPoolRectTransform = rectTransform; // 缓存 RectTransform 引用
+        StopTalentPoolTween(); // 停止旧的移动动画
+        _talentPoolTweenFrom = rectTransform.anchoredPosition3D; // 记录动画起点位置
+        _talentPoolTweenTo = targetLocalPosition; // 记录动画终点位置
+        var duration = _talentPoolMoveDuration; // 读取动画时长
+        if (duration <= 0f)
+        {
+            rectTransform.anchoredPosition3D = targetLocalPosition; // 时长无效时直接设置位置
+            return; // 直接结束
+        }
+
+        _talentPoolTween = Tween.Custom<GameUIPanel>(this, 0f, 1f, duration, (self, t) => // 使用 PrimeTween 播放自定义位移动画
+        {
+            var targetRect = self._talentPoolRectTransform; // 获取当前缓存 RectTransform
+            if (targetRect == null)
+            {
+                return; // RectTransform 为空时直接退出
+            }
+
+            var clamped = Mathf.Clamp01(t); // 限制进度范围
+            var eased = 1f - Mathf.Pow(1f - clamped, 3f); // 计算缓出曲线进度
+            var nextPosition = Vector3.Lerp(self._talentPoolTweenFrom, self._talentPoolTweenTo, eased); // 计算插值位置
+            targetRect.anchoredPosition3D = nextPosition; // 写入人才库位置
+        });
+    }
+
+    /// <summary>
+    /// 停止人才库移动动画。
+    /// </summary>
+    private void StopTalentPoolTween() // 人才库移动动画停止入口
+    {
+        if (_talentPoolTween.isAlive)
+        {
+            _talentPoolTween.Stop(); // 停止正在播放的动画
+        }
+    }
+
+    /// <summary>
+    /// 重置人才库为收起状态。
+    /// </summary>
+    private void ResetTalentPoolToHidden() // 人才库重置入口
+    {
+        if (!TryGetTalentPoolRectTransform(out var rectTransform))
+        {
+            return; // 无法获取 RectTransform 时直接退出
+        }
+
+        StopTalentPoolTween(); // 停止移动动画
+        rectTransform.anchoredPosition3D = TalentPoolCollapsedLocalPosition; // 重置到收起位置
+        _isTalentPoolExpanded = false; // 重置展开状态
     }
 
     /// <summary>
@@ -81,12 +218,25 @@ public class GameUIPanel : UIPanel
         RefreshBattleData();
     }
 
+    /// <summary>
+    /// 面板隐藏时重置人才库位置。
+    /// </summary>
+    protected override void OnHide() // 面板隐藏回调入口
+    {
+        base.OnHide(); // 调用父类隐藏回调
+        ResetTalentPoolToHidden(); // 隐藏时重置人才库位置
+    }
+
     protected override void OnUnbindUI()
     {
         base.OnUnbindUI();
         if (_btnPause != null)
         {
             _btnPause.onClick.RemoveListener(OnBtnPauseClick);
+        }
+        if (_btnShowHide != null)
+        {
+            _btnShowHide.onClick.RemoveListener(OnBtnShowHideClick); // 解绑人才库显示/隐藏按钮事件
         }
 
         UnsubscribeBattleDataEvents(); // 取消战斗数据事件订阅

@@ -56,6 +56,8 @@ public sealed class BattleDataManager : MonoBehaviour,
     public int ConscienceCurrent => _conscienceCurrent; // 对外只读良心
     /// <summary>黑心当前值（只读）。</summary>
     public int BlackHeartCurrent => _blackHeartCurrent; // 对外只读黑心
+    /// <summary>黑心并发吸收槽位数量（只读）。</summary>
+    public int BlackHeartAbsorbCount => GetBlackHeartAbsorbCount(); // 对外只读黑心吸收槽位数量
     /// <summary>公司良心当前值（只读）。</summary>
     public int CompanyConscienceCurrent => _companyConscienceCurrent;
     /// <summary>公司良心最大值（只读）。</summary>
@@ -344,6 +346,15 @@ public sealed class BattleDataManager : MonoBehaviour,
     {
         var value = _battleData != null ? _battleData.BlackHeartConvertTime : 0f; // 读取配置值
         return value > 0f ? value : 0f; // 返回有效值
+    }
+
+    /// <summary>
+    /// 获取黑心并发吸收槽位数量（<=0 时使用 1）。
+    /// </summary>
+    private int GetBlackHeartAbsorbCount() // 黑心吸收槽位读取入口
+    {
+        var value = _battleData != null ? _battleData.BlackHeartAbsorbCount : 0; // 读取配置值
+        return value > 0 ? value : 1; // 返回有效值
     }
 
     /// <summary>
