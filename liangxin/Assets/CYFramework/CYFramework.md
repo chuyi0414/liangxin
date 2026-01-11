@@ -466,6 +466,8 @@ CY.Procedure.ChangeProcedure<T>();
 | `CY.Pool` | PoolManager | 对象| 复用 GameObject |
 | `CY.Game` | GameEntryBase | 游戏入口 | 访问全局实例 |
 
+> 实体位置设置建议：若实体带 `Rigidbody2D`，请避免只改 `transform.position`（会被物理回写）；推荐使用 `CY.Entity.SetEntityPosition2D(...)` 同步 Transform 与 Rigidbody2D，并在需要“本帧立刻做物理查询”时开启 `syncTransforms`。
+
 ### 4.3 扩展自定义系
 
 CY partial class，游戏项目可扩展而不修改框架代码。

@@ -1615,6 +1615,73 @@ namespace CYFramework.Core.Entity
         {
             return GetEntity(entityId) as T;
         }
+
+        /// <summary>
+        /// 设置实体 2D 世界坐标（XY 平面）：同时同步 Transform 与 Rigidbody2D，避免出现“写了刚体位置但读取 Transform 还是旧值”的误判。
+        /// 注意：此方法用于“传送/出生点修正”，不是移动系统；持续移动请在 FixedUpdate 使用 Rigidbody2D.MovePosition/velocity。
+        /// </summary>
+        /// <param name="entityId">实体 Id（由 EntityManager 分配）。</param>
+        /// <param name="position">目标世界坐标（XY）。</param>
+        /// <param name="syncTransforms">是否立即执行 Physics2D.SyncTransforms（用于本帧立刻做物理查询/Overlap/Raycast；有开销）。</param>
+        /// <param name="resetVelocity">是否清零刚体速度（用于出生/传送避免继承池化残留速度）。</param>
+        /// <returns>是否设置成功。</returns>
+        public bool SetEntityPosition2D(int entityId, Vector2 position, bool syncTransforms = false, bool resetVelocity = true) // 实体 2D 位置设置入口（按 Id）
+        {
+            if (entityId <= 0) // Id 非法判定
+            {
+                return false; // Id 非法时返回失败
+            }
+
+            if (!_entities.TryGetValue(entityId, out var entity)) // 查询实体实例
+            {
+                return false; // 未找到实体时返回失败
+            }
+
+            return SetEntityPosition2D(entity, position, syncTransforms, resetVelocity); // 转发到实体实例版本
+        }
+
+        /// <summary>
+        /// 设置实体 2D 世界坐标（XY 平面）：同时同步 Transform 与 Rigidbody2D，避免位置不同步导致逻辑误判。
+        /// </summary>
+        /// <param name="entity">实体接口（建议使用 EntityManager.GetEntity 获取）。</param>
+        /// <param name="position">目标世界坐标（XY）。</param>
+        /// <param name="syncTransforms">是否立即执行 Physics2D.SyncTransforms（用于本帧立刻做物理查询/Overlap/Raycast；有开销）。</param>
+        /// <param name="resetVelocity">是否清零刚体速度（用于出生/传送避免继承池化残留速度）。</param>
+        /// <returns>是否设置成功。</returns>
+        public bool SetEntityPosition2D(IEntity entity, Vector2 position, bool syncTransforms = false, bool resetVelocity = true) // 实体 2D 位置设置入口（按实例）
+        {
+            if (entity == null) // 实体为空判定
+            {
+                return false; // 实体为空时返回失败
+            }
+
+            var gameObject = entity.GameObject; // 获取实体 GameObject
+            if (gameObject == null) // GameObject 为空判定
+            {
+                return false; // GameObject 为空时返回失败
+            }
+
+            var cachedTransform = gameObject.transform; // 获取 Transform 引用
+            var currentZ = cachedTransform.position.z; // 保留当前 Z（2D 项目使用 XY 平面）
+            cachedTransform.position = new Vector3(position.x, position.y, currentZ); // 同步 Transform 世界坐标（确保当帧可见位置正确）
+
+            if (gameObject.TryGetComponent<Rigidbody2D>(out var rigidbody2D)) // 尝试获取 2D 刚体（有刚体时以物理位置为准）
+            {
+                rigidbody2D.position = position; // 同步刚体位置（确保物理系统使用正确坐标）
+                if (resetVelocity) // 是否清零速度判定
+                {
+                    rigidbody2D.velocity = Vector2.zero; // 清零线速度，避免继承残留速度
+                    rigidbody2D.angularVelocity = 0f; // 清零角速度，避免旋转残留
+                }
+            }
+
+            if (syncTransforms) // 是否立即同步 Transform 到物理世界判定
+            {
+                Physics2D.SyncTransforms(); // 同步 2D 物理变换（用于本帧立刻做物理查询）
+            }
+
+            return true; // 返回设置成功
+        }
         
         /// <summary>
         /// 获取所有指定类型的实体

@@ -44,6 +44,8 @@ public sealed class PlayerUnitRow : IDataRow
     public float BulletSpeed;
     /// <summary>子弹数组配置 Id（对应 BulletArray.csv）。</summary>
     public int BulletArrayId;
+    /// <summary>预制体资源路径（Resources 相对路径，无扩展名）。</summary>
+    public string PrefabPath; // 老板预制体路径
 
     int IDataRow.Id => Id;
 
@@ -71,5 +73,6 @@ public sealed class PlayerUnitRow : IDataRow
         AttackInterval = float.Parse(values[16], CultureInfo.InvariantCulture);
         BulletSpeed = float.Parse(values[17], CultureInfo.InvariantCulture); // 读取子弹速度（允许为 0）
         BulletArrayId = int.Parse(values[18]); // 读取子弹数组配置 Id
+        PrefabPath = values.Length > 19 ? values[19] : string.Empty; // 读取预制体路径（兼容旧表）
     }
 }

@@ -39,15 +39,34 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
     private PlayerEntity _playerEntity; // 玩家实体引用
     /// <summary>是否已请求下一帧设置相机跟随。</summary>
     private bool _pendingFollowPlayer; // 相机跟随请求标记
-    /// <summary>NavMeshSurface 组件缓存。</summary>
-    private NavMeshSurface _navMeshSurface; // NavMeshSurface 缓存
+    /// <summary>默认 NavMeshSurface（供敌人/玩家使用）。</summary>
+    [SerializeField] private NavMeshSurface _defaultNavMeshSurface; // 默认 NavMeshSurface 引用（推荐在预制体拖拽）
+    /// <summary>员工 NavMeshSurface（供员工使用）。</summary>
+    [SerializeField] private NavMeshSurface _employeeNavMeshSurface; // 员工 NavMeshSurface 引用（推荐在预制体拖拽）
+    /// <summary>是否启用员工专用 NavMeshSurface（默认关闭，保留未来多方案扩展能力）。</summary>
+    [SerializeField] private bool _enableEmployeeNavMeshSurface = false; // 员工专用 NavMeshSurface 启用开关
     /// <summary>NavMesh 烘焙计时器。</summary>
     private Timer _navMeshTimer; // NavMesh 计时器
-    /// <summary>RootSources2d：显式指定 NavMesh 收集根，避免 DDOL 场景收集不到。</summary>
-    private RootSources2d _rootSources2d; // RootSources2d 缓存
-    /// <summary>缓存 NavMesh 收集根列表，避免重复分配。</summary>
-    private readonly System.Collections.Generic.List<GameObject> _rootSources = // 收集根缓存列表字段
-        new System.Collections.Generic.List<GameObject>(16); // 收集根列表初始化容量
+    /// <summary>员工 NavMesh 更新间隔（秒），用于让员工之间动态障碍实时生效。</summary>
+    [SerializeField] private float _employeeNavMeshUpdateInterval = 0.1f; // 员工 NavMesh 更新间隔秒数
+    /// <summary>员工 NavMesh 更新循环计时器。</summary>
+    private Timer _employeeNavMeshUpdateTimer; // 员工 NavMesh 更新计时器
+    /// <summary>默认 NavMesh 异步烘焙句柄，用于避免重复触发。</summary>
+    private AsyncOperation _defaultNavMeshBuildOperation; // 默认 NavMesh 烘焙异步句柄
+    /// <summary>员工 NavMesh 异步烘焙句柄，用于避免更新与烘焙并发。</summary>
+    private AsyncOperation _employeeNavMeshBuildOperation; // 员工 NavMesh 烘焙异步句柄
+    /// <summary>员工 NavMesh 异步更新句柄，用于避免 0.1s 更新堆叠。</summary>
+    private AsyncOperation _employeeNavMeshUpdateOperation; // 员工 NavMesh 更新异步句柄
+    /// <summary>默认导航 RootSources2d 缓存（与默认 NavMeshSurface 同节点）。</summary>
+    private RootSources2d _defaultRootSources2d; // 默认 RootSources2d 缓存
+    /// <summary>员工导航 RootSources2d 缓存（与员工 NavMeshSurface 同节点）。</summary>
+    private RootSources2d _employeeRootSources2d; // 员工 RootSources2d 缓存
+    /// <summary>默认导航收集根列表缓存，避免重复分配。</summary>
+    private readonly System.Collections.Generic.List<GameObject> _defaultRootSources = // 默认收集根缓存列表字段
+        new System.Collections.Generic.List<GameObject>(16); // 默认收集根列表初始化容量
+    /// <summary>员工导航收集根列表缓存，避免重复分配。</summary>
+    private readonly System.Collections.Generic.List<GameObject> _employeeRootSources = // 员工收集根缓存列表字段
+        new System.Collections.Generic.List<GameObject>(16); // 员工收集根列表初始化容量
 
     /// <summary>
     /// 实体初始化：缓存组件引用。
@@ -56,12 +75,7 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
     protected override void OnEntityInit(object userData) // 实体初始化入口
     {
         base.OnEntityInit(userData); // 调用父类初始化
-        _navMeshSurface = GetComponent<NavMeshSurface>(); // 缓存 NavMeshSurface 组件
-        _rootSources2d = GetComponent<RootSources2d>(); // 缓存 RootSources2d 组件
-        if (_rootSources2d == null)
-        {
-            _rootSources2d = gameObject.AddComponent<RootSources2d>(); // 补充 RootSources2d 组件
-        }
+        CacheNavMeshSurfaces(); // 缓存两套 NavMeshSurface 与 RootSources2d
     }
 
     /// <summary>
@@ -80,6 +94,11 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
             RequestRebuildNavMesh(_buildNavMeshDelay); // 请求动态烘焙 NavMesh
         }
 
+        if (_enableEmployeeNavMeshSurface) // 员工专用导航启用判定
+        {
+            StartEmployeeNavMeshUpdateLoop(); // 启动员工 NavMesh 更新循环（用于动态障碍方案）
+        }
+
         if (_enemySpawnPointsRoot != null)
         {
             WaveSpawnPoint.RefreshAll(_enemySpawnPointsRoot); // 强制刷新怪物刷新点注册
@@ -94,6 +113,7 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
     protected override void OnEntityHide() // 实体隐藏入口
     {
         CancelNavMeshBuild(); // 取消 NavMesh 烘焙
+        StopEmployeeNavMeshUpdateLoop(); // 停止员工 NavMesh 更新循环
         CleanupEntities(); // 回收关卡实体
         base.OnEntityHide(); // 调用父类隐藏
     }
@@ -104,6 +124,7 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
     protected override void OnEntityRecycle() // 实体回收入口
     {
         CancelNavMeshBuild(); // 取消 NavMesh 烘焙
+        StopEmployeeNavMeshUpdateLoop(); // 停止员工 NavMesh 更新循环
         CleanupEntities(); // 回收关卡实体
         base.OnEntityRecycle(); // 调用父类回收
     }
@@ -160,7 +181,14 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
                 playerPreShowData.Position = Vector3.zero; // 回退到原点避免对象池远距离
             }
 
-            _playerEntity = CY.Entity.SpawnEntity<PlayerEntity, PlayerPreShowData>(ref playerPreShowData, row); // 使用预显示数据生成玩家实体
+            if (!string.IsNullOrEmpty(row.PrefabPath)) // 预制体路径存在判定
+            {
+                _playerEntity = CY.Entity.SpawnEntity<PlayerEntity, PlayerPreShowData>(row.Code, row.PrefabPath, "Players", ref playerPreShowData, row); // 使用 CSV 的预制体路径生成玩家实体
+            }
+            else // 路径缺失分支
+            {
+                _playerEntity = CY.Entity.SpawnEntity<PlayerEntity, PlayerPreShowData>(ref playerPreShowData, row); // 回退为脚本 [EntityPrefab] 默认路径生成玩家实体
+            }
             if (_playerEntity != null)
             {
                 unitManager.SetPlayer(_playerEntity); // 设置当前玩家引用
@@ -294,9 +322,9 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
     /// <param name="delay">延迟秒数（小于 0 则使用默认值）。</param>
     public void RequestRebuildNavMesh(float delay = -1f) // 动态烘焙请求入口
     {
-        if (_navMeshSurface == null)
+        if (_defaultNavMeshSurface == null && (!_enableEmployeeNavMeshSurface || _employeeNavMeshSurface == null))
         {
-            CY.LogWarning("[LevelEntity] 未找到 NavMeshSurface，无法动态烘焙。"); // 输出组件缺失警告
+            CY.LogWarning("[LevelEntity] 未找到可用 NavMeshSurface（Default 或启用的 Employee），无法动态烘焙。"); // 输出组件缺失警告
             return; // 组件缺失时退出
         }
 
@@ -316,6 +344,9 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
             _navMeshTimer.Stop(); // 停止计时器
             _navMeshTimer = null; // 清理计时器引用
         }
+
+        _defaultNavMeshBuildOperation = null; // 清理默认烘焙句柄引用
+        _employeeNavMeshBuildOperation = null; // 清理员工烘焙句柄引用
     }
 
     /// <summary>
@@ -323,32 +354,123 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
     /// </summary>
     private void BuildNavMeshInternal() // 烘焙执行入口
     {
-        if (_navMeshSurface == null)
+        if (_defaultNavMeshSurface == null && (!_enableEmployeeNavMeshSurface || _employeeNavMeshSurface == null))
         {
             return; // 组件为空时直接退出
         }
 
-        PrepareNavMeshRootSources(); // 准备收集根
+        PrepareNavMeshRootSources(_defaultRootSources2d, _defaultRootSources); // 准备默认导航收集根
+        if (_enableEmployeeNavMeshSurface) // 员工专用导航启用判定
+        {
+            PrepareNavMeshRootSources(_employeeRootSources2d, _employeeRootSources); // 准备员工导航收集根
+        }
         Physics2D.SyncTransforms(); // 同步 2D 物理变换
-        _navMeshSurface.BuildNavMeshAsync(); // 异步触发 NavMesh 烘焙
-        CY.LogInfo("[LevelEntity] NavMesh 动态烘焙已触发（异步）。"); // 输出烘焙日志
+        if (_defaultNavMeshSurface != null)
+        {
+            _defaultNavMeshBuildOperation = _defaultNavMeshSurface.BuildNavMeshAsync(); // 异步触发默认 NavMesh 烘焙并缓存句柄
+        }
+
+        if (_enableEmployeeNavMeshSurface && _employeeNavMeshSurface != null)
+        {
+            _employeeNavMeshBuildOperation = _employeeNavMeshSurface.BuildNavMeshAsync(); // 异步触发员工 NavMesh 烘焙并缓存句柄
+        }
+
+        if (_enableEmployeeNavMeshSurface && _employeeNavMeshSurface != null)
+        {
+            CY.LogInfo("[LevelEntity] NavMesh 动态烘焙已触发（Default + Employee，异步）。"); // 输出烘焙日志
+        }
+        else
+        {
+            CY.LogInfo("[LevelEntity] NavMesh 动态烘焙已触发（Default，异步）。"); // 输出烘焙日志
+        }
+    }
+
+    /// <summary>
+    /// 启动员工 NavMesh 更新循环（0.1 秒），用于让员工之间动态障碍实时影响寻路。
+    /// </summary>
+    private void StartEmployeeNavMeshUpdateLoop() // 员工 NavMesh 更新循环启动入口
+    {
+        StopEmployeeNavMeshUpdateLoop(); // 先停止旧循环避免重复
+
+        if (!_enableEmployeeNavMeshSurface) // 员工专用导航未启用判定
+        {
+            return; // 未启用时不启动循环
+        }
+
+        if (_employeeNavMeshSurface == null)
+        {
+            return; // 员工 Surface 缺失时不启动循环
+        }
+
+        if (_employeeNavMeshUpdateInterval <= 0f)
+        {
+            return; // 更新间隔非法时不启动循环
+        }
+
+        _employeeNavMeshUpdateTimer = CY.Timer.Loop(_employeeNavMeshUpdateInterval, UpdateEmployeeNavMeshOnce); // 启动循环计时器（不捕获闭包）
+    }
+
+    /// <summary>
+    /// 停止员工 NavMesh 更新循环。
+    /// </summary>
+    private void StopEmployeeNavMeshUpdateLoop() // 员工 NavMesh 更新循环停止入口
+    {
+        if (_employeeNavMeshUpdateTimer != null)
+        {
+            _employeeNavMeshUpdateTimer.Stop(); // 停止员工更新计时器
+            _employeeNavMeshUpdateTimer = null; // 清理计时器引用
+        }
+
+        _employeeNavMeshUpdateOperation = null; // 清理更新句柄引用
+    }
+
+    /// <summary>
+    /// 单次更新员工 NavMesh（异步），用于把员工的 NavMeshModifierVolume（动态障碍）写入员工 NavMesh。
+    /// </summary>
+    private void UpdateEmployeeNavMeshOnce() // 员工 NavMesh 单次更新入口
+    {
+        if (_employeeNavMeshSurface == null)
+        {
+            return; // 员工 Surface 缺失时退出
+        }
+
+        if (_employeeNavMeshSurface.navMeshData == null)
+        {
+            return; // NavMeshData 尚未生成时退出（通常发生在首次烘焙之前）
+        }
+
+        if (_employeeNavMeshBuildOperation != null && !_employeeNavMeshBuildOperation.isDone)
+        {
+            return; // 员工烘焙未完成时跳过本次更新，避免并发
+        }
+
+        if (_employeeNavMeshUpdateOperation != null && !_employeeNavMeshUpdateOperation.isDone)
+        {
+            return; // 上一次更新未完成时跳过，避免 0.1s 堆叠
+        }
+
+        PrepareNavMeshRootSources(_employeeRootSources2d, _employeeRootSources); // 确保员工导航收集根正确
+        Physics2D.SyncTransforms(); // 同步 2D 物理变换（移动的员工障碍需要先同步）
+        _employeeNavMeshUpdateOperation = _employeeNavMeshSurface.UpdateNavMesh(_employeeNavMeshSurface.navMeshData); // 异步更新员工 NavMesh 数据
     }
 
     /// <summary>
     /// 准备 NavMesh 的收集根列表，确保 DDOL 下的导航源也能被收集。
     /// </summary>
-    private void PrepareNavMeshRootSources() // 收集根准备入口
+    /// <param name="rootSources2d">目标 RootSources2d。</param>
+    /// <param name="rootSources">可复用的收集根列表缓存。</param>
+    private void PrepareNavMeshRootSources(RootSources2d rootSources2d, System.Collections.Generic.List<GameObject> rootSources) // 收集根准备入口
     {
-        if (_rootSources2d == null)
+        if (rootSources2d == null)
         {
             return; // RootSources2d 缺失时退出
         }
 
-        _rootSources.Clear(); // 清理旧收集根
+        rootSources.Clear(); // 清理旧收集根
 
         if (_navMeshGroundRoot != null)
         {
-            _rootSources.Add(_navMeshGroundRoot.gameObject); // 添加 NavMeshGround 根节点
+            rootSources.Add(_navMeshGroundRoot.gameObject); // 添加 NavMeshGround 根节点
         }
         else
         {
@@ -361,15 +483,69 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
                     continue; // 忽略无效或未启用的 Modifier
                 }
 
-                _rootSources.Add(modifier.gameObject); // 添加 Modifier 所在节点
+                rootSources.Add(modifier.gameObject); // 添加 Modifier 所在节点
             }
         }
 
-        if (_rootSources.Count == 0)
+        if (rootSources.Count == 0)
         {
             CY.LogWarning("[LevelEntity] 未找到任何 NavMesh 收集根，NavMesh 可能无法生成。"); // 输出收集根缺失警告
         }
 
-        _rootSources2d.RootSources = _rootSources; // 写入 RootSources2d 收集根
+        rootSources2d.RootSources = rootSources; // 写入 RootSources2d 收集根
+    }
+
+    /// <summary>
+    /// 缓存两套 NavMeshSurface 与 RootSources2d，避免运行时反复查找。
+    /// </summary>
+    private void CacheNavMeshSurfaces() // 导航组件缓存入口
+    {
+        if (_defaultNavMeshSurface == null || _employeeNavMeshSurface == null)
+        {
+            var surfaces = GetComponentsInChildren<NavMeshSurface>(true); // 获取子层级全部 NavMeshSurface
+            for (int i = 0; i < surfaces.Length; i++)
+            {
+                var surface = surfaces[i]; // 获取当前 Surface
+                if (surface == null)
+                {
+                    continue; // Surface 为空时跳过
+                }
+
+                var surfaceName = surface.gameObject.name; // 读取节点名称
+                if (_defaultNavMeshSurface == null && surfaceName == "DefaultNavMeshSurface")
+                {
+                    _defaultNavMeshSurface = surface; // 缓存默认导航 Surface
+                    continue; // 命中后跳过后续判断
+                }
+
+                if (_employeeNavMeshSurface == null && surfaceName == "EmployeeNavMeshSurface")
+                {
+                    _employeeNavMeshSurface = surface; // 缓存员工导航 Surface
+                }
+            }
+        }
+
+        _defaultRootSources2d = _defaultNavMeshSurface != null ? _defaultNavMeshSurface.GetComponent<RootSources2d>() : null; // 缓存默认 RootSources2d
+        _employeeRootSources2d = _employeeNavMeshSurface != null ? _employeeNavMeshSurface.GetComponent<RootSources2d>() : null; // 缓存员工 RootSources2d
+
+        if (_defaultNavMeshSurface == null)
+        {
+            CY.LogWarning("[LevelEntity] DefaultNavMeshSurface 未配置，默认导航可能无法生成。"); // 输出默认 Surface 缺失警告
+        }
+
+        if (_enableEmployeeNavMeshSurface && _employeeNavMeshSurface == null)
+        {
+            CY.LogWarning("[LevelEntity] EmployeeNavMeshSurface 未配置，员工导航可能无法生成。"); // 输出员工 Surface 缺失警告
+        }
+
+        if (_defaultNavMeshSurface != null && _defaultRootSources2d == null)
+        {
+            CY.LogWarning("[LevelEntity] DefaultNavMeshSurface 未挂 RootSources2d，DDOL 场景可能收集不到导航源。"); // 输出默认 RootSources2d 缺失警告
+        }
+
+        if (_enableEmployeeNavMeshSurface && _employeeNavMeshSurface != null && _employeeRootSources2d == null)
+        {
+            CY.LogWarning("[LevelEntity] EmployeeNavMeshSurface 未挂 RootSources2d，DDOL 场景可能收集不到导航源。"); // 输出员工 RootSources2d 缺失警告
+        }
     }
 }

@@ -1,6 +1,7 @@
 using CYFramework;
 using CYFramework.Core.Entity;
 using UnityEngine;
+using UnityEngine.EventSystems; // UI 事件系统引用（用于屏蔽点击 UI 时的世界交互）
 /// <summary>
 /// 玩家预显示数据：用于在激活前设置出生位置。
 /// </summary>
@@ -54,6 +55,11 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
 
     /// <summary>黑心点击检测命中缓存（避免运行时分配）。</summary>
     private static readonly Collider2D[] _blackHeartClickHits = new Collider2D[16]; // 黑心点击命中缓存
+
+    /// <summary>
+    /// 当前选中的员工（左键点击员工选中；支持多个不同员工脚本）。
+    /// </summary>
+    private IEmployeeControllable _selectedEmployee; // 当前选中员工接口引用
     /// <summary>
     /// 初始化时缓存组件，避免在 Update 中重复查询。
     /// </summary>
@@ -207,7 +213,242 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
         }
 
         TryHandleAttackInput(); // 处理攻击输入
-        TryHandleBlackHeartClick(); // 处理黑心点击拾取
+        TryHandleLeftClick(); // 处理左键：黑心优先，其次员工选中/取消
+        TryHandleRightClick(); // 处理右键：黑心优先，否则命令选中员工移动
+    }
+
+    /// <summary>
+    /// 处理左键点击：优先拾取黑心；否则尝试选中员工；点击空处则取消选中。
+    /// </summary>
+    private void TryHandleLeftClick() // 左键处理入口
+    {
+        if (!Input.GetMouseButtonDown(0)) // 左键点击判定
+        {
+            return; // 未点击时直接退出
+        }
+
+        if (IsPointerOverUI()) // 点击在 UI 上判定
+        {
+            return; // 在 UI 上时不处理世界点击
+        }
+
+        if (!TryGetMouseWorldPosition(out var worldPosition)) // 获取鼠标世界坐标
+        {
+            return; // 坐标获取失败时退出
+        }
+
+        var hitCount = Physics2D.OverlapPointNonAlloc(worldPosition, _blackHeartClickHits); // 获取鼠标点命中碰撞体
+        if (TryHandleBlackHeartClickByHits(worldPosition, hitCount)) // 尝试拾取黑心（成功则消费点击）
+        {
+            return; // 黑心拾取成功时不再处理选中逻辑
+        }
+
+        if (TrySelectEmployeeByHits(hitCount)) // 尝试根据命中碰撞体选中员工
+        {
+            return; // 选中成功时退出
+        }
+
+        _selectedEmployee = null; // 点击空处则取消当前选中员工
+    }
+
+    /// <summary>
+    /// 处理右键点击：优先拾取黑心；若黑心不可拾取且已选中员工，则命令员工移动到点击位置。
+    /// </summary>
+    private void TryHandleRightClick() // 右键处理入口
+    {
+        if (!Input.GetMouseButtonDown(1)) // 右键点击判定
+        {
+            return; // 未点击时直接退出
+        }
+
+        if (IsPointerOverUI()) // 点击在 UI 上判定
+        {
+            return; // 在 UI 上时不处理世界点击
+        }
+
+        if (_selectedEmployee == null) // 未选中员工判定
+        {
+            return; // 未选中员工时不处理移动命令
+        }
+
+        if (_selectedEmployee.Unit == null || _selectedEmployee.Unit.LifeState == UnitLifeState.Dead) // 选中员工无效/死亡判定
+        {
+            _selectedEmployee = null; // 死亡时清空选中引用
+            return; // 直接退出
+        }
+
+        if (!TryGetMouseWorldPosition(out var worldPosition)) // 获取鼠标世界坐标
+        {
+            return; // 坐标获取失败时退出
+        }
+
+        var hitCount = Physics2D.OverlapPointNonAlloc(worldPosition, _blackHeartClickHits); // 获取鼠标点命中碰撞体
+        if (TryHandleBlackHeartClickByHits(worldPosition, hitCount)) // 若黑心可拾取，则优先拾取（不下发移动）
+        {
+            return; // 黑心拾取成功时退出
+        }
+
+        _selectedEmployee.TryCommandMove(worldPosition); // 黑心不可拾取时，将右键位置作为移动目标点
+    }
+
+    /// <summary>
+    /// 判断鼠标是否指向 UI：用于屏蔽 UI 点击对世界交互的影响。
+    /// </summary>
+    private bool IsPointerOverUI() // UI 指针检测入口
+    {
+        var eventSystem = EventSystem.current; // 获取当前 EventSystem
+        if (eventSystem == null) // EventSystem 缺失判定
+        {
+            return false; // 缺失时认为不在 UI 上
+        }
+
+        return eventSystem.IsPointerOverGameObject(); // 判断当前指针是否在 UI 上
+    }
+
+    /// <summary>
+    /// 获取鼠标点击的世界坐标（XY 平面）。
+    /// </summary>
+    /// <param name="worldPosition">输出世界坐标。</param>
+    /// <returns>是否成功获取。</returns>
+    private bool TryGetMouseWorldPosition(out Vector2 worldPosition) // 鼠标世界坐标获取入口
+    {
+        worldPosition = Vector2.zero; // 默认输出为零点
+
+        var cameraManager = CY.Camera; // 获取相机管理器
+        var worldCamera = cameraManager != null ? cameraManager.WorldCamera : null; // 获取世界相机
+        if (worldCamera != null) // 世界相机存在判定
+        {
+            _cachedCamera = worldCamera; // 同步缓存相机引用
+        }
+        else // 世界相机缺失分支
+        {
+            worldCamera = _cachedCamera; // 回退使用缓存相机
+        }
+
+        if (worldCamera == null) // 仍缺失判定
+        {
+            _cachedCamera = Camera.main; // 回退获取主相机
+            worldCamera = _cachedCamera; // 更新当前相机
+        }
+
+        if (worldCamera == null) // 相机仍缺失判定
+        {
+            if (!_hasLoggedMissingCamera) // 只输出一次日志判定
+            {
+                CY.LogError("[PlayerEntity] 未找到可用摄像机（需要 MainCamera 标签或场景摄像机）。"); // 输出摄像机缺失错误
+                _hasLoggedMissingCamera = true; // 标记已输出日志
+            }
+
+            return false; // 相机缺失时返回失败
+        }
+
+        var playerTransform = _cachedTransform != null ? _cachedTransform : transform; // 获取玩家 Transform
+        var playerPosition = playerTransform.position; // 获取玩家位置
+        var screenPosition = Input.mousePosition; // 获取鼠标屏幕坐标
+        screenPosition.z = Mathf.Abs(worldCamera.transform.position.z - playerPosition.z); // 设置投射深度（以玩家 Z 为参考）
+        worldPosition = (Vector2)worldCamera.ScreenToWorldPoint(screenPosition); // 计算鼠标世界坐标（XY 平面）
+        return true; // 返回获取成功
+    }
+
+    /// <summary>
+    /// 尝试处理黑心拾取（使用外部命中结果，避免重复 Overlap）。
+    /// </summary>
+    /// <param name="worldPosition">鼠标世界坐标。</param>
+    /// <param name="hitCount">命中碰撞体数量。</param>
+    /// <returns>是否成功拾取黑心并消费本次点击。</returns>
+    private bool TryHandleBlackHeartClickByHits(Vector2 worldPosition, int hitCount) // 黑心拾取（命中复用）入口
+    {
+        if (hitCount <= 0) // 未命中判定
+        {
+            return false; // 未命中任何碰撞体时返回失败
+        }
+
+        if (_selectionRange == null) // 拾取范围未配置判定
+        {
+            return false; // 未配置拾取范围时返回失败
+        }
+
+        for (int i = 0; i < hitCount; i++) // 遍历命中碰撞体
+        {
+            var hitCollider = _blackHeartClickHits[i]; // 获取命中的碰撞体
+            if (hitCollider == null) // 碰撞体为空判定
+            {
+                continue; // 碰撞体为空时跳过
+            }
+
+            if (!BlackHeartEntity.TryGetEntityByCollider(hitCollider, out var blackHeartEntity)) // 尝试获取黑心实体
+            {
+                continue; // 非黑心实体时跳过
+            }
+
+            if (blackHeartEntity == null) // 黑心实体为空判定
+            {
+                continue; // 黑心实体为空时跳过
+            }
+
+            if (!IsInSelectionRange(hitCollider)) // 未进入拾取范围判定
+            {
+                continue; // 未进入拾取范围时跳过
+            }
+
+            if (CY.BattleDataManager == null) // 战斗数据管理器未就绪判定
+            {
+                return false; // 管理器为空时返回失败（不消费点击）
+            }
+
+            if (!blackHeartEntity.TryPickup(out _)) // 尝试拾取黑心
+            {
+                return false; // 拾取失败时返回失败（不消费点击）
+            }
+
+            var floatingTarget = GetBlackHeartFloatingTarget(); // 获取黑心漂浮目标
+            blackHeartEntity.PlayPickupToTarget(floatingTarget); // 播放漂浮移动动画并进入漂浮状态
+            return true; // 拾取成功时返回成功并消费点击
+        }
+
+        return false; // 未拾取到黑心时返回失败
+    }
+
+    /// <summary>
+    /// 尝试根据点击命中碰撞体选中员工。
+    /// </summary>
+    /// <param name="hitCount">命中数量。</param>
+    /// <returns>是否选中成功。</returns>
+    private bool TrySelectEmployeeByHits(int hitCount) // 员工选中入口
+    {
+        if (hitCount <= 0) // 未命中判定
+        {
+            return false; // 未命中时返回失败
+        }
+
+        for (int i = 0; i < hitCount; i++) // 遍历命中碰撞体
+        {
+            var hitCollider = _blackHeartClickHits[i]; // 获取命中的碰撞体
+            if (hitCollider == null) // 碰撞体为空判定
+            {
+                continue; // 碰撞体为空时跳过
+            }
+
+            if (!EmployeeClickRegistry.TryGetByCollider(hitCollider, out var employeeEntity)) // 尝试通过碰撞体获取员工接口
+            {
+                continue; // 非员工实体时跳过
+            }
+
+            if (employeeEntity == null) // 员工为空判定
+            {
+                continue; // 员工实体为空时跳过
+            }
+
+            if (employeeEntity.Unit == null || employeeEntity.Unit.LifeState == UnitLifeState.Dead) // 死亡/无效员工判定
+            {
+                continue; // 死亡员工不允许选中
+            }
+
+            _selectedEmployee = employeeEntity; // 写入选中员工
+            return true; // 选中成功返回 true
+        }
+
+        return false; // 未命中任何员工时返回 false
     }
 
     /// <summary>
@@ -344,92 +585,23 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
     /// </summary>
     private void TryHandleBlackHeartClick() // 黑心点击拾取入口
     {
-        if (!Input.GetMouseButtonDown(0))
+        if (!Input.GetMouseButtonDown(0)) // 左键点击判定
         {
             return; // 未点击左键时退出
         }
 
-        if (_selectionRange == null)
+        if (IsPointerOverUI()) // 点击在 UI 上判定
         {
-            return; // 拾取范围未配置时退出
+            return; // 在 UI 上时不处理世界拾取
         }
 
-        var cameraManager = CY.Camera; // 获取相机管理器
-        var worldCamera = cameraManager != null ? cameraManager.WorldCamera : null; // 获取世界相机
-        if (worldCamera != null)
+        if (!TryGetMouseWorldPosition(out var worldPosition)) // 获取鼠标世界坐标
         {
-            _cachedCamera = worldCamera; // 同步缓存相机引用
-        }
-        else
-        {
-            worldCamera = _cachedCamera; // 回退使用缓存相机
+            return; // 坐标获取失败时退出
         }
 
-        if (worldCamera == null)
-        {
-            _cachedCamera = Camera.main; // 回退获取主相机
-            worldCamera = _cachedCamera; // 更新当前相机
-        }
-
-        if (worldCamera == null)
-        {
-            if (!_hasLoggedMissingCamera)
-            {
-                CY.LogError("[PlayerEntity] 未找到可用摄像机（需要 MainCamera 标签或场景摄像机）。"); // 输出摄像机缺失错误
-                _hasLoggedMissingCamera = true; // 标记已输出日志
-            }
-
-            return; // 摄像机为空时退出
-        }
-
-        var playerTransform = _cachedTransform != null ? _cachedTransform : transform; // 获取玩家 Transform
-        var playerPosition = playerTransform.position; // 获取玩家位置
-        var screenPosition = Input.mousePosition; // 获取鼠标屏幕坐标
-        screenPosition.z = Mathf.Abs(worldCamera.transform.position.z - playerPosition.z); // 设置投射深度
-        var worldPosition = (Vector2)worldCamera.ScreenToWorldPoint(screenPosition); // 计算鼠标世界坐标
         var hitCount = Physics2D.OverlapPointNonAlloc(worldPosition, _blackHeartClickHits); // 获取命中碰撞体数量
-        if (hitCount <= 0)
-        {
-            return; // 未命中任何碰撞体时退出
-        }
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            var hitCollider = _blackHeartClickHits[i]; // 获取命中的碰撞体
-            if (hitCollider == null)
-            {
-                continue; // 碰撞体为空时跳过
-            }
-
-            if (!BlackHeartEntity.TryGetEntityByCollider(hitCollider, out var blackHeartEntity))
-            {
-                continue; // 非黑心实体时跳过
-            }
-
-            if (blackHeartEntity == null)
-            {
-                continue; // 黑心实体为空时跳过
-            }
-
-            if (!IsInSelectionRange(hitCollider))
-            {
-                continue; // 未进入拾取范围时跳过
-            }
-
-            if (CY.BattleDataManager == null) // 战斗数据管理器未就绪时不允许拾取，避免结算阶段无法入账
-            {
-                return; // 管理器为空时退出
-            }
-
-            if (!blackHeartEntity.TryPickup(out _))
-            {
-                return; // 拾取失败时退出
-            }
-
-            var floatingTarget = GetBlackHeartFloatingTarget(); // 获取黑心漂浮目标
-            blackHeartEntity.PlayPickupToTarget(floatingTarget); // 播放漂浮移动动画并进入漂浮状态
-            return; // 成功拾取后退出
-        }
+        TryHandleBlackHeartClickByHits(worldPosition, hitCount); // 复用命中结果尝试拾取黑心
     }
 
     /// <summary>

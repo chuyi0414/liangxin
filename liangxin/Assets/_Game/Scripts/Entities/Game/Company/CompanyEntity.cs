@@ -28,7 +28,8 @@ public class CompanyEntity : EntityBase // 公司实体定义
     private bool _absorptionFilterReady; // 过滤器初始化标记
     /// <summary>当前正在吸收的黑心数量。</summary>
     private int _absorbingCount; // 当前吸收计数
-
+    /// <summary>员工刷新点</summary>
+    [SerializeField] private Transform _createPoint; // 公司吸收黑心范围
 
     /// <summary>公司强制追击距离（只读）。</summary>
     public float ForceChaseDistance => _forceChaseDistance; // 对外只读访问
@@ -55,6 +56,16 @@ public class CompanyEntity : EntityBase // 公司实体定义
         base.OnEntityShow(userData); // 调用父类显示
         Current = this; // 写入当前公司实体
         _absorbingCount = 0; // 重置吸收计数
+        CY.Event.Subscribe<EmployeeRecruitRequestedEvent>(OnEmployeeRecruitRequested, this); // 订阅员工招聘请求事件
+    }
+
+    /// <summary>
+    /// 实体隐藏：取消事件订阅，避免对象池复用导致重复响应。
+    /// </summary>
+    protected override void OnEntityHide() // 实体隐藏入口
+    {
+        CY.Event.UnsubscribeAll(this); // 取消当前公司实体的事件订阅
+        base.OnEntityHide(); // 调用父类隐藏
     }
 
     /// <summary>
@@ -188,6 +199,41 @@ public class CompanyEntity : EntityBase // 公司实体定义
         }
 
         _absorbingCount = 0; // 回收时清空吸收计数
+        CY.Event.UnsubscribeAll(this); // 回收时兜底取消事件订阅
         base.OnEntityRecycle(); // 调用父类回收
+    }
+
+    /// <summary>
+    /// 员工招聘请求回调：在公司刷新点创建员工实体。
+    /// </summary>
+    /// <param name="evt">招聘请求事件（引用传递）。</param>
+    private void OnEmployeeRecruitRequested(ref EmployeeRecruitRequestedEvent evt) // 员工招聘回调入口
+    {
+        if (Current != this) // 多实例保护判定
+        {
+            return; // 非当前公司实体时直接退出
+        }
+
+        var employeeId = evt.EmployeeId; // 读取员工配置 Id
+        if (employeeId <= 0) // Id 无效判定
+        {
+            return; // Id 无效时直接退出
+        }
+
+        var unitManager = CY.Unit; // 获取单位管理器
+        if (unitManager == null) // 管理器为空判定
+        {
+            CY.LogWarning("[CompanyEntity] UnitManager 未就绪，无法创建员工。"); // 输出警告日志
+            return; // 管理器为空时退出
+        }
+
+        var spawnTransform = _createPoint != null ? _createPoint : transform; // 获取创建点（缺失则回退公司本体）
+        var spawnPosition = spawnTransform.position; // 读取创建点世界坐标
+        var spawnPosition2D = new Vector2(spawnPosition.x, spawnPosition.y); // 转换为 2D 坐标（XY 平面）
+
+        if (!unitManager.TryCreateEmployee(employeeId, spawnPosition2D, out _)) // 尝试创建员工实体
+        {
+            CY.LogWarning($"[CompanyEntity] 创建员工失败，EmployeeId={employeeId}"); // 输出创建失败日志
+        }
     }
 }

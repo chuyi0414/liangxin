@@ -42,12 +42,18 @@ public sealed class EmployeeUnitRow : IDataRow // 员工数据表行定义
     public float MoveSpeed; // 员工移动速度
     /// <summary>攻击距离。</summary>
     public float AttackRange; // 员工攻击范围
+    /// <summary>可视范围。</summary>
+    public float SightRange; // 员工可视范围
     /// <summary>攻击间隔（秒）。</summary>
     public float AttackInterval; // 员工攻击间隔
     /// <summary>招聘价格。</summary>
     public int RecruitmentPrice; // 员工招聘价格
     /// <summary>风格 Id 列表（用 | 分隔）。</summary>
     public string StyleIds; // 员工风格列表字符串
+    /// <summary>头像图标资源路径（Resources 相对路径，无扩展名）。</summary>
+    public string IconPath; // 员工头像路径
+    /// <summary>预制体资源路径（Resources 相对路径，无扩展名）。</summary>
+    public string PrefabPath; // 员工预制体路径
 
     /// <summary>缓存后的风格 Id 数组。</summary>
     private int[] _cachedStyleIds; // 风格 Id 数组缓存
@@ -77,9 +83,12 @@ public sealed class EmployeeUnitRow : IDataRow // 员工数据表行定义
         IsRanged = bool.Parse(values[13]); // 解析远程标记
         MoveSpeed = float.Parse(values[14], CultureInfo.InvariantCulture); // 解析移动速度
         AttackRange = float.Parse(values[15], CultureInfo.InvariantCulture); // 解析攻击距离
-        AttackInterval = float.Parse(values[16], CultureInfo.InvariantCulture); // 解析攻击间隔
-        RecruitmentPrice = int.Parse(values[17]); // 解析招聘价格
-        StyleIds = values[18]; // 解析风格 Id 列表字符串
+        SightRange = float.Parse(values[16], CultureInfo.InvariantCulture); // 解析可视范围
+        AttackInterval = float.Parse(values[17], CultureInfo.InvariantCulture); // 解析攻击间隔
+        RecruitmentPrice = int.Parse(values[18]); // 解析招聘价格
+        StyleIds = values[19]; // 解析风格 Id 列表字符串
+        IconPath = values.Length > 20 ? values[20] : string.Empty; // 解析头像图标路径（兼容旧表）
+        PrefabPath = values.Length > 21 ? values[21] : string.Empty; // 解析预制体路径（兼容旧表）
     }
 
     /// <summary>

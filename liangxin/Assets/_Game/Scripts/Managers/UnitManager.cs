@@ -401,7 +401,14 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
             return false;
         }
 
-        enemy = CY.Entity.SpawnEntity<EnemyEntity>(row);
+        if (row != null && !string.IsNullOrEmpty(row.PrefabPath)) // 预制体路径存在判定
+        {
+            enemy = CY.Entity.SpawnEntity<EnemyEntity>(row.Code, row.PrefabPath, "Enemys", row); // 使用 CSV 的预制体路径生成敌人实体
+        }
+        else // 路径缺失分支
+        {
+            enemy = CY.Entity.SpawnEntity<EnemyEntity>(row); // 回退为脚本 [EntityPrefab] 默认路径生成敌人实体
+        }
         if (enemy == null)
         {
             CY.LogError($"[UnitManager] 敌人实体生成失败，Id={enemyId}");
@@ -415,6 +422,62 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
 
         AddEnemy(enemy);
         return true;
+    }
+
+    /// <summary>
+    /// 根据配置 Id 创建员工实体（支持任意 Id）。
+    /// </summary>
+    /// <param name="employeeId">数据表 Id。</param>
+    /// <param name="spawnPosition">生成位置（世界坐标，XY 平面）。</param>
+    /// <param name="employee">输出生成的员工单位（支持不同员工脚本）。</param>
+    /// <returns>是否创建成功。</returns>
+    public bool TryCreateEmployee(int employeeId, Vector2 spawnPosition, out UnitEntity employee) // 员工创建入口
+    {
+        employee = null; // 默认输出为空
+        if (employeeId <= 0) // Id 非法判定
+        {
+            CY.LogWarning("[UnitManager] 员工 Id 非法，创建失败。"); // 输出非法 Id 警告
+            return false; // 非法 Id 时返回失败
+        }
+
+        if (!_hasEmployeeRows) // 未缓存员工数据表判定
+        {
+            TryCacheEmployeeRows(); // 尝试缓存员工数据表
+        }
+
+        if (!_hasEmployeeRows || !_employeeRowMap.TryGetValue(employeeId, out var row)) // 缓存失败或未找到行判定
+        {
+            CY.LogWarning($"[UnitManager] 未找到员工配置，Id={employeeId}"); // 输出未找到配置日志
+            return false; // 未找到配置时返回失败
+        }
+
+        var preShowData = new EmployeePreShowData // 组装员工预显示出生点数据（激活前设置位置）
+        {
+            HasPosition = true, // 标记出生点有效
+            Position = new Vector3(spawnPosition.x, spawnPosition.y, 0f) // 写入 XY 出生点（Z 在应用时保留）
+        };
+
+        if (row != null && !string.IsNullOrEmpty(row.PrefabPath)) // 预制体路径存在判定
+        {
+            var spawned = CY.Entity.SpawnEntity<CYFramework.Core.Entity.IEntity, EmployeePreShowData>(row.Code, row.PrefabPath, "Employees", ref preShowData, row); // 使用 CSV 预制体路径生成员工实体（不依赖具体员工脚本类型）
+            employee = spawned as UnitEntity; // 转换为单位基类（员工脚本需继承 UnitEntity）
+        }
+        else // 路径缺失分支
+        {
+            var spawned = CY.Entity.SpawnEntity<EmployeeEntity, EmployeePreShowData>(row.Code, ref preShowData, row); // 回退为 EmployeeEntity 默认预制体生成（预显示设置出生点）
+            employee = spawned; // EmployeeEntity 继承 UnitEntity，可直接赋值
+        }
+
+        if (employee == null) // 生成失败判定
+        {
+            CY.LogError($"[UnitManager] 员工实体生成失败，Id={employeeId}"); // 输出生成失败错误日志
+            return false; // 生成失败时返回失败
+        }
+
+        // 注意：员工实体在本框架中会延迟到下一帧 OnShow 才真正进入“可见/可交互”状态。
+        // 若此处立刻加入 Employees 列表，敌人 AI 可能在员工显示前就将其当作目标并攻击，导致“刚创建就飘字/掉血”的错觉。
+        // 最优做法：由 EmployeeEntity 在 OnEntityShow 时加入列表，在 Hide/Recycle 时移除，确保列表只包含可见单位。
+        return true; // 返回创建成功
     }
 
     /// <summary>

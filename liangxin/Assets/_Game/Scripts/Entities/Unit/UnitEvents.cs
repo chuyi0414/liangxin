@@ -58,3 +58,12 @@ public struct UnitLifeStateChangedEvent // 单位生命状态变化事件结构�
     /// <summary>新状态。</summary>
     public UnitLifeState NewState; // 新状态
 }
+
+/// <summary>
+/// 员工招聘请求事件：UI 点击招聘按钮后派发，由 CompanyEntity 负责在刷新点创建员工实体。
+/// </summary>
+public struct EmployeeRecruitRequestedEvent // 员工招聘请求事件结构体
+{
+    /// <summary>员工配置 Id（Employee.csv 的 Id）。</summary>
+    public int EmployeeId; // 员工配置 Id
+}

@@ -30,6 +30,10 @@ public sealed class BattleData : IDataRow
     /// 污染损害累计值
     /// </summary>
     public int CompanyPollutionDamagePerPoint;
+    /// <summary>
+    /// 人才库默认显示数量（对应 UI 的 _goTalentPoolContent 子物体数量）。
+    /// </summary>
+    public int TalentPoolDisplayCount;
 
     int IDataRow.Id => Id;
 

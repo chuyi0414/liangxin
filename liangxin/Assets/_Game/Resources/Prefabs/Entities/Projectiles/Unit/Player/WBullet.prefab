@@ -171,4 +171,4 @@ MonoBehaviour:
   _singleHit: 1
   _hitMask:
     serializedVersion: 2
-    m_Bits: 3008
+    m_Bits: 2624

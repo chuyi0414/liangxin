@@ -1,3 +1,6 @@
+using System; // Array 等基础类型引用
+using System.Collections.Generic; // IReadOnlyList 等集合接口引用
+using System.Text; // StringBuilder 引用
 using CYFramework;
 using CYFramework.Core.Timer;
 using CYFramework.Core.UI;
@@ -51,6 +54,26 @@ public class GameUIPanel : UIPanel
     /// </summary>
     [SerializeField] private GameObject _goTalentPool;
     /// <summary>
+    /// 人才库Content
+    /// </summary>
+    [SerializeField] private GameObject _goTalentPoolContent;
+    /// <summary>
+    /// 人才库子物体脚本缓存（与 _goTalentPoolContent 子物体一一对应）。
+    /// </summary>
+    private GoTalents[] _talentPoolItems = Array.Empty<GoTalents>(); // 人才库条目缓存数组
+    /// <summary>
+    /// 人才库子物体是否已缓存。
+    /// </summary>
+    private bool _hasCachedTalentPoolItems; // 人才库缓存标记
+    /// <summary>
+    /// 员工随机打散索引缓存（用于无重复抽取）。
+    /// </summary>
+    private int[] _employeeShuffleIndices = Array.Empty<int>(); // 员工索引缓存数组
+    /// <summary>
+    /// 风格字符串拼接器（复用避免频繁分配）。
+    /// </summary>
+    private readonly StringBuilder _styleTextBuilder = new StringBuilder(64); // 风格字符串构建器
+    /// <summary>
     /// 人才库按钮（显示/隐藏）
     /// </summary>
     [SerializeField] private Button _btnShowHide;
@@ -74,6 +97,7 @@ public class GameUIPanel : UIPanel
     protected override void OnBindUI()
     {
         base.OnBindUI();
+        CacheTalentPoolItemsIfNeeded(); // 尝试缓存人才库子物体脚本引用
         if (_btnPause != null)
         {
             _btnPause.onClick.AddListener(OnBtnPauseClick);
@@ -86,6 +110,336 @@ public class GameUIPanel : UIPanel
         {
             _talentPoolRectTransform = _goTalentPool.GetComponent<RectTransform>(); // 缓存人才库 RectTransform
         }
+    }
+
+    /// <summary>
+    /// 刷新人才库 Content 显示（从 Employee.csv 抽取，不可重复，数量不足则显示已有数量）。
+    /// </summary>
+    public void RefreshTalentPoolContent() // 人才库刷新入口
+    {
+        if (!TryGetTalentPoolItems(out var items, out var slotCount)) // 获取人才库条目缓存
+        {
+            return; // 无有效条目时直接退出
+        }
+
+        var targetDisplayCount = GetTalentPoolTargetDisplayCount(slotCount); // 获取目标显示数量
+        var maxSlotCount = Mathf.Max(0, slotCount); // 计算槽位数量保护值
+        var clampedTarget = Mathf.Clamp(targetDisplayCount, 0, maxSlotCount); // 将目标数量限制在槽位范围内
+
+        if (!TryGetEmployeeRows(out var employeeRows, out var employeeCount)) // 获取员工数据表行列表
+        {
+            HideTalentPoolItems(items, slotCount); // 数据表不可用时隐藏所有条目
+            return; // 直接退出
+        }
+
+        var showCount = Mathf.Min(clampedTarget, employeeCount, slotCount); // 计算最终显示数量（不足则按已有数量显示）
+        if (showCount <= 0) // 最终显示数量判定
+        {
+            HideTalentPoolItems(items, slotCount); // 无需显示时隐藏所有条目
+            return; // 直接退出
+        }
+
+        EnsureEmployeeShuffleIndices(employeeCount); // 确保索引缓存容量满足员工数量
+        ShuffleEmployeeIndices(employeeCount); // 打散索引数组实现无重复抽取
+
+        for (int i = 0; i < slotCount; i++) // 遍历人才库槽位
+        {
+            var item = items[i]; // 获取当前槽位脚本
+            if (i >= showCount) // 超出显示数量判定
+            {
+                SetTalentItemActive(item, false, i); // 隐藏多余条目
+                continue; // 继续下一个槽位
+            }
+
+            var employeeIndex = _employeeShuffleIndices[i]; // 获取本槽位对应的员工索引
+            var employeeRow = employeeRows[employeeIndex]; // 获取员工数据行
+            if (employeeRow == null) // 员工行为空判定
+            {
+                SetTalentItemActive(item, false, i); // 员工行为空时隐藏条目
+                continue; // 继续下一个槽位
+            }
+
+            var styleText = BuildEmployeeStyleText(employeeRow); // 将 StyleIds 解析为风格字符串
+            if (item != null) // 脚本存在判定
+            {
+                item.SetData(employeeRow, styleText); // 刷新条目显示
+            }
+
+            SetTalentItemActive(item, true, i); // 显示当前条目
+        }
+    }
+
+    /// <summary>
+    /// 缓存人才库子物体的 GoTalents 组件引用（避免刷新时反复 GetComponent）。
+    /// </summary>
+    private void CacheTalentPoolItemsIfNeeded() // 人才库组件缓存入口
+    {
+        if (_goTalentPoolContent == null) // Content 为空判定
+        {
+            return; // Content 为空时直接退出
+        }
+
+        var contentTransform = _goTalentPoolContent.transform; // 获取 Content Transform
+        var childCount = contentTransform != null ? contentTransform.childCount : 0; // 获取子物体数量
+        if (_hasCachedTalentPoolItems && _talentPoolItems != null && _talentPoolItems.Length == childCount) // 缓存有效判定
+        {
+            return; // 缓存有效时直接退出
+        }
+
+        if (childCount <= 0) // 子物体数量判定
+        {
+            _talentPoolItems = Array.Empty<GoTalents>(); // 无子物体时缓存空数组
+            _hasCachedTalentPoolItems = true; // 标记缓存完成
+            return; // 直接退出
+        }
+
+        _talentPoolItems = new GoTalents[childCount]; // 创建条目缓存数组
+        for (int i = 0; i < childCount; i++) // 遍历子物体
+        {
+            var child = contentTransform.GetChild(i); // 获取子物体 Transform
+            if (child == null) // 子物体为空判定
+            {
+                continue; // 子物体为空时跳过
+            }
+
+            var goTalents = child.GetComponent<GoTalents>(); // 获取子物体上的 GoTalents 组件
+            if (goTalents == null) // 组件缺失判定
+            {
+                CY.LogWarning($"[GameUIPanel] 人才库子物体缺少 GoTalents 组件，Index={i}"); // 输出警告日志
+            }
+
+            _talentPoolItems[i] = goTalents; // 缓存组件引用（允许为空）
+        }
+
+        _hasCachedTalentPoolItems = true; // 标记缓存完成
+    }
+
+    /// <summary>
+    /// 获取人才库条目缓存与槽位数量。
+    /// </summary>
+    /// <param name="items">输出条目数组。</param>
+    /// <param name="slotCount">输出槽位数量。</param>
+    /// <returns>是否存在有效槽位。</returns>
+    private bool TryGetTalentPoolItems(out GoTalents[] items, out int slotCount) // 人才库条目获取入口
+    {
+        CacheTalentPoolItemsIfNeeded(); // 确保已缓存条目组件
+        items = _talentPoolItems; // 输出缓存数组
+        slotCount = items != null ? items.Length : 0; // 输出槽位数量
+        return slotCount > 0; // 返回是否存在有效槽位
+    }
+
+    /// <summary>
+    /// 获取人才库目标显示数量（优先读取 BattleData.json 配置，缺失则回退为槽位数量）。
+    /// </summary>
+    /// <param name="fallbackSlotCount">回退槽位数量。</param>
+    /// <returns>目标显示数量。</returns>
+    private int GetTalentPoolTargetDisplayCount(int fallbackSlotCount) // 人才库显示数量获取入口
+    {
+        var configuredCount = 0; // 默认配置数量
+        var battleDataManager = CY.BattleDataManager; // 获取战斗数据管理器
+        if (battleDataManager != null) // 管理器存在判定
+        {
+            var battleData = battleDataManager.BattleData; // 获取战斗数据配置
+            if (battleData != null) // 配置存在判定
+            {
+                configuredCount = battleData.TalentPoolDisplayCount; // 读取人才库显示数量配置
+            }
+        }
+
+        if (configuredCount > 0) // 配置有效判定
+        {
+            return configuredCount; // 返回配置数量
+        }
+
+        return fallbackSlotCount; // 配置无效时回退为槽位数量
+    }
+
+    /// <summary>
+    /// 获取员工数据表行列表（Employee.csv）。
+    /// </summary>
+    /// <param name="rows">输出员工行列表。</param>
+    /// <param name="count">输出员工数量。</param>
+    /// <returns>是否获取成功。</returns>
+    private bool TryGetEmployeeRows(out IReadOnlyList<EmployeeUnitRow> rows, out int count) // 员工数据获取入口
+    {
+        rows = null; // 默认输出为空
+        count = 0; // 默认输出数量为 0
+
+        var dataManager = CY.Data; // 获取数据表管理器
+        if (dataManager == null) // 管理器为空判定
+        {
+            CY.LogWarning("[GameUIPanel] DataTableManager 未就绪，无法刷新人才库。"); // 输出警告日志
+            return false; // 返回失败
+        }
+
+        const string employeeTableName = "Employee"; // 员工数据表名常量
+        if (!dataManager.HasDataTable(employeeTableName)) // 数据表未加载判定
+        {
+            CY.LogWarning("[GameUIPanel] 员工数据表未加载，无法刷新人才库。"); // 输出警告日志
+            return false; // 返回失败
+        }
+
+        var table = dataManager.GetDataTable<EmployeeUnitRow>(employeeTableName); // 获取员工数据表实例
+        if (table == null) // 表实例为空判定
+        {
+            CY.LogWarning("[GameUIPanel] 员工数据表为空，无法刷新人才库。"); // 输出警告日志
+            return false; // 返回失败
+        }
+
+        rows = table.GetAllRows(); // 获取所有员工行
+        count = rows != null ? rows.Count : 0; // 获取员工数量
+        return count > 0; // 返回是否存在有效员工行
+    }
+
+    /// <summary>
+    /// 隐藏所有人才库条目。
+    /// </summary>
+    /// <param name="items">条目数组。</param>
+    /// <param name="slotCount">槽位数量。</param>
+    private void HideTalentPoolItems(GoTalents[] items, int slotCount) // 人才库隐藏入口
+    {
+        for (int i = 0; i < slotCount; i++) // 遍历槽位
+        {
+            SetTalentItemActive(items[i], false, i); // 隐藏当前条目
+        }
+    }
+
+    /// <summary>
+    /// 设置人才库条目显示/隐藏（组件缺失时仍尝试通过 Content 子物体隐藏）。
+    /// </summary>
+    /// <param name="item">条目组件。</param>
+    /// <param name="active">是否显示。</param>
+    /// <param name="index">槽位索引。</param>
+    private void SetTalentItemActive(GoTalents item, bool active, int index) // 条目显隐设置入口
+    {
+        if (item != null) // 组件存在判定
+        {
+            item.gameObject.SetActive(active); // 通过组件 GameObject 设置显隐
+            return; // 直接退出
+        }
+
+        if (_goTalentPoolContent == null) // Content 为空判定
+        {
+            return; // Content 为空时直接退出
+        }
+
+        var contentTransform = _goTalentPoolContent.transform; // 获取 Content Transform
+        if (contentTransform == null) // Transform 为空判定
+        {
+            return; // Transform 为空时直接退出
+        }
+
+        if (index < 0 || index >= contentTransform.childCount) // 索引越界判定
+        {
+            return; // 越界时直接退出
+        }
+
+        var child = contentTransform.GetChild(index); // 获取子物体 Transform
+        if (child == null) // 子物体为空判定
+        {
+            return; // 子物体为空时直接退出
+        }
+
+        child.gameObject.SetActive(active); // 通过子物体 GameObject 设置显隐
+    }
+
+    /// <summary>
+    /// 确保员工索引缓存数组容量满足员工数量。
+    /// </summary>
+    /// <param name="employeeCount">员工数量。</param>
+    private void EnsureEmployeeShuffleIndices(int employeeCount) // 索引缓存确保入口
+    {
+        if (employeeCount <= 0) // 数量无效判定
+        {
+            _employeeShuffleIndices = Array.Empty<int>(); // 数量无效时重置为空数组
+            return; // 直接退出
+        }
+
+        if (_employeeShuffleIndices != null && _employeeShuffleIndices.Length == employeeCount) // 容量匹配判定
+        {
+            return; // 容量匹配时直接退出
+        }
+
+        _employeeShuffleIndices = new int[employeeCount]; // 创建/重建索引缓存数组
+    }
+
+    /// <summary>
+    /// 打散员工索引数组（Fisher–Yates 洗牌，保证无重复）。
+    /// </summary>
+    /// <param name="employeeCount">员工数量。</param>
+    private void ShuffleEmployeeIndices(int employeeCount) // 员工索引打散入口
+    {
+        for (int i = 0; i < employeeCount; i++) // 初始化索引数组
+        {
+            _employeeShuffleIndices[i] = i; // 写入顺序索引
+        }
+
+        for (int i = 0; i < employeeCount; i++) // Fisher–Yates 洗牌
+        {
+            var swapIndex = UnityEngine.Random.Range(i, employeeCount); // 获取交换索引
+            if (swapIndex == i) // 无需交换判定
+            {
+                continue; // 相同索引时跳过
+            }
+
+            var temp = _employeeShuffleIndices[i]; // 缓存当前索引
+            _employeeShuffleIndices[i] = _employeeShuffleIndices[swapIndex]; // 写入交换值
+            _employeeShuffleIndices[swapIndex] = temp; // 写回缓存值
+        }
+    }
+
+    /// <summary>
+    /// 将 Employee.csv 的 StyleIds 解析为风格字符串（映射 UnitStyle.csv）。
+    /// </summary>
+    /// <param name="employeeRow">员工数据行。</param>
+    /// <returns>风格字符串（如“近战、肉盾”）。</returns>
+    private string BuildEmployeeStyleText(EmployeeUnitRow employeeRow) // 风格字符串构建入口
+    {
+        if (employeeRow == null) // 数据为空判定
+        {
+            return string.Empty; // 返回空字符串
+        }
+
+        if (!employeeRow.TryGetStyleIds(out var styleIds) || styleIds == null || styleIds.Length <= 0) // 风格 Id 无效判定
+        {
+            return string.Empty; // 返回空字符串
+        }
+
+        var unitManager = CY.Unit; // 获取单位管理器（用于查询风格表）
+        if (unitManager == null) // 管理器为空判定
+        {
+            return string.Empty; // 返回空字符串
+        }
+
+        _styleTextBuilder.Clear(); // 清空构建器内容
+        for (int i = 0; i < styleIds.Length; i++) // 遍历风格 Id
+        {
+            var styleId = styleIds[i]; // 获取当前风格 Id
+            if (styleId <= 0) // Id 无效判定
+            {
+                continue; // Id 无效时跳过
+            }
+
+            if (!unitManager.TryGetUnitStyleRow(styleId, out var styleRow) || styleRow == null) // 风格行查询失败判定
+            {
+                continue; // 查询失败时跳过
+            }
+
+            var styleName = styleRow.Name; // 获取风格名称
+            if (string.IsNullOrEmpty(styleName)) // 名称为空判定
+            {
+                continue; // 名称为空时跳过
+            }
+
+            if (_styleTextBuilder.Length > 0) // 分隔符追加判定
+            {
+                _styleTextBuilder.Append('、'); // 追加中文分隔符
+            }
+
+            _styleTextBuilder.Append(styleName); // 追加风格名称
+        }
+
+        return _styleTextBuilder.Length > 0 ? _styleTextBuilder.ToString() : string.Empty; // 返回构建结果
     }
 
     /// <summary>
@@ -109,6 +463,17 @@ public class GameUIPanel : UIPanel
         _isTalentPoolExpanded = !_isTalentPoolExpanded; // 切换人才库展开状态
         var targetPosition = _isTalentPoolExpanded ? TalentPoolExpandedLocalPosition : TalentPoolCollapsedLocalPosition; // 计算目标位置
         PlayTalentPoolMoveTween(rectTransform, targetPosition); // 播放人才库移动动画
+
+        var eventSystem = UnityEngine.EventSystems.EventSystem.current; // 获取当前 EventSystem（用于清理按钮选中态）
+        if (eventSystem == null) // EventSystem 缺失判定
+        {
+            return; // 缺失时直接退出（不影响原有显示/隐藏逻辑）
+        }
+
+        if (eventSystem.currentSelectedGameObject == _btnShowHide.gameObject) // 当前选中对象是该按钮判定
+        {
+            eventSystem.SetSelectedGameObject(null); // 清理选中态，避免按空格/回车触发 Submit 重复点击
+        }
     }
 
     /// <summary>

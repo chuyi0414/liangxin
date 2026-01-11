@@ -1,2 +1,2 @@
-Id,Code,Name,Camp,LifeState,Level,MaxHp,Attack,Defense,DefensePenetration,DefensePenetrationRate,CritRate,DodgeRate,IsRanged,MoveSpeed,AttackRange,AttackInterval,BulletSpeed,BulletArrayId
-1,P0001,良心老板,1,0,1,100,20,5,0,0,0.1,0.05,True,5,4,0.1,10,1
+Id,Code,Name,Camp,LifeState,Level,MaxHp,Attack,Defense,DefensePenetration,DefensePenetrationRate,CritRate,DodgeRate,IsRanged,MoveSpeed,AttackRange,AttackInterval,BulletSpeed,BulletArrayId,PrefabPath
+1,P0001,良心老板,1,0,1,100,20,5,0,0,0.1,0.05,True,5,4,0.1,10,1,Prefabs/Entities/Unit/Player/PlayerEntity

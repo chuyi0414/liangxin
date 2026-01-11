@@ -63,6 +63,8 @@ public sealed class EnemyUnitRow : IDataRow
     public int BlackHeartDropMax;
     /// <summary>风格 Id 列表（用 | 分隔）。</summary>
     public string StyleIds; // 风格列表字符串
+    /// <summary>预制体资源路径（Resources 相对路径，无扩展名）。</summary>
+    public string PrefabPath; // 敌人预制体路径
 
     /// <summary>缓存后的风格 Id 数组。</summary>
     private int[] _cachedStyleIds; // 风格 Id 数组缓存
@@ -104,6 +106,7 @@ public sealed class EnemyUnitRow : IDataRow
         BlackHeartDropMin = int.Parse(values[25]); // 解析黑心掉落最小数量
         BlackHeartDropMax = int.Parse(values[26]); // 解析黑心掉落最大数量
         StyleIds = values[27]; // 解析风格 Id 列表字符串
+        PrefabPath = values.Length > 28 ? values[28] : string.Empty; // 解析预制体路径（兼容旧表）
     }
 
     /// <summary>

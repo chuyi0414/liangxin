@@ -7,5 +7,6 @@
     "CompanyConscience": 100,
     "CompanyConscienceDamagePerPoint": 10,
     "CompanyPollution": 20,
-    "CompanyPollutionDamagePerPoint": 5
+    "CompanyPollutionDamagePerPoint": 5,
+    "TalentPoolDisplayCount": 3
 }

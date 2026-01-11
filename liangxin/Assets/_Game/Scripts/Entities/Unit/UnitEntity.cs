@@ -99,6 +99,14 @@ public abstract class UnitEntity : EntityBase
     private Transform _cachedTransform; // Transform 缓存引用
     /// <summary>碰撞体缓存（用于距离计算与命中点推导）。</summary>
     private Collider2D _cachedCollider2D; // 碰撞体缓存引用
+    /// <summary>
+    /// 最近一次 OnEntityShow 的帧数：用于调试“出生瞬间受伤”等同帧/跨帧问题。
+    /// </summary>
+    private int _shownFrame; // 显示帧数缓存
+    /// <summary>
+    /// 是否已输出“出生早期受伤”的调试日志（避免刷屏）。
+    /// </summary>
+    private bool _hasLoggedEarlyDamage; // 早期受伤日志标记
 
     /// <summary>策划配置表 ID（只读）。</summary>
     public int UnitConfigId => _unitConfigId;
@@ -192,6 +200,8 @@ public abstract class UnitEntity : EntityBase
     protected override void OnEntityShow(object userData)
     {
         base.OnEntityShow(userData);
+        _shownFrame = Time.frameCount; // 记录本次显示的帧数（用于调试）
+        _hasLoggedEarlyDamage = false; // 显示时重置日志标记，便于每次生成都能定位一次
         _hasDespawnedEvent = false;
         _attackCooldown = 0f;
         ResetHpToMax();
@@ -258,6 +268,21 @@ public abstract class UnitEntity : EntityBase
         {
             return false;
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (!_hasLoggedEarlyDamage) // 仅输出一次判定
+        {
+            var frameDelta = Time.frameCount - _shownFrame; // 计算距离显示的帧差
+            if (frameDelta >= 0 && frameDelta <= 5 && _camp == UnitCamp.Employee) // 仅关注员工在显示后的早期受伤
+            {
+                _hasLoggedEarlyDamage = true; // 标记已输出，避免刷屏
+                var beforeHp = _currentHp; // 记录受伤前生命
+                var afterHp = beforeHp - damage; // 计算受伤后生命（仅用于日志展示）
+                var pos = _cachedTransform != null ? _cachedTransform.position : transform.position; // 获取当前世界坐标
+                CY.LogWarning($"[DamageDebug] 员工早期受伤：damage={damage}, isCrit={isCrit}, hp={beforeHp}->{afterHp}, frameDelta={frameDelta}, pos=({pos.x:F3},{pos.y:F3}), code={_unitCode}, id={Id}\nStack:\n{System.Environment.StackTrace}"); // 输出调用栈帮助定位来源（子弹/近战）
+            }
+        }
+#endif
 
         var newHp = _currentHp - damage;
         SetCurrentHp(newHp);
