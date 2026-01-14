@@ -282,6 +282,71 @@ public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理�
     }
 
     /// <summary>
+    /// 将“剩余路径点（从当前路径点开始）”复制到外部缓存数组（NonAlloc）。
+    /// 说明：用于在运行时可视化路径（例如右键移动显示路径线/路径点），避免直接暴露内部 List 造成误修改与 GC。
+    /// </summary>
+    /// <param name="buffer">外部缓存数组（由调用者复用，避免每次分配）。</param>
+    /// <param name="includeCurrentPosition">是否在数组第 0 个位置写入“当前脚下位置”。</param>
+    /// <returns>实际写入的点数量。</returns>
+    public int CopyRemainingPathPointsNonAlloc(Vector2[] buffer, bool includeCurrentPosition = true) // 剩余路径点拷贝入口（NonAlloc）
+    {
+        if (buffer == null) // 缓存数组为空判定
+        {
+            return 0; // 缓存为空时返回 0
+        }
+
+        if (buffer.Length <= 0) // 缓存长度为 0 判定
+        {
+            return 0; // 无容量时返回 0
+        }
+
+        if (!_hasPath) // 无路径判定
+        {
+            return 0; // 无路径时返回 0（调用方可据此隐藏可视化）
+        }
+
+        if (_pathBuffer == null || _pathBuffer.Count <= 0) // 内部路径缓存为空判定
+        {
+            return 0; // 无有效路径点时返回 0
+        }
+
+        var startIndex = _currentWaypointIndex; // 读取当前路径点索引
+        if (startIndex < 0) // 下限保护判定
+        {
+            startIndex = 0; // 回退为 0
+        }
+
+        if (startIndex >= _pathBuffer.Count) // 上限保护判定
+        {
+            startIndex = _pathBuffer.Count; // 回退为 Count（后续循环不会写入）
+        }
+
+        var writeIndex = 0; // 记录写入索引
+        if (includeCurrentPosition) // 需要写入脚下点判定
+        {
+            buffer[writeIndex] = (Vector2)transform.position; // 写入当前脚下世界坐标（2D）
+            writeIndex++; // 推进写入索引
+            if (writeIndex >= buffer.Length) // 缓存已满判定
+            {
+                return writeIndex; // 已写满时直接返回写入数量
+            }
+        }
+
+        for (int i = startIndex; i < _pathBuffer.Count; i++) // 从当前路径点开始遍历剩余路径点
+        {
+            if (writeIndex >= buffer.Length) // 缓存容量不足判定
+            {
+                break; // 容量不足时提前结束
+            }
+
+            buffer[writeIndex] = _pathBuffer[i]; // 将剩余路径点写入外部缓存
+            writeIndex++; // 推进写入索引
+        }
+
+        return writeIndex; // 返回实际写入数量
+    }
+
+    /// <summary>
     /// 尝试使用 NavMesh 生成路径。
     /// </summary>
     private bool TryBuildNavMeshPath(Vector2 destination) // NavMesh 寻路入口
