@@ -18,6 +18,7 @@ public class GameProcedure : ProcedureBase
             var panel = CY.UI.Open<GameUIPanel>(); // 打开游戏 UI 面板
             if (panel != null) // 面板存在判定
             {
+
                 panel.RefreshTalentPoolContent(); // 进入游戏流程时刷新人才库 Content（Employee.csv 抽取）
             }
             if (!resetCompleted)
@@ -37,6 +38,7 @@ public class GameProcedure : ProcedureBase
         var fallbackPanel = CY.UI.Open<GameUIPanel>(); // BattleDataManager 未就绪时仍然打开 UI（会显示 --）
         if (fallbackPanel != null) // 面板存在判定
         {
+
             fallbackPanel.RefreshTalentPoolContent(); // 进入游戏流程时刷新人才库 Content（Employee.csv 抽取）
         }
         SpawnDefaultLevel();
