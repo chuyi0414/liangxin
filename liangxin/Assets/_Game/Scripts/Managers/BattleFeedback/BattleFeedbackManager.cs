@@ -170,13 +170,13 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
     }
 
     /// <summary>
-    /// 缓存世界相机（若未指定则尝试 Camera.main）。
+    /// 缓存世界相机（优先使用 CameraManager，未指定则尝试 Camera.main）。
     /// </summary>
     private void CacheCamera()
     {
         if (_worldCamera == null)
         {
-            _worldCamera = Camera.main;
+            _worldCamera = ServiceLocator.TryGet<CameraManager>(out var cameraManager) && cameraManager != null && cameraManager.WorldCamera != null ? cameraManager.WorldCamera : Camera.main; // 优先使用相机管理器缓存的世界相机
         }
     }
 

@@ -1,5 +1,6 @@
 using CYFramework;
 using CYFramework.Core.Entity;
+using CYFramework.Infrastructure; // ServiceLocator 引用
 using UnityEngine;
 using UnityEngine.EventSystems; // UI 事件系统引用（用于屏蔽点击 UI 时的世界交互）
 /// <summary>
@@ -70,7 +71,7 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
         _rigidbody2D = GetComponent<Rigidbody2D>();
         _attackLocationTransform = AttackLocation != null ? AttackLocation.transform : null; // 缓存攻击点 Transform
         _floatingPointTransform = _floatingPoint != null ? _floatingPoint.transform : null; // 缓存漂浮点 Transform
-        _cachedCamera = Camera.main; // 缓存主摄像机
+        _cachedCamera = ServiceLocator.TryGet<CameraManager>(out var cameraManager) && cameraManager != null && cameraManager.WorldCamera != null ? cameraManager.WorldCamera : Camera.main; // 优先使用相机管理器缓存的世界相机
         if (_cachedCamera == null)
         {
             _cachedCamera = FindObjectOfType<Camera>(); // 回退获取场景中的任意摄像机（低频）

@@ -7,8 +7,6 @@ using UnityEngine;
 public class GameProcedure : ProcedureBase
 {
     private LevelEntity _levelEntity;
-    private const string EmployeeDataTableName = "Employee"; // 员工数据表名常量（与 LoadProcedure 保持一致）
-    private const string EmployeeDataCsvPath = "DataTable/Unit/Employee/Employee"; // 员工数据表 Resources 路径常量（与 LoadProcedure 保持一致）
 
     protected override void OnEnter(ProcedureBase previousProcedure)
     {
@@ -20,7 +18,6 @@ public class GameProcedure : ProcedureBase
             var panel = CY.UI.Open<GameUIPanel>(); // 打开游戏 UI 面板
             if (panel != null) // 面板存在判定
             {
-                ReloadEmployeeDataTableIfPossible(); // 进入游戏流程时重载员工数据表（避免只切到 GameProcedure 时仍使用旧表）
                 panel.RefreshTalentPoolContent(); // 进入游戏流程时刷新人才库 Content（Employee.csv 抽取）
             }
             if (!resetCompleted)
@@ -40,38 +37,10 @@ public class GameProcedure : ProcedureBase
         var fallbackPanel = CY.UI.Open<GameUIPanel>(); // BattleDataManager 未就绪时仍然打开 UI（会显示 --）
         if (fallbackPanel != null) // 面板存在判定
         {
-            ReloadEmployeeDataTableIfPossible(); // 进入游戏流程时重载员工数据表（避免只切到 GameProcedure 时仍使用旧表）
             fallbackPanel.RefreshTalentPoolContent(); // 进入游戏流程时刷新人才库 Content（Employee.csv 抽取）
         }
         SpawnDefaultLevel();
         CY.Timer.NextFrame(ResumeWaveSystem); // 下一帧再启动波次系统，确保 UI 初始化完成
-    }
-
-    /// <summary>
-    /// 尝试重新加载员工数据表：用于“直接从 MainProcedure 切到 GameProcedure”时，确保人才库读取到最新 Employee.csv。
-    /// </summary>
-    private void ReloadEmployeeDataTableIfPossible() // 员工数据表重载入口
-    {
-        var dataManager = CY.Data; // 获取数据表管理器
-        if (dataManager == null) // 管理器为空判定
-        {
-            CY.LogWarning("[GameProcedure] DataTableManager 未就绪，无法重载员工数据表。"); // 输出警告日志
-            return; // 管理器为空时直接退出
-        }
-
-        if (dataManager.HasDataTable(EmployeeDataTableName)) // 数据表已加载判定
-        {
-            dataManager.UnloadDataTable(EmployeeDataTableName); // 卸载旧表（确保读取到最新内容）
-        }
-
-        var csvAsset = CY.Resource.Load<TextAsset>(EmployeeDataCsvPath); // 从 Resources 加载员工 CSV 文本资源
-        if (csvAsset == null) // 资源为空判定
-        {
-            CY.LogError($"[GameProcedure] 加载员工数据失败：{EmployeeDataCsvPath}"); // 输出错误日志
-            return; // 资源为空时退出
-        }
-
-        dataManager.LoadFromCsv<EmployeeUnitRow>(csvAsset.text, EmployeeDataTableName); // 解析并加载员工数据表
     }
 
     protected override void OnUpdate(float deltaTime)
