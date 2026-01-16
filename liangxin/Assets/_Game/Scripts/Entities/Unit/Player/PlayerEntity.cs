@@ -244,7 +244,7 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             return; // 黑心拾取成功时不再处理选中逻辑
         }
 
-        if (TrySelectEmployeeByHits(hitCount)) // 尝试根据命中碰撞体选中员工
+        if (TrySelectEmployeeByHits(hitCount, worldPosition)) // 尝试根据命中碰撞体选中员工（按最近优先）
         {
             return; // 选中成功时退出
         }
@@ -287,6 +287,11 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
         if (TryHandleBlackHeartClickByHits(worldPosition, hitCount)) // 若黑心可拾取，则优先拾取（不下发移动）
         {
             return; // 黑心拾取成功时退出
+        }
+
+        if (IsHitEmployeeByHits(hitCount)) // 右键命中员工则不下发移动命令
+        {
+            return; // 命中员工时直接退出
         }
 
         _selectedEmployee.TryCommandMove(worldPosition); // 黑心不可拾取时，将右键位置作为移动目标点
@@ -414,13 +419,17 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
     /// 尝试根据点击命中碰撞体选中员工。
     /// </summary>
     /// <param name="hitCount">命中数量。</param>
+    /// <param name="clickWorldPosition">点击世界坐标（用于最近优先）。</param>
     /// <returns>是否选中成功。</returns>
-    private bool TrySelectEmployeeByHits(int hitCount) // 员工选中入口
+    private bool TrySelectEmployeeByHits(int hitCount, Vector2 clickWorldPosition) // 员工选中入口（最近优先）
     {
         if (hitCount <= 0) // 未命中判定
         {
             return false; // 未命中时返回失败
         }
+
+        var bestEmployee = (IEmployeeControllable)null; // 当前最近的员工候选
+        var bestDistanceSqr = float.MaxValue; // 当前最近距离平方缓存
 
         for (int i = 0; i < hitCount; i++) // 遍历命中碰撞体
         {
@@ -445,11 +454,71 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
                 continue; // 死亡员工不允许选中
             }
 
-            _selectedEmployee = employeeEntity; // 写入选中员工
-            return true; // 选中成功返回 true
+            var closestPoint = hitCollider.ClosestPoint(clickWorldPosition); // 计算点击点到碰撞体的最近点
+            var diff = closestPoint - clickWorldPosition; // 计算最近点到点击点的差向量
+            var distanceSqr = diff.sqrMagnitude; // 计算距离平方
+            if (distanceSqr >= bestDistanceSqr) // 非更近判定
+            {
+                continue; // 非更近时跳过
+            }
+
+            bestDistanceSqr = distanceSqr; // 更新最近距离平方
+            bestEmployee = employeeEntity; // 更新最近员工候选
         }
 
-        return false; // 未命中任何员工时返回 false
+        if (bestEmployee == null) // 未找到可选员工判定
+        {
+            return false; // 未找到时返回失败
+        }
+
+        _selectedEmployee = bestEmployee; // 写入选中员工
+        return true; // 选中成功返回 true
+    }
+
+    /// <summary>
+    /// 右键命中检测：只判断是否点击到员工，不改变当前选中状态。
+    /// </summary>
+    /// <param name="hitCount">命中数量。</param>
+    /// <returns>是否命中有效员工。</returns>
+    private bool IsHitEmployeeByHits(int hitCount) // 员工命中检测入口（不改变选中）
+    {
+        if (hitCount <= 0) // 未命中判定
+        {
+            return false; // 未命中时返回 false
+        }
+
+        for (int i = 0; i < hitCount; i++) // 遍历命中碰撞体
+        {
+            var hitCollider = _blackHeartClickHits[i]; // 获取命中的碰撞体
+            if (hitCollider == null) // 碰撞体为空判定
+            {
+                continue; // 碰撞体为空时跳过
+            }
+
+            if (!EmployeeClickRegistry.TryGetByCollider(hitCollider, out var employeeEntity)) // 尝试通过碰撞体获取员工接口
+            {
+                continue; // 非员工实体时跳过
+            }
+
+            if (employeeEntity == null) // 员工为空判定
+            {
+                continue; // 员工为空时跳过
+            }
+
+            if (_selectedEmployee != null && employeeEntity == _selectedEmployee) // 命中当前选中员工判定
+            {
+                continue; // 命中自身不拦截移动
+            }
+
+            if (employeeEntity.Unit == null || employeeEntity.Unit.LifeState == UnitLifeState.Dead) // 员工无效/死亡判定
+            {
+                continue; // 无效员工不拦截移动
+            }
+
+            return true; // 命中有效员工则返回 true
+        }
+
+        return false; // 未命中有效员工则返回 false
     }
 
     /// <summary>

@@ -807,14 +807,14 @@ public class GameUIPanel : UIPanel
             return;
         }
 
-        if (!waveManager.TryGetMainWaveStatus(out var waveId, out var stage, out var remaining))
+        if (!waveManager.TryGetMainWaveDisplayStatus(out var displayIndex, out var stage, out var remaining)) // 获取显示波次编号与阶段数据
         {
             SetWaveStageText("--");
             SetWaveCountdownText("--:--");
             return;
         }
 
-        SetWaveStageText(waveId, stage);
+        SetWaveStageText(displayIndex, stage); // 刷新波次阶段显示
         var seconds = Mathf.CeilToInt(remaining);
         SetWaveCountdownText(seconds);
     }

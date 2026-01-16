@@ -310,7 +310,7 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
             return; // 管理器为空时退出
         }
 
-        if (!waveManager.TryStartWave(1))
+        if (!waveManager.TryStartRandomWave())
         {
             CY.LogWarning("[LevelEntity] 启动第一波失败，可能已在运行。"); // 输出启动失败提示
         }

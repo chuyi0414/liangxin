@@ -214,14 +214,6 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 2112
   _repathInterval: 0.5
-  _enableLocalAvoidance: 1
-  _useColliderBoundsForAvoidanceRadius: 1
-  _avoidanceRadius: 0.6
-  _avoidanceStrength: 1
-  _avoidanceMask:
-    serializedVersion: 2
-    m_Bits: 256
-  _avoidanceMaxHits: 16
 --- !u!114 &-4100337638819287750
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -254,3 +246,4 @@ MonoBehaviour:
     AttackInterval: 0
   _currentHp: 0
   _aiCheckInterval: 0.2
+  _attackOnlyWhenIdle: 1

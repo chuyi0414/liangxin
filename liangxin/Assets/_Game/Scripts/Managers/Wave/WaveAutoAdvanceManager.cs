@@ -1,30 +1,17 @@
+// 引用 CYFramework 入口，使用 CY.Event/CY.Log
 using CYFramework; // 框架统一入口
+// 引用生命周期接口命名空间，使用 IInitializable/IUpdateable/IDisposableEx
 using CYFramework.Infrastructure; // 生命周期接口引用
+// 引用 UnityEngine，使用 MonoBehaviour/SerializeField
 using UnityEngine; // Unity 引擎类型引用
 
 /// <summary>
-/// 波次自动推进管理器：主线自动推进 + 奇袭独立计时触发。
+/// 波次自动推进管理器：在波次结束后自动推进下一波。
 /// </summary>
 public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpdateable, IDisposableEx // 自动推进管理器定义
 {
     /// <summary>是否启用自动推进。</summary>
     [SerializeField] private bool _autoAdvance = true; // 自动推进开关
-    /// <summary>是否启用概率奇袭。</summary>
-    [SerializeField] private bool _autoAssault = true; // 自动奇袭开关
-    /// <summary>奇袭概率提升的时间间隔（秒）。</summary>
-    [SerializeField] private float _assaultProbIntervalSeconds = 120f; // 概率间隔
-    /// <summary>奇袭基础概率（0-1）。</summary>
-    [SerializeField] private float _assaultBaseProb = 0f; // 基础概率
-    /// <summary>奇袭概率步进（每波递增）。</summary>
-    [SerializeField] private float _assaultProbStep = 0.02f; // 概率步进
-    /// <summary>奇袭最小概率（0-1）。</summary>
-    [SerializeField] private float _assaultMinProb = 0f; // 最小概率
-    /// <summary>奇袭最大概率（0-1）。</summary>
-    [SerializeField] private float _assaultMaxProb = 0.35f; // 最大概率
-    /// <summary>奇袭计时器累计时间。</summary>
-    private float _assaultTimer; // 计时器
-    /// <summary>概率提升次数。</summary>
-    private int _assaultProbLevel; // 概率层级
 
     /// <summary>是否已注册到 ServiceLocator。</summary>
     private bool _registered; // 注册标记
@@ -34,8 +21,10 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
     private bool _disposed; // 释放标记
     /// <summary>是否已订阅事件。</summary>
     private bool _subscribed; // 订阅标记
-    /// <summary>奇袭是否正在运行。</summary>
-    private bool _assaultRunning; // 奇袭运行标记
+    /// <summary>是否已请求下一帧自动推进。</summary>
+    private bool _pendingAdvance; // 自动推进请求标记
+    /// <summary>是否允许在下一帧自动推进。</summary>
+    private bool _advanceAllowed; // 自动推进许可标记
 
     /// <summary>初始化顺序（确保在 WaveManager 之后）。</summary>
     public int InitOrder => 150; // 初始化顺序
@@ -44,9 +33,12 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
     /// <summary>更新顺序（数值小的先执行）。</summary>
     public int UpdateOrder => 360; // 更新顺序
 
-    private void Awake() // Unity 生命周期入口
+    /// <summary>
+    /// Unity Awake：注册到 ServiceLocator。
+    /// </summary>
+    private void Awake() // 生命周期：Awake
     {
-        if (ServiceLocator.TryGet<WaveAutoAdvanceManager>(out var existing) && existing != this)
+        if (ServiceLocator.TryGet<WaveAutoAdvanceManager>(out var existing) && existing != this) // 重复实例判定
         {
             Destroy(this); // 已存在实例时销毁当前组件
             return; // 直接退出
@@ -54,13 +46,16 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
 
         ServiceLocator.RegisterInstance(this); // 注册到服务定位器
         _registered = true; // 标记已注册
-        EnsureSubscribed(); // 提前订阅事件，避免未初始化时漏订阅
+        EnsureSubscribed(); // 提前订阅事件
         _initialized = true; // 标记已初始化
     }
 
-    private void OnDestroy() // Unity 生命周期出口
+    /// <summary>
+    /// Unity OnDestroy：注销服务并清理。
+    /// </summary>
+    private void OnDestroy() // 生命周期：OnDestroy
     {
-        if (_registered)
+        if (_registered) // 注册判定
         {
             Dispose(); // 执行清理
             ServiceLocator.Unregister<WaveAutoAdvanceManager>(); // 注销服务
@@ -73,7 +68,7 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
     /// </summary>
     public void Initialize() // 初始化入口
     {
-        if (_initialized)
+        if (_initialized) // 已初始化判定
         {
             return; // 已初始化时直接退出
         }
@@ -83,18 +78,32 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
     }
 
     /// <summary>
+    /// 每帧更新（保留接口，当前无逻辑）。
+    /// </summary>
+    /// <param name="deltaTime">帧间隔时间。</param>
+    public void OnUpdate(float deltaTime) // Update 入口
+    {
+        if (_disposed) // 已释放判定
+        {
+            return; // 已释放时退出
+        }
+    }
+
+    /// <summary>
     /// 释放清理。
     /// </summary>
     public void Dispose() // 释放入口
     {
-        if (_disposed)
+        if (_disposed) // 已释放判定
         {
             return; // 已释放时直接退出
         }
 
         _disposed = true; // 标记已释放
         _initialized = false; // 重置初始化标记
-        if (_subscribed)
+        _pendingAdvance = false; // 清理自动推进请求标记
+        _advanceAllowed = false; // 清理自动推进许可标记
+        if (_subscribed) // 订阅判定
         {
             CY.Event.UnsubscribeAll(this); // 取消事件订阅
             _subscribed = false; // 清理订阅标记
@@ -102,55 +111,18 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
     }
 
     /// <summary>
-    /// 重置自动推进运行时状态（用于流程切换复位）。
+    /// 重置运行时状态（供流程切换时调用）。
     /// </summary>
-    public void ResetRuntime() // 自动推进运行时重置入口
+    public void ResetRuntime() // 运行时重置入口
     {
-        if (_disposed)
-        {
-            return; // 已释放时直接退出
-        }
-
-        _assaultTimer = 0f; // 重置奇袭计时器
-        _assaultProbLevel = 0; // 重置概率层级
-        _assaultRunning = false; // 清理奇袭运行标记
-    }
-
-    /// <summary>
-    /// 每帧更新（驱动奇袭计时器）。
-    /// </summary>
-    /// <param name="deltaTime">帧间隔时间。</param>
-    public void OnUpdate(float deltaTime) // Update 入口
-    {
-        if (_disposed)
+        if (_disposed) // 已释放判定
         {
             return; // 已释放时退出
         }
 
-        if (!_autoAssault)
-        {
-            return; // 未启用自动奇袭时退出
-        }
-
-        if (_assaultProbIntervalSeconds <= 0f)
-        {
-            return; // 时间间隔无效时退出
-        }
-
-        var waveManager = CY.Wave; // 获取波次管理器
-        if (waveManager == null || waveManager.IsPaused)
-        {
-            return; // 管理器未就绪或暂停时退出
-        }
-
-        _assaultTimer += deltaTime; // 累积计时器
-        var guard = 0; // 循环保护
-        while (_assaultTimer >= _assaultProbIntervalSeconds && guard < 4)
-        {
-            _assaultTimer -= _assaultProbIntervalSeconds; // 消耗一段间隔
-            TryRollAssault(waveManager); // 尝试触发奇袭
-            guard++; // 递增保护计数
-        }
+        _pendingAdvance = false; // 重置自动推进请求标记
+        _advanceAllowed = false; // 重置自动推进许可标记
+        EnsureSubscribed(); // 确保仍然订阅波次事件
     }
 
     /// <summary>
@@ -158,106 +130,96 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
     /// </summary>
     private void EnsureSubscribed() // 手动订阅入口
     {
-        if (_subscribed)
+        if (_subscribed) // 已订阅判定
         {
             return; // 已订阅时直接退出
         }
 
-        CY.Event.Subscribe<WaveFinishedEvent>(OnWaveFinished, this); // 手动订阅波次结束事件
-        CY.Event.Subscribe<WavePrepareStartedEvent>(OnWavePrepareStarted, this); // 手动订阅波次准备开始事件
+        CY.Event.Subscribe<WaveFinishedEvent>(OnWaveFinished, this); // 订阅波次结束事件
         _subscribed = true; // 标记已订阅
     }
 
     /// <summary>
-    /// 按概率尝试触发奇袭。
-    /// </summary>
-    /// <param name="waveManager">波次管理器。</param>
-    private void TryRollAssault(WaveManager waveManager) // 奇袭触发入口
-    {
-        if (waveManager == null)
-        {
-            return; // 管理器为空时退出
-        }
-
-        if (_assaultRunning)
-        {
-            return; // 奇袭运行中不触发
-        }
-
-        var prob = _assaultBaseProb + _assaultProbStep * _assaultProbLevel; // 计算触发概率
-        prob = Mathf.Clamp(prob, _assaultMinProb, _assaultMaxProb); // 约束概率范围
-        if (Random.value >= prob)
-        {
-            _assaultProbLevel++; // 未命中时提升概率层级
-            return; // 直接退出
-        }
-
-        if (waveManager.TryStartRandomAssaultWave(out _))
-        {
-            _assaultRunning = true; // 标记奇袭已开始
-            _assaultProbLevel = 0; // 重置概率层级
-            _assaultTimer = 0f; // 重置计时器
-        }
-    }
-
-    /// <summary>
-    /// 波次结束回调：启动下一波。
+    /// 波次结束回调：自动推进下一波。
     /// </summary>
     /// <param name="evt">波次结束事件。</param>
     private void OnWaveFinished(ref WaveFinishedEvent evt) // 波次结束事件入口
     {
-        if (_disposed)
+        if (_disposed) // 已释放判定
         {
             return; // 已释放时退出
         }
 
-        if (!_autoAdvance)
+        if (!_autoAdvance) // 自动推进开关判定
         {
             return; // 关闭自动推进时退出
         }
 
         var waveManager = CY.Wave; // 获取波次管理器
-        if (waveManager == null)
+        if (waveManager == null) // 管理器判定
         {
             CY.LogWarning("[WaveAutoAdvanceManager] WaveManager 未就绪，无法推进下一波。"); // 输出警告
             return; // 管理器为空时退出
         }
 
-        if (evt.IsAssault)
+        if (!waveManager.AutoAdvanceEnabled) // 波次配置判定
         {
-            _assaultRunning = false; // 清理奇袭运行标记
-            return; // 奇袭波次结束不自动推进
+            return; // 未启用自动推进时退出
         }
 
-        if (waveManager.IsPaused)
+        if (waveManager.IsPaused) // 暂停判定
         {
             return; // 暂停状态下不推进
         }
 
-        var nextWaveId = evt.WaveId + 1; // 计算下一波 Id
-        if (!waveManager.TryStartWave(nextWaveId))
+        if (_pendingAdvance) // 重复请求判定
         {
-            CY.LogWarning($"[WaveAutoAdvanceManager] 自动推进失败，NextWaveId={nextWaveId}。"); // 输出失败日志
+            return; // 已请求时直接退出
         }
+
+        _advanceAllowed = true; // 记录允许自动推进
+        _pendingAdvance = true; // 标记已请求自动推进
+        CY.Timer.NextFrame(AdvanceNextWave); // 下一帧执行推进，确保当前波次已完成清理
     }
 
     /// <summary>
-    /// 波次准备阶段开始回调：判断是否触发奇袭。
+    /// 下一帧执行自动推进。
     /// </summary>
-    /// <param name="evt">波次准备开始事件。</param>
-    private void OnWavePrepareStarted(ref WavePrepareStartedEvent evt) // 波次准备事件入口
+    private void AdvanceNextWave() // 自动推进执行入口
     {
-        if (_disposed)
+        _pendingAdvance = false; // 清理请求标记
+
+        if (_disposed) // 已释放判定
         {
             return; // 已释放时退出
         }
 
-        if (evt.IsAssault)
+        if (!_autoAdvance) // 自动推进开关判定
         {
-            _assaultRunning = true; // 标记奇袭已开始
-            _assaultProbLevel = 0; // 重置概率层级
-            _assaultTimer = 0f; // 重置计时器
-            return; // 奇袭自身不再触发奇袭
+            return; // 关闭自动推进时退出
+        }
+
+        if (!_advanceAllowed) // 自动推进许可判定
+        {
+            return; // 未允许推进时退出
+        }
+
+        _advanceAllowed = false; // 清理许可标记
+        var waveManager = CY.Wave; // 获取波次管理器
+        if (waveManager == null) // 管理器判定
+        {
+            CY.LogWarning("[WaveAutoAdvanceManager] WaveManager 未就绪，无法推进下一波。"); // 输出警告
+            return; // 管理器为空时退出
+        }
+
+        if (waveManager.IsPaused) // 暂停判定
+        {
+            return; // 暂停状态下不推进
+        }
+
+        if (!waveManager.TryAdvanceWave()) // 推进下一波判定
+        {
+            CY.LogWarning("[WaveAutoAdvanceManager] 自动推进失败。"); // 输出失败日志
         }
     }
 }

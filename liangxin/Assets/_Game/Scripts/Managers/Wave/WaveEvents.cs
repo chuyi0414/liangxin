@@ -32,8 +32,8 @@ public struct WaveSpawnedEvent // 刷怪生成事件结构体
     public int WaveId; // 波次 Id
     /// <summary>是否为奇袭波次。</summary>
     public bool IsAssault; // 奇袭标记
-    /// <summary>生成类型 Id。</summary>
-    public int SpawnTypeId; // 生成类型 Id
+    /// <summary>刷怪组 Id。</summary>
+    public int SpawnGroupId; // 刷怪组 Id
     /// <summary>敌人 Id。</summary>
     public int EnemyId; // 敌人 Id
     /// <summary>生成位置。</summary>
@@ -58,4 +58,24 @@ public struct WavePauseEvent // 波次暂停事件结构体
 {
     /// <summary>是否暂停。</summary>
     public bool IsPaused; // 是否暂停
+}
+
+/// <summary>
+/// 波次触发事件（用于脚本/剧情触发波次轨道）。
+/// </summary>
+public struct WaveTriggerEvent // 波次触发事件结构体
+{
+    /// <summary>触发标识 Id。</summary>
+    public string TriggerId; // 触发标识
+}
+
+/// <summary>
+/// 波次区域触发事件（进入/离开区域）。
+/// </summary>
+public struct WaveAreaTriggerEvent // 波次区域事件结构体
+{
+    /// <summary>区域 Id。</summary>
+    public string AreaId; // 区域 Id
+    /// <summary>是否进入区域。</summary>
+    public bool IsEnter; // 进入标记
 }

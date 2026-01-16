@@ -70,26 +70,6 @@ public abstract class EmployeeEntityBase : UnitEntity, IEntityPreShowData<Employ
     private EmployeeMovePathVisualizer _movePathVisualizer; // 路径可视化器缓存
 
     /// <summary>
-    /// 员工层遮罩缓存（用于 Physics2D NonAlloc 检测）。
-    /// </summary>
-    private int _employeeLayerMask; // 员工层遮罩缓存
-
-    /// <summary>
-    /// 移动命令占用检测命中缓存：用于避免在右键移动时产生 GC。
-    /// </summary>
-    private Collider2D[] _moveCommandOccupyHits; // 占用检测命中缓存数组
-
-    /// <summary>
-    /// 移动命令：寻找最近“未被员工占用”的偏移点时，单圈采样数量。
-    /// </summary>
-    private const int MoveCommandSamplesPerRing = 16; // 单圈采样点数量常量
-
-    /// <summary>
-    /// 移动命令：寻找最近“未被员工占用”的偏移点时，最大圈数。
-    /// </summary>
-    private const int MoveCommandMaxRings = 8; // 最大圈数常量
-
-    /// <summary>
     /// 实现 IEmployeeControllable：返回自身单位引用。
     /// </summary>
     public UnitEntity Unit => this; // 返回自身作为单位引用
@@ -131,8 +111,6 @@ public abstract class EmployeeEntityBase : UnitEntity, IEntityPreShowData<Employ
         _rigidbody2D = GetComponent<Rigidbody2D>(); // 缓存刚体组件（低频）
         _navigationAgent = GetComponent<HybridNavigationAgent>(); // 缓存导航代理组件（低频）
         _movePathVisualizer = GetOrAddMovePathVisualizer(); // 缓存/创建路径可视化器（无需手改预制体）
-        _employeeLayerMask = BuildEmployeeLayerMask(); // 构建员工层遮罩缓存（用于移动命令占用检测）
-        _moveCommandOccupyHits = new Collider2D[16]; // 分配占用检测命中缓存数组（一次性分配）
     }
 
     /// <summary>
@@ -288,9 +266,7 @@ public abstract class EmployeeEntityBase : UnitEntity, IEntityPreShowData<Employ
             }
         }
 
-        var finalDestination = destination; // 默认使用点击位置作为最终目标点
-        TryAdjustMoveDestinationToNearestFree(ref finalDestination); // 若目标点被员工占用，则偏移到最近的空位
-        var success = _navigationAgent.SetDestination(finalDestination, NavigationMode.Auto, false); // 下发导航目标（Auto）
+        var success = _navigationAgent.SetDestination(destination, NavigationMode.Auto, false); // 下发导航目标（Auto）
         if (!success) // 下发失败判定
         {
             HideMovePathVisualizer(); // 下发失败时隐藏路径显示（避免显示旧路径）
@@ -358,141 +334,6 @@ public abstract class EmployeeEntityBase : UnitEntity, IEntityPreShowData<Employ
     }
 
     /// <summary>
-    /// 构建员工 LayerMask（若项目未配置 Employee 层，则回退使用自身 Layer）。
-    /// </summary>
-    /// <returns>员工层遮罩。</returns>
-    private int BuildEmployeeLayerMask() // 员工层遮罩构建入口
-    {
-        var employeeLayer = LayerMask.NameToLayer("Employee"); // 在运行期获取 Employee 层索引（避免静态初始化阶段调用）
-        if (employeeLayer >= 0) // Employee 层存在判定
-        {
-            return 1 << employeeLayer; // 使用 Employee 层构建遮罩
-        }
-
-        return 1 << gameObject.layer; // 回退使用自身所在层构建遮罩
-    }
-
-    /// <summary>
-    /// 若目标点被员工占用，则把目标点偏移到最近的“未被员工占用”的位置。
-    /// 目的：解决“点击已有员工位置时，移动目标点与避让互相矛盾”的体验问题。
-    /// </summary>
-    /// <param name="destination">输入/输出目标点（若被占用将被修改）。</param>
-    private void TryAdjustMoveDestinationToNearestFree(ref Vector2 destination) // 目标点占用偏移入口
-    {
-        if (_employeeLayerMask == 0) // 员工层遮罩为空判定
-        {
-            return; // 未配置时不处理
-        }
-
-        if (_moveCommandOccupyHits == null || _moveCommandOccupyHits.Length == 0) // 命中数组缺失判定
-        {
-            return; // 缺失缓存时不处理
-        }
-
-        var selfCollider = CachedCollider2D; // 获取自身碰撞体缓存
-        if (selfCollider == null) // 自身碰撞体缺失判定
-        {
-            return; // 缺失碰撞体时不处理
-        }
-
-        var occupyRadius = GetOccupyRadiusByCollider(selfCollider); // 计算自身占用半径（基于碰撞体尺寸）
-        if (occupyRadius <= 0f) // 半径非法判定
-        {
-            return; // 半径非法时不处理
-        }
-
-        if (!IsPositionOccupiedByOtherEmployee(destination, occupyRadius)) // 目标点未被其他员工占用判定
-        {
-            return; // 未被占用时直接使用原目标点
-        }
-
-        var currentPos = _rigidbody2D != null ? _rigidbody2D.position : (Vector2)transform.position; // 获取当前坐标（优先刚体）
-        var preferDir = destination - currentPos; // 计算“更偏向的搜索方向”（朝向目标点）
-        var preferAngle = preferDir.sqrMagnitude > 0.0001f ? Mathf.Atan2(preferDir.y, preferDir.x) : 0f; // 计算偏好角度（用于优先搜索前方）
-        var step = Mathf.Max(occupyRadius * 2f, 0.05f); // 计算每圈半径步进（以“两个同体积员工不重叠”的最小中心距为基准）
-
-        for (int ring = 1; ring <= MoveCommandMaxRings; ring++) // 从近到远逐圈搜索
-        {
-            var radius = step * ring; // 计算当前圈半径
-            var bestCandidateFound = false; // 标记是否找到当前圈候选点
-            var bestCandidate = destination; // 当前圈最优候选点缓存
-
-            for (int i = 0; i < MoveCommandSamplesPerRing; i++) // 在当前半径上采样多个方向点
-            {
-                var angle = preferAngle + (Mathf.PI * 2f) * (i / (float)MoveCommandSamplesPerRing); // 计算采样角度（以偏好角度为起点）
-                var offset = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius; // 计算偏移向量
-                var candidate = destination + offset; // 计算候选点
-
-                if (IsPositionOccupiedByOtherEmployee(candidate, occupyRadius)) // 候选点被占用判定
-                {
-                    continue; // 被占用则继续尝试下一点
-                }
-
-                bestCandidate = candidate; // 记录可用候选点
-                bestCandidateFound = true; // 标记找到候选点
-                break; // 当前圈找到一个最近半径的可用点即可退出（满足“最近”）
-            }
-
-            if (bestCandidateFound) // 当前圈找到可用点判定
-            {
-                destination = bestCandidate; // 覆盖目标点为最近空位
-                return; // 完成偏移后直接返回
-            }
-        }
-    }
-
-    /// <summary>
-    /// 基于碰撞体尺寸计算“占用半径”（用于判断点位是否被员工占用）。
-    /// </summary>
-    /// <param name="collider2D">碰撞体。</param>
-    /// <returns>占用半径。</returns>
-    private float GetOccupyRadiusByCollider(Collider2D collider2D) // 占用半径计算入口
-    {
-        if (collider2D == null) // 碰撞体为空判定
-        {
-            return 0f; // 为空时返回 0
-        }
-
-        var extents = collider2D.bounds.extents; // 获取 Bounds 半尺寸（世界坐标）
-        var radius = Mathf.Max(extents.x, extents.y); // 取较大半轴作为占用半径
-        return radius + 0.02f; // 增加少量余量避免贴边重叠
-    }
-
-    /// <summary>
-    /// 判断指定位置是否被“其他员工”占用。
-    /// </summary>
-    /// <param name="position">需要检测的位置。</param>
-    /// <param name="radius">检测半径（使用自身占用半径）。</param>
-    /// <returns>是否被其他员工占用。</returns>
-    private bool IsPositionOccupiedByOtherEmployee(Vector2 position, float radius) // 目标点占用检测入口
-    {
-        var hitCount = Physics2D.OverlapCircleNonAlloc(position, radius, _moveCommandOccupyHits, _employeeLayerMask); // 检测范围内员工碰撞体（NonAlloc）
-        if (hitCount <= 0) // 未命中判定
-        {
-            return false; // 未命中任何员工时认为不占用
-        }
-
-        var selfCollider = CachedCollider2D; // 获取自身碰撞体缓存
-        for (int i = 0; i < hitCount; i++) // 遍历命中结果
-        {
-            var hit = _moveCommandOccupyHits[i]; // 获取命中碰撞体
-            if (hit == null) // 命中为空判定
-            {
-                continue; // 为空时跳过
-            }
-
-            if (hit == selfCollider) // 命中自身判定
-            {
-                continue; // 忽略自身
-            }
-
-            return true; // 命中其他员工则认为占用
-        }
-
-        return false; // 仅命中自身时认为不占用
-    }
-
-    /// <summary>
     /// 应用员工配置数据（来自 Employee.csv）。
     /// </summary>
     /// <param name="row">员工数据行。</param>
@@ -556,6 +397,7 @@ public abstract class EmployeeEntityBase : UnitEntity, IEntityPreShowData<Employ
         _aiTimer.Stop(); // 停止循环计时器
         _aiTimer = null; // 清空计时器引用
     }
+
 
     /// <summary>
     /// 基础 AI Tick：默认仅在静止时（无导航路径）才会攻击；可视范围内找最近敌人，进入攻击范围则攻击（不主动移动）。

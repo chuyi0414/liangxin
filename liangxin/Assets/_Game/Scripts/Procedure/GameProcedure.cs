@@ -98,6 +98,7 @@ public class GameProcedure : ProcedureBase
 
         if (unitManager != null)
         {
+            unitManager.RecycleAllEnemies(); // 回收所有敌人实体
             unitManager.ClearAll(); // 清空单位缓存引用
         }
 

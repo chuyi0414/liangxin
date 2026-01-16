@@ -17,10 +17,12 @@ public class LoadProcedure : ProcedureBase
     private const string BulletArrayCsvPath = "DataTable/Projectiles/BulletArray"; // 子弹数组表路径
     private const string EnemyDataTableName = "Enemy";
     private const string EnemyDataCsvPath = "DataTable/Unit/Enemy/Enemy";
-    private const string SpawnTypeTableName = "SpawnType"; // 生成类型表名
-    private const string SpawnTypeCsvPath = "DataTable/Wave/SpawnType"; // 生成类型路径
-    private const string AssaultSpawnTypeTableName = "AssaultSpawnType"; // 奇袭生成类型表名
-    private const string AssaultSpawnTypeCsvPath = "DataTable/Wave/AssaultSpawnType"; // 奇袭生成类型路径
+    private const string WavePlanTableName = "WavePlan"; // 波次计划表名
+    private const string WavePlanCsvPath = "DataTable/Wave/WavePlan"; // 波次计划表路径
+    private const string WaveTrackTableName = "WaveTrack"; // 波次轨道表名
+    private const string WaveTrackCsvPath = "DataTable/Wave/WaveTrack"; // 波次轨道表路径
+    private const string WaveSpawnGroupTableName = "WaveSpawnGroup"; // 波次刷怪组表名
+    private const string WaveSpawnGroupCsvPath = "DataTable/Wave/WaveSpawnGroup"; // 波次刷怪组表路径
 
     protected override void OnEnter(ProcedureBase previousProcedure)
     {
@@ -33,8 +35,9 @@ public class LoadProcedure : ProcedureBase
         LoadUnitStyleData(); // 加载单位风格数据
         LoadBulletArrayData(); // 加载子弹数组数据
         LoadEnemyData();
-        LoadSpawnTypeData(); // 加载生成类型
-        LoadAssaultSpawnTypeData(); // 加载奇袭生成类型
+        LoadWavePlanData(); // 加载波次计划表
+        LoadWaveTrackData(); // 加载波次轨道表
+        LoadWaveSpawnGroupData(); // 加载刷怪组表
     }
 
     protected override void OnUpdate(float deltaTime)
@@ -170,43 +173,63 @@ public class LoadProcedure : ProcedureBase
     }
 
     /// <summary>
-    /// 加载生成类型数据（CSV）。
+    /// 加载波次计划数据（CSV）。
     /// </summary>
-    private void LoadSpawnTypeData() // 加载生成类型表
+    private void LoadWavePlanData() // 波次计划表加载入口
     {
-        if (CY.Data.HasDataTable(SpawnTypeTableName)) // 判断是否已加载
+        if (CY.Data.HasDataTable(WavePlanTableName)) // 判断是否已加载
         {
-            CY.Data.UnloadDataTable(SpawnTypeTableName); // 卸载旧表
+            CY.Data.UnloadDataTable(WavePlanTableName); // 卸载旧表
         }
 
-        var csvAsset = CY.Resource.Load<TextAsset>(SpawnTypeCsvPath); // 加载 CSV 资源
+        var csvAsset = CY.Resource.Load<TextAsset>(WavePlanCsvPath); // 加载 CSV 资源
         if (csvAsset == null) // 资源为空判定
         {
-            CY.LogError($"[LoadProcedure] 加载生成类型失败：{SpawnTypeCsvPath}"); // 输出错误日志
-            return; // 直接退出
+            CY.LogError($"[LoadProcedure] 加载波次计划失败：{WavePlanCsvPath}"); // 输出错误日志
+            return; // 资源为空时退出
         }
 
-        CY.Data.LoadFromCsv<SpawnTypeRow>(csvAsset.text, SpawnTypeTableName); // 解析生成类型表
+        CY.Data.LoadFromCsv<WavePlanRow>(csvAsset.text, WavePlanTableName); // 解析波次计划表
     }
 
     /// <summary>
-    /// 加载奇袭生成类型数据（CSV）。
+    /// 加载波次轨道数据（CSV）。
     /// </summary>
-    private void LoadAssaultSpawnTypeData() // 加载奇袭生成类型表
+    private void LoadWaveTrackData() // 波次轨道表加载入口
     {
-        if (CY.Data.HasDataTable(AssaultSpawnTypeTableName)) // 判断是否已加载
+        if (CY.Data.HasDataTable(WaveTrackTableName)) // 判断是否已加载
         {
-            CY.Data.UnloadDataTable(AssaultSpawnTypeTableName); // 卸载旧表
+            CY.Data.UnloadDataTable(WaveTrackTableName); // 卸载旧表
         }
 
-        var csvAsset = CY.Resource.Load<TextAsset>(AssaultSpawnTypeCsvPath); // 加载 CSV 资源
+        var csvAsset = CY.Resource.Load<TextAsset>(WaveTrackCsvPath); // 加载 CSV 资源
         if (csvAsset == null) // 资源为空判定
         {
-            CY.LogWarning($"[LoadProcedure] 加载奇袭生成类型失败：{AssaultSpawnTypeCsvPath}"); // 输出警告日志
-            return; // 允许奇袭表缺失
+            CY.LogError($"[LoadProcedure] 加载波次轨道失败：{WaveTrackCsvPath}"); // 输出错误日志
+            return; // 资源为空时退出
         }
 
-        CY.Data.LoadFromCsv<AssaultSpawnTypeRow>(csvAsset.text, AssaultSpawnTypeTableName); // 解析奇袭生成类型表
+        CY.Data.LoadFromCsv<WaveTrackRow>(csvAsset.text, WaveTrackTableName); // 解析波次轨道表
+    }
+
+    /// <summary>
+    /// 加载波次刷怪组数据（CSV）。
+    /// </summary>
+    private void LoadWaveSpawnGroupData() // 波次刷怪组表加载入口
+    {
+        if (CY.Data.HasDataTable(WaveSpawnGroupTableName)) // 判断是否已加载
+        {
+            CY.Data.UnloadDataTable(WaveSpawnGroupTableName); // 卸载旧表
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(WaveSpawnGroupCsvPath); // 加载 CSV 资源
+        if (csvAsset == null) // 资源为空判定
+        {
+            CY.LogError($"[LoadProcedure] 加载刷怪组失败：{WaveSpawnGroupCsvPath}"); // 输出错误日志
+            return; // 资源为空时退出
+        }
+
+        CY.Data.LoadFromCsv<WaveSpawnGroupRow>(csvAsset.text, WaveSpawnGroupTableName); // 解析刷怪组表
     }
 
 

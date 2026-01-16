@@ -1,8 +1,8 @@
 // 引用泛型集合命名空间，使用 List
 using System.Collections.Generic; // 集合类型引用
+
 public sealed partial class WaveManager // 波次管理器分部定义
 {
-
     /// <summary>
     /// 权重条目（Id + 权重）。
     /// </summary>
@@ -26,46 +26,9 @@ public sealed partial class WaveManager // 波次管理器分部定义
     }
 
     /// <summary>
-    /// 波次运行时数据。
+    /// 刷怪组敌人池。
     /// </summary>
-    private sealed class WaveRuntime // 波次运行时
-    {
-        /// <summary>波次 Id。</summary>
-        public int WaveId; // 波次 Id
-        /// <summary>是否为奇袭波次。</summary>
-        public bool IsAssault; // 奇袭标记
-        /// <summary>下一次刷新倒计时（秒）。</summary>
-        public float NextRefreshTimer; // 刷新计时
-        /// <summary>运行时生成类型池。</summary>
-        public readonly List<WeightedId> SpawnTypes; // 运行时生成池
-        /// <summary>运行时生成类型权重总和。</summary>
-        public int SpawnTypeWeightTotal; // 权重总和
-        /// <summary>生成类型运行时列表。</summary>
-        public readonly List<SpawnTypeRuntime> SpawnTypeRuntimes; // 生成类型运行时
-        /// <summary>是否已进入刷怪阶段。</summary>
-        public bool HasSpawnStarted; // 刷怪阶段标记
-
-        /// <summary>
-        /// 构造函数。
-        /// </summary>
-        /// <param name="waveId">波次 Id。</param>
-        /// <param name="isAssault">是否为奇袭波次。</param>
-        public WaveRuntime(int waveId, bool isAssault) // 构造函数
-        {
-            WaveId = waveId; // 记录波次 Id
-            IsAssault = isAssault; // 记录奇袭标记
-            NextRefreshTimer = 0f; // 初始化刷新计时
-            SpawnTypes = new List<WeightedId>(8); // 初始化生成池
-            SpawnTypeWeightTotal = 0; // 初始化权重
-            SpawnTypeRuntimes = new List<SpawnTypeRuntime>(8); // 初始化运行时列表
-            HasSpawnStarted = false; // 初始化刷怪标记
-        }
-    }
-
-    /// <summary>
-    /// 生成类型内的敌人权重池。
-    /// </summary>
-    private sealed class SpawnTypeEnemyPool // 生成类型敌人池
+    private sealed class SpawnGroupEnemyPool // 刷怪组敌人池定义
     {
         /// <summary>总权重。</summary>
         public int TotalWeight; // 权重总和
@@ -75,7 +38,7 @@ public sealed partial class WaveManager // 波次管理器分部定义
         /// <summary>
         /// 构造函数。
         /// </summary>
-        public SpawnTypeEnemyPool() // 构造函数
+        public SpawnGroupEnemyPool() // 构造函数
         {
             TotalWeight = 0; // 初始化权重
             Entries = new List<WeightedId>(8); // 初始化列表
@@ -83,37 +46,107 @@ public sealed partial class WaveManager // 波次管理器分部定义
     }
 
     /// <summary>
-    /// 生成类型刷新点池。
+    /// 刷怪组运行时数据。
     /// </summary>
-    private sealed class SpawnTypePointPool // 刷新点池
+    private sealed class SpawnGroupRuntime // 刷怪组运行时定义
     {
+        /// <summary>刷怪组配置。</summary>
+        public WaveSpawnGroupRow Row; // 刷怪组配置
+        /// <summary>敌人权重池。</summary>
+        public SpawnGroupEnemyPool EnemyPool; // 敌人池
         /// <summary>刷新点 Id 列表。</summary>
-        public readonly List<string> PointIds = new List<string>(8); // 刷新点列表
-    }
-
-    /// <summary>
-    /// 生成类型运行时数据。
-    /// </summary>
-    private sealed class SpawnTypeRuntime // 生成类型运行时
-    {
-        /// <summary>配置 Id。</summary>
-        public int ConfigId; // 配置 Id
-        /// <summary>准备阶段剩余时间（秒）。</summary>
-        public float PrepareRemaining; // 准备剩余
-        /// <summary>刷怪阶段剩余时间（秒）。</summary>
-        public float SpawnRemaining; // 刷怪剩余
+        public readonly List<string> PointIds; // 刷新点列表
 
         /// <summary>
         /// 构造函数。
         /// </summary>
-        /// <param name="configId">生成类型 Id。</param>
-        /// <param name="prepareDuration">准备时长。</param>
-        /// <param name="spawnDuration">刷怪时长。</param>
-        public SpawnTypeRuntime(int configId, float prepareDuration, float spawnDuration) // 构造函数
+        public SpawnGroupRuntime() // 构造函数
         {
-            ConfigId = configId; // 记录配置 Id
-            PrepareRemaining = prepareDuration < 0f ? 0f : prepareDuration; // 初始化准备时间
-            SpawnRemaining = spawnDuration < 0f ? 0f : spawnDuration; // 初始化刷怪时间
+            Row = null; // 初始化配置
+            EnemyPool = null; // 初始化敌人池
+            PointIds = new List<string>(8); // 初始化刷新点列表
+        }
+    }
+
+    /// <summary>
+    /// 轨道运行时数据。
+    /// </summary>
+    private sealed class TrackRuntime // 轨道运行时定义
+    {
+        /// <summary>轨道配置。</summary>
+        public WaveTrackRow Row; // 轨道配置
+        /// <summary>刷怪组运行时数据。</summary>
+        public SpawnGroupRuntime SpawnGroup; // 刷怪组运行时
+        /// <summary>是否已满足开始条件。</summary>
+        public bool StartConditionMet; // 开始条件标记
+        /// <summary>是否已开始。</summary>
+        public bool IsStarted; // 开始标记
+        /// <summary>是否已结束。</summary>
+        public bool IsFinished; // 结束标记
+        /// <summary>开始延迟剩余时间（秒）。</summary>
+        public float StartDelayRemaining; // 开始延迟剩余
+        /// <summary>轨道已运行时间（秒）。</summary>
+        public float ElapsedTime; // 轨道时间
+        /// <summary>下一次刷新倒计时（秒）。</summary>
+        public float NextSpawnTimer; // 刷新计时
+        /// <summary>累计刷怪数量。</summary>
+        public int SpawnedCount; // 刷怪数量
+        /// <summary>当前存活数量。</summary>
+        public int AliveCount; // 存活数量
+
+        /// <summary>
+        /// 构造函数。
+        /// </summary>
+        /// <param name="row">轨道配置。</param>
+        /// <param name="spawnGroup">刷怪组运行时。</param>
+        public TrackRuntime(WaveTrackRow row, SpawnGroupRuntime spawnGroup) // 构造函数
+        {
+            Row = row; // 记录轨道配置
+            SpawnGroup = spawnGroup; // 记录刷怪组
+            StartConditionMet = false; // 初始化开始条件标记
+            IsStarted = false; // 初始化开始标记
+            IsFinished = false; // 初始化结束标记
+            StartDelayRemaining = 0f; // 初始化开始延迟
+            ElapsedTime = 0f; // 初始化轨道时间
+            NextSpawnTimer = 0f; // 初始化刷新计时
+            SpawnedCount = 0; // 初始化刷怪数量
+            AliveCount = 0; // 初始化存活数量
+        }
+    }
+
+    /// <summary>
+    /// 波次运行时数据。
+    /// </summary>
+    private sealed class WaveRuntime // 波次运行时定义
+    {
+        /// <summary>波次配置。</summary>
+        public WavePlanRow Plan; // 波次配置
+        /// <summary>轨道运行时列表。</summary>
+        public readonly List<TrackRuntime> Tracks; // 轨道列表
+        /// <summary>是否已进入刷怪阶段。</summary>
+        public bool HasSpawnStarted; // 刷怪阶段标记
+        /// <summary>波次已运行时间（秒）。</summary>
+        public float ElapsedTime; // 波次时间
+        /// <summary>累计刷怪数量。</summary>
+        public int TotalSpawned; // 总刷怪数量
+        /// <summary>累计击杀数量。</summary>
+        public int TotalKilled; // 总击杀数量
+        /// <summary>当前存活数量。</summary>
+        public int EnemyAliveCount; // 存活数量
+
+        /// <summary>
+        /// 构造函数。
+        /// </summary>
+        /// <param name="plan">波次配置。</param>
+        public WaveRuntime(WavePlanRow plan) // 构造函数
+        {
+            Plan = plan; // 记录波次配置
+            Tracks = new List<TrackRuntime>(8); // 初始化轨道列表
+            HasSpawnStarted = false; // 初始化刷怪标记
+            ElapsedTime = 0f; // 初始化波次时间
+            TotalSpawned = 0; // 初始化刷怪计数
+            TotalKilled = 0; // 初始化击杀计数
+            EnemyAliveCount = 0; // 初始化存活计数
         }
     }
 }

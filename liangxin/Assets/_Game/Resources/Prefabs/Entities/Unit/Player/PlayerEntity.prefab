@@ -347,15 +347,6 @@ MonoBehaviour:
   _destinationSpreadRadius: 1
   _destinationSpreadStep: 0.25
   _destinationSpreadMaxTries: 16
-  _enableLocalAvoidance: 0
-  _avoidanceMask:
-    serializedVersion: 2
-    m_Bits: 0
-  _avoidanceRadius: 0.9
-  _separationDistance: 0.55
-  _avoidanceStrength: 0.8
-  _avoidanceMaxHits: 16
-  _disableAvoidanceNearDestination: 1
   _defaultMode: 0
   _navMeshPlane: 1
   _agentRadius: 0.4

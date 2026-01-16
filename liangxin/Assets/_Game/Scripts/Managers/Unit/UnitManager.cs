@@ -366,6 +366,33 @@ public sealed class UnitManager : MonoBehaviour, IInitializable, IDisposableEx
     }
 
     /// <summary>
+    /// 回收所有敌人实体（包含列表内的所有敌人）。
+    /// </summary>
+    public void RecycleAllEnemies() // 敌人回收入口
+    {
+        if (_enemies.Count <= 0) // 列表为空判定
+        {
+            return; // 无敌人时直接退出
+        }
+
+        for (int i = _enemies.Count - 1; i >= 0; i--) // 倒序遍历避免移除干扰
+        {
+            var enemy = _enemies[i]; // 获取当前敌人
+            if (enemy == null) // 空引用判定
+            {
+                continue; // 空引用跳过
+            }
+
+            if (enemy.Id > 0) // 实体 Id 判定
+            {
+                CY.Entity.RecycleEntity(enemy.Id); // 回收敌人实体
+            }
+        }
+
+        _enemies.Clear(); // 清空敌人列表引用
+    }
+
+    /// <summary>
     /// 清空所有引用（包含老板/员工/敌人）。
     /// </summary>
     public void ClearAll()

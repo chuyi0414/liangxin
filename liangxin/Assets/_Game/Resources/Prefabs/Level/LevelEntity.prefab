@@ -215,6 +215,10 @@ MonoBehaviour:
   _enemySpawnPointsRoot: {fileID: 7110605724259675737}
   _companySpawnPoint: {fileID: 6548070842285861586}
   _playerSpawnPoint: {fileID: 1728491477260811730}
+  _defaultNavMeshSurface: {fileID: 0}
+  _employeeNavMeshSurface: {fileID: 0}
+  _enableEmployeeNavMeshSurface: 0
+  _employeeNavMeshUpdateInterval: 0.1
 --- !u!1 &2576662195715514081
 GameObject:
   m_ObjectHideFlags: 0
@@ -379,8 +383,8 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 4193193561603114742}
   - {fileID: 3065115604963270633}
+  - {fileID: 4193193561603114742}
   m_Father: {fileID: 1328534763703550771}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &3314192640553896114

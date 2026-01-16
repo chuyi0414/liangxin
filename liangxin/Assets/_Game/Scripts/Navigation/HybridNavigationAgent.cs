@@ -45,14 +45,8 @@ public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理�
     [SerializeField] private float _agentRadius = 0.4f; // 寻路半径（用于网格障碍检测）
     [SerializeField] private LayerMask _dynamicObstacleMask = 0; // 动态障碍层
     [SerializeField] private float _repathInterval = 0.5f; // NavMesh 重算间隔
-
-    [Header("局部避让配置")] // Inspector 分组：局部避让配置
-    [SerializeField] private bool _enableLocalAvoidance = false; // 是否启用局部避让（用于单位之间自动绕开）
-    [SerializeField] private bool _useColliderBoundsForAvoidanceRadius = true; // 是否使用自身碰撞体 Bounds 自动计算避让半径
-    [SerializeField] private float _avoidanceRadius = 0.6f; // 局部避让半径（当不使用碰撞体自动计算时生效）
-    [SerializeField] private float _avoidanceStrength = 1f; // 局部避让强度（越大越倾向远离邻居）
-    [SerializeField] private LayerMask _avoidanceMask = 0; // 局部避让检测层（例如 Employee 层）
-    [SerializeField] private int _avoidanceMaxHits = 16; // 局部避让最多检测碰撞体数量（避免数组扩容）
+    [SerializeField] private float _fallbackSampleRadius = 8f; // 目标不可达时的 NavMesh 采样半径
+    [SerializeField] private float _gridFallbackSearchRadius = 6f; // 目标不可达时的 A* 最近可走点搜索半径（世界单位）
 
     private readonly List<Vector2> _pathBuffer = new List<Vector2>(32); // 路径点缓存
     private int _currentWaypointIndex = -1; // 当前路径点索引
@@ -63,10 +57,6 @@ public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理�
     private bool _hasPath; // 是否存在有效路径
 
     private Rigidbody2D _rigidbody2D; // 刚体缓存
-    private Collider2D _collider2D; // 碰撞体缓存（用于计算避让半径与邻居关系）
-    private Collider2D[] _avoidanceHits; // 局部避让命中缓存数组（NonAlloc）
-    private float _cachedAvoidanceRadius; // 缓存的避让半径（使用碰撞体自动计算时）
-
     public bool HasPath => _hasPath; // 是否有路径的外部只读访问
     public NavigationMode CurrentMode => _currentMode; // 当前导航模式的外部只读访问
 
@@ -78,8 +68,6 @@ public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理�
         _rigidbody2D = GetComponent<Rigidbody2D>(); // 缓存刚体组件
         _rigidbody2D.gravityScale = 0f; // 禁用重力
         _rigidbody2D.freezeRotation = true; // 冻结旋转
-        _collider2D = GetComponent<Collider2D>(); // 缓存碰撞体组件（用于局部避让）
-        PrepareLocalAvoidanceCache(); // 初始化局部避让缓存（避免运行时分配）
     }
 
     /// <summary>
@@ -115,7 +103,6 @@ public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理�
         }
 
         var direction = diff.normalized; // 归一化方向
-        direction = ApplyLocalAvoidance(currentPos, direction); // 应用局部避让（在不改变目标点的前提下轻度修正移动方向）
         _currentVelocity = direction * _moveSpeed; // 计算当前速度
         _rigidbody2D.MovePosition(currentPos + _currentVelocity * Time.fixedDeltaTime); // 刚体移动
 
@@ -128,127 +115,6 @@ public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理�
                 SetDestination(_currentDestination, _currentMode, true); // 重算当前目标路径
             }
         }
-    }
-
-    /// <summary>
-    /// 初始化局部避让缓存：准备命中数组与避让半径缓存，避免运行时 GC。
-    /// </summary>
-    private void PrepareLocalAvoidanceCache() // 局部避让缓存准备入口
-    {
-        if (_avoidanceMaxHits <= 0) // 最大命中数量非法判定
-        {
-            _avoidanceMaxHits = 1; // 兜底至少为 1
-        }
-
-        _avoidanceHits = new Collider2D[_avoidanceMaxHits]; // 分配命中缓存数组（一次性分配）
-
-        if (!_useColliderBoundsForAvoidanceRadius) // 不使用碰撞体自动计算判定
-        {
-            _cachedAvoidanceRadius = 0f; // 不使用时清空缓存半径
-            return; // 直接结束
-        }
-
-        if (_collider2D == null) // 碰撞体缺失判定
-        {
-            _cachedAvoidanceRadius = 0f; // 碰撞体缺失时清空缓存半径
-            return; // 直接结束
-        }
-
-        var bounds = _collider2D.bounds; // 获取碰撞体世界 Bounds
-        var extents = bounds.extents; // 获取 Bounds 半尺寸
-        _cachedAvoidanceRadius = Mathf.Max(extents.x, extents.y); // 使用较大半轴作为避让半径（与碰撞体大小一致的量级）
-    }
-
-    /// <summary>
-    /// 应用局部避让：检测附近同层单位并叠加一个轻度“远离邻居”的修正方向。
-    /// </summary>
-    /// <param name="currentPos">当前世界坐标（2D）。</param>
-    /// <param name="direction">原始移动方向（已归一化）。</param>
-    /// <returns>修正后的移动方向（归一化）。</returns>
-    private Vector2 ApplyLocalAvoidance(Vector2 currentPos, Vector2 direction) // 局部避让应用入口
-    {
-        if (!_enableLocalAvoidance) // 未启用判定
-        {
-            return direction; // 未启用时直接返回原方向
-        }
-
-        if (_avoidanceMask.value == 0) // 避让层为空判定
-        {
-            return direction; // 未配置避让层时不处理
-        }
-
-        if (_avoidanceStrength <= 0f) // 强度非法判定
-        {
-            return direction; // 强度为 0 时不处理
-        }
-
-        var radius = _useColliderBoundsForAvoidanceRadius ? _cachedAvoidanceRadius : _avoidanceRadius; // 计算实际避让半径
-        if (radius <= 0f) // 半径非法判定
-        {
-            return direction; // 半径为 0 时不处理
-        }
-
-        if (_avoidanceHits == null || _avoidanceHits.Length == 0) // 命中数组缺失判定
-        {
-            return direction; // 缺失时直接返回原方向
-        }
-
-        var hitCount = Physics2D.OverlapCircleNonAlloc(currentPos, radius, _avoidanceHits, _avoidanceMask); // 获取范围内碰撞体（NonAlloc）
-        if (hitCount <= 0) // 未命中判定
-        {
-            return direction; // 未命中邻居时不处理
-        }
-
-        var avoidance = Vector2.zero; // 避让向量累积
-        for (int i = 0; i < hitCount; i++) // 遍历命中碰撞体
-        {
-            var hit = _avoidanceHits[i]; // 获取命中碰撞体
-            if (hit == null) // 碰撞体为空判定
-            {
-                continue; // 为空时跳过
-            }
-
-            var hitRigidbody = hit.attachedRigidbody; // 获取命中碰撞体附带刚体
-            if (hitRigidbody == null) // 刚体缺失判定
-            {
-                continue; // 无刚体时跳过
-            }
-
-            if (hitRigidbody == _rigidbody2D) // 命中自身判定
-            {
-                continue; // 忽略自身
-            }
-
-            var otherPos = hitRigidbody.position; // 获取邻居刚体位置
-            var diff = currentPos - otherPos; // 计算远离邻居的方向
-            var distSqr = diff.sqrMagnitude; // 计算距离平方
-            if (distSqr <= 0.0001f) // 距离过小判定
-            {
-                continue; // 距离过小不处理
-            }
-
-            var dist = Mathf.Sqrt(distSqr); // 计算距离
-            if (dist >= radius) // 超出半径判定
-            {
-                continue; // 超出半径时跳过
-            }
-
-            var weight = (radius - dist) / radius; // 根据距离计算权重（越近权重越大）
-            avoidance += (diff / dist) * weight; // 按权重叠加单位化避让方向
-        }
-
-        if (avoidance.sqrMagnitude <= 0.0001f) // 避让向量为空判定
-        {
-            return direction; // 无有效避让时返回原方向
-        }
-
-        var finalDirection = direction + avoidance.normalized * _avoidanceStrength; // 叠加避让修正方向
-        if (finalDirection.sqrMagnitude <= 0.0001f) // 方向退化判定
-        {
-            return direction; // 退化时回退原方向
-        }
-
-        return finalDirection.normalized; // 返回归一化后的最终方向
     }
 
     /// <summary>
@@ -270,6 +136,20 @@ public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理�
         if (TryBuildGridPath(destination))
         {
             return true; // A* 路径成功时返回
+        }
+
+        if (!isRepath && TryResolveDestination(destination, out var resolvedDestination)) // 外部调用失败后尝试修正目标
+        {
+            _currentDestination = resolvedDestination; // 记录修正后的目标点
+            if (TryBuildNavMeshPath(resolvedDestination))
+            {
+                return true; // 修正后 NavMesh 成功时返回
+            }
+
+            if (TryBuildGridPath(resolvedDestination))
+            {
+                return true; // 修正后 A* 成功时返回
+            }
         }
 
         if (!isRepath)
@@ -456,6 +336,185 @@ public sealed class HybridNavigationAgent : MonoBehaviour // 混合导航代理�
         _hasPath = _pathBuffer.Count > 0; // 更新路径标记
         _currentMode = NavigationMode.GridAStar; // 标记为 A* 模式
         return _hasPath; // 返回是否成功
+    }
+
+    /// <summary>
+    /// 尝试将不可达目标修正为最近可走点。
+    /// </summary>
+    /// <param name="destination">原目标坐标。</param>
+    /// <param name="resolvedDestination">输出修正后的目标坐标。</param>
+    private bool TryResolveDestination(Vector2 destination, out Vector2 resolvedDestination) // 目标修正入口
+    {
+        resolvedDestination = destination; // 默认返回原目标
+        var resolved = false; // 记录是否找到修正点
+
+        if (_currentMode != NavigationMode.GridAStar) // 非强制 A* 模式时优先尝试 NavMesh
+        {
+            if (TrySampleNavMeshDestination(destination, out var navMeshDestination))
+            {
+                resolvedDestination = navMeshDestination; // 记录 NavMesh 采样点
+                resolved = true; // 标记已修正
+            }
+        }
+
+        if (!resolved) // NavMesh 未修正时尝试 A* 网格
+        {
+            if (TrySampleGridDestination(destination, out var gridDestination))
+            {
+                resolvedDestination = gridDestination; // 记录网格采样点
+                resolved = true; // 标记已修正
+            }
+        }
+
+        return resolved; // 返回是否修正成功
+    }
+
+    /// <summary>
+    /// 尝试在 NavMesh 上采样最近可走点。
+    /// </summary>
+    /// <param name="destination">原目标坐标。</param>
+    /// <param name="resolvedDestination">输出修正后的目标坐标。</param>
+    private bool TrySampleNavMeshDestination(Vector2 destination, out Vector2 resolvedDestination) // NavMesh 采样入口
+    {
+        resolvedDestination = destination; // 默认返回原目标
+        if (_fallbackSampleRadius <= 0f) // 采样半径禁用判定
+        {
+            return false; // 禁用时直接失败
+        }
+
+        var filter = new NavMeshQueryFilter(); // 创建查询过滤器
+        filter.agentTypeID = _navMeshAgentTypeId; // 指定代理类型
+        filter.areaMask = NavMesh.AllAreas; // 使用所有区域
+        var destinationPosition = ToNavMeshPosition(destination); // 转换目标坐标到 NavMesh 坐标
+        if (!NavMesh.SamplePosition(destinationPosition, out var endHit, _fallbackSampleRadius, filter)) // 采样最近点
+        {
+            return false; // 采样失败时返回
+        }
+
+        resolvedDestination = FromNavMeshPosition(endHit.position); // 回写采样点
+        return true; // 返回采样成功
+    }
+
+    /// <summary>
+    /// 尝试在 A* 网格上采样最近可走点。
+    /// </summary>
+    /// <param name="destination">原目标坐标。</param>
+    /// <param name="resolvedDestination">输出修正后的目标坐标。</param>
+    private bool TrySampleGridDestination(Vector2 destination, out Vector2 resolvedDestination) // 网格采样入口
+    {
+        resolvedDestination = destination; // 默认返回原目标
+        if (_gridFallbackSearchRadius <= 0f) // 搜索半径禁用判定
+        {
+            return false; // 禁用时直接失败
+        }
+
+        if (!NavGridArea.TryGetByPositionOrNearest(destination, out var area)) // 获取最近网格区域
+        {
+            return false; // 无区域时失败
+        }
+
+        var cellSize = area.CellSize; // 读取格子大小
+        if (cellSize <= 0.0001f) // 格子大小异常判定
+        {
+            return false; // 格子异常时失败
+        }
+
+        var areaCenter = area.AreaCenter; // 读取区域中心
+        var areaExtents = area.AreaExtents; // 读取区域半尺寸
+        var width = Mathf.Max(1, Mathf.CeilToInt((areaExtents.x * 2f) / cellSize)); // 计算网格宽度
+        var height = Mathf.Max(1, Mathf.CeilToInt((areaExtents.y * 2f) / cellSize)); // 计算网格高度
+        var origin = new Vector2(areaCenter.x - areaExtents.x, areaCenter.y - areaExtents.y); // 计算网格原点
+
+        var cellX = Mathf.FloorToInt((destination.x - origin.x) / cellSize); // 计算目标格子 X
+        var cellY = Mathf.FloorToInt((destination.y - origin.y) / cellSize); // 计算目标格子 Y
+        cellX = Mathf.Clamp(cellX, 0, width - 1); // 夹取格子 X 到范围内
+        cellY = Mathf.Clamp(cellY, 0, height - 1); // 夹取格子 Y 到范围内
+
+        var maxCellRadius = Mathf.Max(0, Mathf.CeilToInt(_gridFallbackSearchRadius / cellSize)); // 计算最大搜索格数
+        var bestDist = float.MaxValue; // 最近距离缓存
+        var bestPos = destination; // 最近位置缓存
+        var found = false; // 是否找到可走点
+
+        for (int r = 0; r <= maxCellRadius; r++) // 按环半径逐圈搜索
+        {
+            var foundInRing = false; // 当前环是否找到候选
+            for (int dx = -r; dx <= r; dx++) // 遍历环的 X 偏移
+            {
+                for (int dy = -r; dy <= r; dy++) // 遍历环的 Y 偏移
+                {
+                    if (r > 0 && Mathf.Abs(dx) != r && Mathf.Abs(dy) != r) // 仅检查环边界
+                    {
+                        continue; // 非环边界点跳过
+                    }
+
+                    var x = cellX + dx; // 计算候选格子 X
+                    var y = cellY + dy; // 计算候选格子 Y
+                    if (x < 0 || x >= width || y < 0 || y >= height) // 越界判定
+                    {
+                        continue; // 越界时跳过
+                    }
+
+                    if (IsGridCellBlocked(origin, cellSize, x, y, area.StaticObstacleMask)) // 障碍格子判定
+                    {
+                        continue; // 被障碍阻挡时跳过
+                    }
+
+                    var worldPos = GridCellToWorld(origin, cellSize, x, y); // 转换为世界坐标
+                    var dist = (worldPos - destination).sqrMagnitude; // 计算距离平方
+                    if (dist < bestDist) // 更近判定
+                    {
+                        bestDist = dist; // 更新最优距离
+                        bestPos = worldPos; // 更新最优位置
+                        found = true; // 标记找到
+                    }
+
+                    foundInRing = true; // 标记本环存在候选
+                }
+            }
+
+            if (foundInRing && found) // 本环已找到可走点
+            {
+                break; // 最近环找到即可退出
+            }
+        }
+
+        if (!found) // 未找到可走点判定
+        {
+            return false; // 未找到时失败
+        }
+
+        resolvedDestination = bestPos; // 回写最优位置
+        return true; // 返回成功
+    }
+
+    /// <summary>
+    /// 网格格子坐标转换为世界坐标。
+    /// </summary>
+    /// <param name="origin">网格原点。</param>
+    /// <param name="cellSize">格子大小。</param>
+    /// <param name="x">格子 X。</param>
+    /// <param name="y">格子 Y。</param>
+    private Vector2 GridCellToWorld(Vector2 origin, float cellSize, int x, int y) // 网格坐标转换入口
+    {
+        return new Vector2( // 返回世界坐标
+            origin.x + (x + 0.5f) * cellSize, // 计算 X 坐标
+            origin.y + (y + 0.5f) * cellSize); // 计算 Y 坐标
+    }
+
+    /// <summary>
+    /// 判断网格格子是否被障碍阻挡。
+    /// </summary>
+    /// <param name="origin">网格原点。</param>
+    /// <param name="cellSize">格子大小。</param>
+    /// <param name="x">格子 X。</param>
+    /// <param name="y">格子 Y。</param>
+    /// <param name="staticObstacleMask">静态障碍层。</param>
+    private bool IsGridCellBlocked(Vector2 origin, float cellSize, int x, int y, LayerMask staticObstacleMask) // 网格障碍检测入口
+    {
+        var center = GridCellToWorld(origin, cellSize, x, y); // 计算格子中心点
+        var extents = new Vector2(_agentRadius * 2f, _agentRadius * 2f); // 计算单位占用尺寸
+        var size = new Vector2(Mathf.Min(cellSize, extents.x), Mathf.Min(cellSize, extents.y)); // 计算检测盒大小
+        return Physics2D.OverlapBox(center, size, 0f, _dynamicObstacleMask | staticObstacleMask); // 重叠检测障碍
     }
 
     /// <summary>
