@@ -639,7 +639,7 @@ public class BulletEntity : EntityBase // 子弹实体定义
             return; // 无伤害时返回
         }
 
-        target.TryApplyDamage(_damage, _isCrit); // 施加伤害
+        target.TryApplyDamage(_owner, _damage, _isCrit); // 施加伤害（含防御/暴击/闪避）
     }
 
     /// <summary>

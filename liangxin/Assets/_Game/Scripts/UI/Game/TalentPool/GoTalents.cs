@@ -26,6 +26,16 @@ public class GoTalents : MonoBehaviour
     [SerializeField]
     private TextMeshProUGUI _txtType;
     /// <summary>
+    /// 平台
+    /// </summary>
+    [SerializeField]
+    private TextMeshProUGUI _txtPlatform;
+    /// <summary>
+    /// 招聘波数
+    /// </summary>
+    [SerializeField]
+    private TextMeshProUGUI _txtRecruitWave;
+    /// <summary>
     /// 人才价格
     /// </summary>
     [SerializeField]
@@ -38,6 +48,22 @@ public class GoTalents : MonoBehaviour
     /// 当前条目绑定的员工配置 Id（Employee.csv 的 Id）。
     /// </summary>
     private int _employeeId; // 当前员工 Id 缓存
+    /// <summary>
+    /// 当前条目绑定的招聘类型。
+    /// </summary>
+    private RecruitType _recruitType; // 招聘类型缓存
+    /// <summary>
+    /// 当前条目绑定的招聘平台名称。
+    /// </summary>
+    private string _recruitPlatformName; // 招聘平台名称缓存
+    /// <summary>
+    /// 当前条目绑定的招聘波数。
+    /// </summary>
+    private int _recruitWaveCount; // 招聘波数缓存
+    /// <summary>
+    /// 当前条目绑定的最终招聘价格。
+    /// </summary>
+    private int _recruitmentPrice; // 招聘价格缓存
     /// <summary>
     /// 是否已绑定按钮点击事件（避免重复绑定）。
     /// </summary>
@@ -64,23 +90,39 @@ public class GoTalents : MonoBehaviour
     /// 设置人才显示数据。
     /// </summary>
     /// <param name="row">员工数据行（来自 Employee.csv）。</param>
-    /// <param name="styleText">风格字符串（由 StyleIds 解析得到）。</param>
-    public void SetData(EmployeeUnitRow row, string styleText) // 人才数据刷新入口
+    /// <param name="styleText">风格字符串。</param>
+    /// <param name="platformName">招聘平台名称。</param>
+    /// <param name="recruitType">招聘类型。</param>
+    /// <param name="recruitWaveCount">招聘波数。</param>
+    /// <param name="recruitmentPrice">最终招聘价格。</param>
+    public void SetData(EmployeeUnitRow row, string styleText, string platformName, RecruitType recruitType, int recruitWaveCount, int recruitmentPrice) // 人才数据刷新入口
     {
         if (row == null) // 数据为空判定
         {
             _employeeId = 0; // 清空员工 Id，避免点击误触发
+            _recruitType = RecruitType.Normal; // 重置招聘类型
+            _recruitPlatformName = string.Empty; // 清空平台名称
+            _recruitWaveCount = 0; // 清空招聘波数
+            _recruitmentPrice = 0; // 清空招聘价格
             SetNameText(string.Empty); // 清空名称显示
             SetTypeText(string.Empty); // 清空类型显示
+            SetPlatformText(string.Empty); // 清空平台显示
+            SetRecruitWaveText(string.Empty); // 清空波数显示
             SetRecruitmentFeeText(string.Empty); // 清空价格显示
             SetHeadPortrait(string.Empty); // 清空头像显示
             return; // 数据为空时直接退出
         }
 
         _employeeId = row.Id; // 缓存员工 Id，用于点击招聘时派发事件
+        _recruitType = recruitType; // 缓存招聘类型
+        _recruitPlatformName = platformName; // 缓存招聘平台名称
+        _recruitWaveCount = recruitWaveCount; // 缓存招聘波数
+        _recruitmentPrice = recruitmentPrice; // 缓存最终招聘价格
         SetNameText(row.Name); // 刷新名称显示
         SetTypeText(styleText); // 刷新风格/类型显示
-        SetRecruitmentFeeText(row.RecruitmentPrice); // 刷新招聘价格显示
+        SetPlatformText(platformName); // 刷新平台显示
+        SetRecruitWaveText(recruitType, recruitWaveCount); // 刷新招聘波数显示
+        SetRecruitmentFeeText(recruitmentPrice); // 刷新招聘价格显示
         SetHeadPortrait(row.IconPath); // 刷新头像显示（无兜底）
     }
 
@@ -148,9 +190,14 @@ public class GoTalents : MonoBehaviour
 
         var evt = new EmployeeRecruitRequestedEvent // 创建招聘请求事件
         {
-            EmployeeId = _employeeId // 写入员工配置 Id
+            EmployeeId = _employeeId, // 写入员工配置 Id
+            RecruitType = _recruitType, // 写入招聘类型
+            PlatformName = _recruitPlatformName, // 写入招聘平台名称
+            RecruitmentPrice = _recruitmentPrice, // 写入最终招聘价格
+            RecruitWaveCount = _recruitWaveCount // 写入招聘波数
         };
         CY.Event.Post(ref evt); // 派发事件（由玩法侧处理创建）
+        gameObject.SetActive(false); // 点击招聘后隐藏当前条目
     }
 
     /// <summary>
@@ -202,6 +249,69 @@ public class GoTalents : MonoBehaviour
 
         text ??= string.Empty; // 文本为空时使用空字符串保护
         _txtType.SetText(text); // 写入类型文本
+    }
+
+    /// <summary>
+    /// 设置平台文本。
+    /// </summary>
+    /// <param name="text">平台字符串。</param>
+    private void SetPlatformText(string text) // 平台文本设置入口
+    {
+        if (_txtPlatform == null) // 文本为空判定
+        {
+            return; // 文本为空时直接退出
+        }
+
+        text ??= string.Empty; // 文本为空时使用空字符串保护
+        _txtPlatform.SetText(text); // 写入平台文本
+    }
+
+    /// <summary>
+    /// 设置招聘波数文本（直接字符串）。
+    /// </summary>
+    /// <param name="text">波数字符串。</param>
+    private void SetRecruitWaveText(string text) // 波数文本设置入口
+    {
+        if (_txtRecruitWave == null) // 文本为空判定
+        {
+            return; // 文本为空时直接退出
+        }
+
+        text ??= string.Empty; // 文本为空时使用空字符串保护
+        _txtRecruitWave.SetText(text); // 写入波数文本
+    }
+
+    /// <summary>
+    /// 设置招聘波数文本（按类型格式化）。
+    /// </summary>
+    /// <param name="recruitType">招聘类型。</param>
+    /// <param name="recruitWaveCount">招聘波数。</param>
+    private void SetRecruitWaveText(RecruitType recruitType, int recruitWaveCount) // 波数格式化入口
+    {
+        if (_txtRecruitWave == null) // 文本为空判定
+        {
+            return; // 文本为空时直接退出
+        }
+
+        if (recruitType == RecruitType.Urgent) // 急聘判定
+        {
+            _txtRecruitWave.SetText("立即"); // 急聘显示立即
+            return; // 急聘时直接退出
+        }
+
+        if (recruitType == RecruitType.Normal) // 普通招聘判定
+        {
+            _txtRecruitWave.SetText("等待{0}波", recruitWaveCount); // 普通招聘显示等待波数
+            return; // 普通招聘时直接退出
+        }
+
+        if (recruitType == RecruitType.Temp) // 临时工判定
+        {
+            _txtRecruitWave.SetText("持续{0}波", recruitWaveCount); // 临时工显示持续波数
+            return; // 临时工时直接退出
+        }
+
+        _txtRecruitWave.SetText(string.Empty); // 未知类型时清空显示
     }
 
     /// <summary>

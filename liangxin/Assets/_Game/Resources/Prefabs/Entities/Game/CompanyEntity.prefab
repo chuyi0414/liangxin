@@ -177,7 +177,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9164cc50e7c351a449719b9be9550cce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _forceChaseDistance: 2
+  _forceChaseDistance: 4
   _absorptionRange: {fileID: 3628130889650574737}
   _createPoint: {fileID: 5950673492337562751}
 --- !u!208 &7312062283359229281

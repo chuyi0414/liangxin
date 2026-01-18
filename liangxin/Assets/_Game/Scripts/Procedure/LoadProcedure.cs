@@ -11,6 +11,10 @@ public class LoadProcedure : ProcedureBase
     private const string PlayerDataCsvPath = "DataTable/Unit/Player/Player";
     private const string EmployeeDataTableName = "Employee"; // 员工数据表名
     private const string EmployeeDataCsvPath = "DataTable/Unit/Employee/Employee"; // 员工数据表路径
+    private const string RecruitConfigTableName = "RecruitConfig"; // 招聘配置表名
+    private const string RecruitConfigCsvPath = "DataTable/Unit/Employee/Recruit/RecruitConfig"; // 招聘配置表路径
+    private const string RecruitPlatformTableName = "RecruitPlatform"; // 招聘平台表名
+    private const string RecruitPlatformCsvPath = "DataTable/Unit/Employee/Recruit/RecruitPlatform"; // 招聘平台表路径
     private const string UnitStyleTableName = "UnitStyle"; // 单位风格表名
     private const string UnitStyleCsvPath = "DataTable/Unit/Employee/Style/UnitStyle"; // 单位风格表路径
     private const string BulletArrayTableName = "BulletArray"; // 子弹数组表名
@@ -32,6 +36,8 @@ public class LoadProcedure : ProcedureBase
         LoadBattleData();
         LoadPlayerData();
         LoadEmployeeData(); // 加载员工数据
+        LoadRecruitConfigData(); // 加载招聘配置数据
+        LoadRecruitPlatformData(); // 加载招聘平台数据
         LoadUnitStyleData(); // 加载单位风格数据
         LoadBulletArrayData(); // 加载子弹数组数据
         LoadEnemyData();
@@ -110,6 +116,46 @@ public class LoadProcedure : ProcedureBase
         }
 
         CY.Data.LoadFromCsv<EmployeeUnitRow>(csvAsset.text, EmployeeDataTableName); // 解析员工数据表
+    }
+
+    /// <summary>
+    /// 加载招聘配置数据（CSV）。
+    /// </summary>
+    private void LoadRecruitConfigData() // 招聘配置数据加载入口
+    {
+        if (CY.Data.HasDataTable(RecruitConfigTableName)) // 判断是否已加载
+        {
+            CY.Data.UnloadDataTable(RecruitConfigTableName); // 卸载旧表
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(RecruitConfigCsvPath); // 加载 CSV 资源
+        if (csvAsset == null) // 资源为空判定
+        {
+            CY.LogError($"[LoadProcedure] 加载招聘配置失败：{RecruitConfigCsvPath}"); // 输出错误日志
+            return; // 资源为空时退出
+        }
+
+        CY.Data.LoadFromCsv<RecruitConfigRow>(csvAsset.text, RecruitConfigTableName); // 解析招聘配置表
+    }
+
+    /// <summary>
+    /// 加载招聘平台数据（CSV）。
+    /// </summary>
+    private void LoadRecruitPlatformData() // 招聘平台数据加载入口
+    {
+        if (CY.Data.HasDataTable(RecruitPlatformTableName)) // 判断是否已加载
+        {
+            CY.Data.UnloadDataTable(RecruitPlatformTableName); // 卸载旧表
+        }
+
+        var csvAsset = CY.Resource.Load<TextAsset>(RecruitPlatformCsvPath); // 加载 CSV 资源
+        if (csvAsset == null) // 资源为空判定
+        {
+            CY.LogError($"[LoadProcedure] 加载招聘平台失败：{RecruitPlatformCsvPath}"); // 输出错误日志
+            return; // 资源为空时退出
+        }
+
+        CY.Data.LoadFromCsv<RecruitPlatformRow>(csvAsset.text, RecruitPlatformTableName); // 解析招聘平台表
     }
 
     /// <summary>

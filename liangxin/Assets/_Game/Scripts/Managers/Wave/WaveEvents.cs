@@ -49,6 +49,8 @@ public struct WaveFinishedEvent // 波次结束事件结构体
     public int WaveId; // 波次 Id
     /// <summary>是否为奇袭波次。</summary>
     public bool IsAssault; // 奇袭标记
+    /// <summary>是否允许自动推进。</summary>
+    public bool AutoAdvance; // 自动推进标记
 }
 
 /// <summary>

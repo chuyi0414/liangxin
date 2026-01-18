@@ -513,9 +513,12 @@ public sealed partial class WaveManager // 波次管理器分部定义
     /// </summary>
     private void FinishWave() // 波次结束入口
     {
-        PostWaveFinished(); // 派发波次结束事件
+        var finishedWaveId = _currentWaveId; // 缓存结束波次 Id
+        var finishedIsAssault = false; // 缓存奇袭标记（当前未使用奇袭）
+        var finishedAutoAdvance = _currentWave != null && _currentWave.Plan != null && _currentWave.Plan.AutoAdvance != 0; // 缓存自动推进标记
         _completedWaveCount += 1; // 累加已完成波次数
         ResetRuntimeInternal(); // 清理运行时
+        PostWaveFinished(finishedWaveId, finishedIsAssault, finishedAutoAdvance); // 派发波次结束事件
     }
 
     /// <summary>

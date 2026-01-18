@@ -8,6 +8,8 @@ public sealed class DamageTextItem : MonoBehaviour // 伤害飘字组件
 {
     /// <summary>伤害文本。</summary>
     [SerializeField] private TMP_Text _text;
+    /// <summary>伤害文本正负（-/+）。</summary>
+    [SerializeField] private TMP_Text _txtPositiveAndNegative;
     /// <summary>透明度控制（可选）。</summary>
     [SerializeField] private CanvasGroup _canvasGroup;
     /// <summary>生命周期（秒）。</summary>
@@ -20,6 +22,8 @@ public sealed class DamageTextItem : MonoBehaviour // 伤害飘字组件
     [SerializeField] private Color _normalColor = new Color(1f, 1f, 1f, 1f);
     /// <summary>暴击伤害颜色。</summary>
     [SerializeField] private Color _critColor = new Color(1f, 0.25f, 0.25f, 1f);
+    /// <summary>闪避文本颜色。</summary>
+    [SerializeField] private Color _dodgeColor = new Color(0.7f, 0.9f, 1f, 1f); // 闪避文本颜色
 
     /// <summary>缓存 RectTransform。</summary>
     private RectTransform _rectTransform;
@@ -56,7 +60,8 @@ public sealed class DamageTextItem : MonoBehaviour // 伤害飘字组件
     /// <param name="worldPos">世界坐标。</param>
     /// <param name="damage">伤害值。</param>
     /// <param name="isCrit">是否暴击。</param>
-    public void Show(Vector2 worldPos, int damage, bool isCrit)
+    /// <param name="isDodge">是否闪避。</param>
+    public void Show(Vector2 worldPos, int damage, bool isCrit, bool isDodge)
     {
         _worldPosition = worldPos; // 记录世界坐标
         _elapsed = 0f; // 重置计时
@@ -65,8 +70,16 @@ public sealed class DamageTextItem : MonoBehaviour // 伤害飘字组件
 
         if (_text != null)
         {
-            _text.color = isCrit ? _critColor : _normalColor; // 设置颜色
-            _text.SetText("{0}", damage); // 设置文本内容
+            if (isDodge) // 闪避显示判定
+            {
+                _text.color = _dodgeColor; // 设置闪避颜色
+                _text.SetText("闪避"); // 设置闪避文本
+            }
+            else // 正常伤害显示
+            {
+                _text.color = isCrit ? _critColor : _normalColor; // 设置伤害颜色
+                _text.SetText("{0}", damage); // 设置文本内容
+            }
         }
 
         ApplyVisibility(true); // 应用可见状态

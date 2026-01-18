@@ -1,6 +1,6 @@
-WaveId,Name,EndType,EndValue,EndId,AutoAdvance,NextWaveId,TrackIds,UnlockAfterWave,ExpireAfterWave,RandomWeight,DisplayIndex
-1,潮水来袭,6,0,,1,2,101,0,0,10,1
-2,钢盾掩护,6,0,,1,3,201|202,0,0,10,2
-3,双翼夹击,6,0,,1,4,301|302,0,0,10,3
-4,四面围攻,6,0,,1,5,401|402|403|404,0,0,10,4
-5,诱饵突击,6,0,,0,0,501|502,0,0,10,5
+WaveId,Name,EndType,EndValue,EndId,AutoAdvance,NextWaveId,TrackIds,UnlockAfterWave,ExpireAfterWave,RandomWeight
+1,潮水来袭,6,0,,1,-1,101,0,0,10
+2,钢盾掩护,6,0,,1,-1,201|202,0,0,10
+3,双翼夹击,6,0,,1,-1,301|302,0,0,10
+4,四面围攻,6,0,,1,-1,401|402|403|404,0,0,10
+5,诱饵突击,6,0,,0,-1,501|502,0,0,10

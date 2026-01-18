@@ -30,6 +30,8 @@ public sealed class PlayerUnitRow : IDataRow
     public float DefensePenetrationRate;
     /// <summary>暴击率（0-1）。</summary>
     public float CritRate;
+    /// <summary>暴击倍率（>=1）。</summary>
+    public float CritMultiplier; // 老板暴击倍率
     /// <summary>闪避率（0-1）。</summary>
     public float DodgeRate;
     /// <summary>是否远程单位。</summary>
@@ -44,6 +46,8 @@ public sealed class PlayerUnitRow : IDataRow
     public float BulletSpeed;
     /// <summary>子弹数组配置 Id（对应 BulletArray.csv）。</summary>
     public int BulletArrayId;
+    /// <summary>头像图标资源路径（Resources 相对路径，无扩展名）。</summary>
+    public string IconPath; // 老板头像路径
     /// <summary>预制体资源路径（Resources 相对路径，无扩展名）。</summary>
     public string PrefabPath; // 老板预制体路径
 
@@ -73,6 +77,8 @@ public sealed class PlayerUnitRow : IDataRow
         AttackInterval = float.Parse(values[16], CultureInfo.InvariantCulture);
         BulletSpeed = float.Parse(values[17], CultureInfo.InvariantCulture); // 读取子弹速度（允许为 0）
         BulletArrayId = int.Parse(values[18]); // 读取子弹数组配置 Id
-        PrefabPath = values.Length > 19 ? values[19] : string.Empty; // 读取预制体路径（兼容旧表）
+        IconPath = values.Length > 19 ? values[19] : string.Empty; // 读取头像图标路径（兼容旧表）
+        PrefabPath = values.Length > 20 ? values[20] : string.Empty; // 读取预制体路径（兼容旧表）
+        CritMultiplier = values.Length > 21 ? float.Parse(values[21], CultureInfo.InvariantCulture) : 2f; // 读取暴击倍率（兼容旧表）
     }
 }

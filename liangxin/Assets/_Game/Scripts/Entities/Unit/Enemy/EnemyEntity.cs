@@ -134,6 +134,7 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
             DefensePenetration = row.DefensePenetration, // 固定防御穿透
             DefensePenetrationRate = row.DefensePenetrationRate, // 百分比防御穿透
             CritRate = row.CritRate, // 暴击率
+            CritMultiplier = row.CritMultiplier, // 暴击倍率
             DodgeRate = row.DodgeRate, // 闪避率
             IsRanged = row.IsRanged, // 是否远程
             MoveSpeed = row.MoveSpeed, // 移动速度

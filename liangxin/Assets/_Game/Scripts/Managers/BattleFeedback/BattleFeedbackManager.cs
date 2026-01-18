@@ -358,11 +358,12 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
             return;
         }
 
-        CY.Event.Subscribe<UnitSpawnedEvent>(OnUnitSpawned, this);
-        CY.Event.Subscribe<UnitDespawnedEvent>(OnUnitDespawned, this);
-        CY.Event.Subscribe<UnitHpChangedEvent>(OnUnitHpChanged, this);
-        CY.Event.Subscribe<UnitDamagePopupEvent>(OnUnitDamagePopup, this);
-        CY.Event.Subscribe<UnitLifeStateChangedEvent>(OnUnitLifeStateChanged, this);
+        CY.Event.Subscribe<UnitSpawnedEvent>(OnUnitSpawned, this); // 订阅单位生成事件
+        CY.Event.Subscribe<UnitDespawnedEvent>(OnUnitDespawned, this); // 订阅单位移除事件
+        CY.Event.Subscribe<UnitHpChangedEvent>(OnUnitHpChanged, this); // 订阅单位血量变化事件
+        CY.Event.Subscribe<UnitDamagedEvent>(OnUnitDamaged, this); // 订阅单位受伤事件
+        CY.Event.Subscribe<UnitDamagePopupEvent>(OnUnitDamagePopup, this); // 订阅伤害飘字事件
+        CY.Event.Subscribe<UnitLifeStateChangedEvent>(OnUnitLifeStateChanged, this); // 订阅单位生命状态变化事件
         _subscribed = true;
     }
 
@@ -381,28 +382,17 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
             return;
         }
 
-        if (!EnsureHpUiReady())
+        if (evt.Unit.Camp == UnitCamp.Player) // 玩家血条改由 GameUIPanel 处理
         {
-            return;
+            return; // 玩家不创建世界血条
         }
 
         var unitId = evt.Unit.Id;
-        if (_hpBarMap.TryGetValue(unitId, out var existing))
+        if (_hpBarMap.TryGetValue(unitId, out var existing)) // 生成时存在旧血条判定
         {
-            existing.SetHp(evt.CurrentHp, evt.MaxHp);
-            return;
+            _hpBarMap.Remove(unitId); // 移除旧映射
+            RemoveHpBarFromList(existing); // 回收旧血条实例
         }
-
-        var item = GetHpBarFromPool();
-        if (item == null)
-        {
-            return;
-        }
-
-        item.Bind(evt.Unit, _hpBarWorldOffset, _useColliderTopOffset);
-        item.SetHp(evt.CurrentHp, evt.MaxHp);
-        _hpBarMap[unitId] = item;
-        _activeHpBars.Add(item);
     }
 
     /// <summary>
@@ -438,26 +428,66 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
             return;
         }
 
-        if (!EnsureHpUiReady())
+        if (evt.Unit.Camp == UnitCamp.Player) // 玩家血条改由 GameUIPanel 处理
         {
-            return;
+            return; // 玩家不更新世界血条
         }
 
         var unitId = evt.Unit.Id;
-        if (!_hpBarMap.TryGetValue(unitId, out var item))
+        if (!_hpBarMap.TryGetValue(unitId, out var item)) // 未创建血条判定
         {
-            item = GetHpBarFromPool();
-            if (item == null)
-            {
-                return;
-            }
-
-            item.Bind(evt.Unit, _hpBarWorldOffset, _useColliderTopOffset);
-            _hpBarMap[unitId] = item;
-            _activeHpBars.Add(item);
+            return; // 未创建血条时不做更新
         }
 
-        item.SetHp(evt.CurrentHp, evt.MaxHp);
+        item.SetHp(evt.CurrentHp, evt.MaxHp); // 更新已存在血条数值
+    }
+
+    /// <summary>
+    /// 单位受伤事件回调（仅扣血时触发，用于显示血条）。
+    /// </summary>
+    /// <param name="evt">受伤事件。</param>
+    private void OnUnitDamaged(ref UnitDamagedEvent evt) // 单位受伤事件回调入口
+    {
+        if (_disposed) // 已释放判定
+        {
+            return; // 已释放时直接退出
+        }
+
+        if (evt.Unit == null || evt.MaxHp <= 0 || evt.Unit.LifeState == UnitLifeState.Dead) // 单位无效判定
+        {
+            return; // 无效单位时直接退出
+        }
+
+        if (evt.Damage <= 0) // 伤害数值无效判定
+        {
+            return; // 伤害无效时直接退出
+        }
+
+        if (evt.Unit.Camp == UnitCamp.Player) // 玩家血条改由 GameUIPanel 处理
+        {
+            return; // 玩家不创建世界血条
+        }
+
+        if (!EnsureHpUiReady()) // 血条 UI 未就绪判定
+        {
+            return; // 未就绪时直接退出
+        }
+
+        var unitId = evt.Unit.Id; // 读取单位 Id
+        if (!_hpBarMap.TryGetValue(unitId, out var item)) // 未创建血条判定
+        {
+            item = GetHpBarFromPool(); // 从对象池获取血条
+            if (item == null) // 获取失败判定
+            {
+                return; // 获取失败时直接退出
+            }
+
+            item.Bind(evt.Unit, _hpBarWorldOffset, _useColliderTopOffset); // 绑定血条与跟随参数
+            _hpBarMap[unitId] = item; // 写入血条映射
+            _activeHpBars.Add(item); // 加入激活列表
+        }
+
+        item.SetHp(evt.CurrentHp, evt.MaxHp); // 刷新血条数值
     }
 
     /// <summary>
@@ -487,7 +517,7 @@ public sealed class BattleFeedbackManager : MonoBehaviour, IInitializable, IUpda
         }
 
         var worldPos = ResolveDamageWorldPosition(evt.Unit);
-        item.Show(worldPos, evt.Damage, evt.IsCrit);
+        item.Show(worldPos, evt.Damage, evt.IsCrit, evt.IsDodge); // 显示飘字（含闪避/暴击）
         _activeDamageTexts.Add(item);
     }
 

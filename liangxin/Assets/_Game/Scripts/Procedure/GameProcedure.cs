@@ -74,6 +74,23 @@ public class GameProcedure : ProcedureBase
             entityManager.RecycleAllEntities("MoneyEntity"); // 回收金币实体
             entityManager.RecycleAllEntities("BlackHeartEntity"); // 回收黑心实体
             entityManager.RecycleAllEntities("Players"); // 回收玩家实体
+            if (unitManager != null) // 单位管理器存在判定
+            {
+                var employees = unitManager.Employees; // 获取员工列表
+                if (employees != null && employees.Count > 0) // 员工列表有效判定
+                {
+                    for (int i = employees.Count - 1; i >= 0; i--) // 倒序遍历员工列表
+                    {
+                        var employee = employees[i]; // 获取当前员工实体
+                        if (employee == null) // 员工为空判定
+                        {
+                            continue; // 员工为空时跳过
+                        }
+
+                        entityManager.RecycleEntity(employee); // 回收员工实体
+                    }
+                }
+            }
             if (unitManager != null && unitManager.TryGetDefaultPlayerRow(out var playerRow))
             {
                 var bulletArrayId = playerRow.BulletArrayId; // 读取玩家子弹数组 Id

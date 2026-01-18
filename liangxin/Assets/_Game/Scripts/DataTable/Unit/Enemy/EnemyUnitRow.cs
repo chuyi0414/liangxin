@@ -35,6 +35,8 @@ public sealed class EnemyUnitRow : IDataRow
     public float DefensePenetrationRate;
     /// <summary>暴击率（0-1）。</summary>
     public float CritRate;
+    /// <summary>暴击倍率（>=1）。</summary>
+    public float CritMultiplier; // 敌人暴击倍率
     /// <summary>闪避率（0-1）。</summary>
     public float DodgeRate;
     /// <summary>是否远程单位。</summary>
@@ -107,6 +109,7 @@ public sealed class EnemyUnitRow : IDataRow
         BlackHeartDropMax = int.Parse(values[26]); // 解析黑心掉落最大数量
         StyleIds = values[27]; // 解析风格 Id 列表字符串
         PrefabPath = values.Length > 28 ? values[28] : string.Empty; // 解析预制体路径（兼容旧表）
+        CritMultiplier = values.Length > 29 ? float.Parse(values[29], CultureInfo.InvariantCulture) : 2f; // 解析暴击倍率（兼容旧表）
     }
 
     /// <summary>

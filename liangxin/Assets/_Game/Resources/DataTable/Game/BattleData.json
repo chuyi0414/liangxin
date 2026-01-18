@@ -8,5 +8,6 @@
     "CompanyConscienceDamagePerPoint": 10,
     "CompanyPollution": 20,
     "CompanyPollutionDamagePerPoint": 5,
-    "TalentPoolDisplayCount": 3
+    "TalentPoolDisplayCount": 3,
+    "TalentPoolRefreshPrice": 50
 }

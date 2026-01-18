@@ -49,6 +49,8 @@ public struct UnitStats
     public float DefensePenetrationRate;
     /// <summary>暴击率（0-1）。</summary>
     public float CritRate;
+    /// <summary>暴击倍率（>=1）。</summary>
+    public float CritMultiplier; // 暴击倍率
     /// <summary>闪避率（0-1）。</summary>
     public float DodgeRate;
     /// <summary>是否远程单位。</summary>
@@ -259,14 +261,76 @@ public abstract class UnitEntity : EntityBase
     /// <param name="isCrit">是否暴击。</param>
     public bool TryApplyDamage(int damage, bool isCrit = false)
     {
-        if (damage <= 0)
+        return TryApplyDamage(null, damage, isCrit); // 兼容旧接口（无攻击者信息）
+    }
+
+    /// <summary>
+    /// 尝试应用伤害（包含防御/穿透/暴击/闪避结算）。
+    /// </summary>
+    /// <param name="attacker">攻击者（可为空）。</param>
+    /// <param name="baseDamage">基础伤害值（>0 才生效）。</param>
+    /// <param name="forceCrit">是否强制暴击。</param>
+    public bool TryApplyDamage(UnitEntity attacker, int baseDamage, bool forceCrit = false) // 伤害结算入口
+    {
+        if (baseDamage <= 0) // 基础伤害无效判定
         {
-            return false;
+            return false; // 伤害无效时返回失败
         }
 
-        if (_lifeState == UnitLifeState.Dead)
+        if (_lifeState == UnitLifeState.Dead) // 死亡状态判定
         {
-            return false;
+            return false; // 死亡时不再受伤
+        }
+
+        var dodgeRate = Mathf.Clamp01(_baseStats.DodgeRate); // 读取并限制闪避率
+        if (dodgeRate > 0f && UnityEngine.Random.value < dodgeRate) // 闪避命中判定
+        {
+            PostDamagePopupEvent(0, false, true); // 派发闪避飘字事件
+            return true; // 闪避也视为一次有效攻击
+        }
+
+        var isCrit = forceCrit; // 初始化暴击标记
+        if (!isCrit && attacker != null) // 未强制暴击且攻击者存在判定
+        {
+            var critRate = Mathf.Clamp01(attacker.BaseStats.CritRate); // 读取并限制暴击率
+            if (critRate > 0f && UnityEngine.Random.value < critRate) // 暴击命中判定
+            {
+                isCrit = true; // 标记为暴击
+            }
+        }
+
+        var attackerDefensePenetration = attacker != null ? attacker.BaseStats.DefensePenetration : 0; // 读取攻击者固定穿透
+        var attackerPenetrationRate = attacker != null ? attacker.BaseStats.DefensePenetrationRate : 0f; // 读取攻击者百分比穿透
+        var clampedPenetrationRate = Mathf.Clamp01(attackerPenetrationRate); // 限制穿透比例范围
+        var reducedDefense = (float)_baseStats.Defense - attackerDefensePenetration; // 计算固定穿透后的防御（转为浮点参与后续运算）
+        if (reducedDefense < 0f) // 防御下限判定
+        {
+            reducedDefense = 0f; // 防御下限保护
+        }
+
+        var effectiveDefense = reducedDefense * (1f - clampedPenetrationRate); // 计算穿透后有效防御
+        var rawDamage = baseDamage - effectiveDefense; // 计算扣除防御后的伤害
+        if (rawDamage < 1f) // 最小伤害判定
+        {
+            rawDamage = 1f; // 最小伤害保护
+        }
+
+        var finalDamage = Mathf.RoundToInt(rawDamage); // 将最终伤害取整
+        if (finalDamage < 1) // 最终伤害下限判定
+        {
+            finalDamage = 1; // 确保至少 1 点伤害
+        }
+
+        if (isCrit) // 暴击结算判定
+        {
+            var critMultiplier = attacker != null ? attacker.BaseStats.CritMultiplier : 2f; // 读取暴击倍率（攻击者为空则默认 2）
+            if (critMultiplier < 1f) // 暴击倍率下限判定
+            {
+                critMultiplier = 2f; // 暴击倍率下限保护（回退默认值）
+            }
+
+            var critDamage = Mathf.RoundToInt(finalDamage * critMultiplier); // 计算暴击后伤害
+            finalDamage = critDamage >= 1 ? critDamage : 1; // 暴击伤害下限保护
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -277,23 +341,24 @@ public abstract class UnitEntity : EntityBase
             {
                 _hasLoggedEarlyDamage = true; // 标记已输出，避免刷屏
                 var beforeHp = _currentHp; // 记录受伤前生命
-                var afterHp = beforeHp - damage; // 计算受伤后生命（仅用于日志展示）
+                var afterHp = beforeHp - finalDamage; // 计算受伤后生命（仅用于日志展示）
                 var pos = _cachedTransform != null ? _cachedTransform.position : transform.position; // 获取当前世界坐标
-                CY.LogWarning($"[DamageDebug] 员工早期受伤：damage={damage}, isCrit={isCrit}, hp={beforeHp}->{afterHp}, frameDelta={frameDelta}, pos=({pos.x:F3},{pos.y:F3}), code={_unitCode}, id={Id}\nStack:\n{System.Environment.StackTrace}"); // 输出调用栈帮助定位来源（子弹/近战）
+                CY.LogWarning($"[DamageDebug] 员工早期受伤：damage={finalDamage}, isCrit={isCrit}, hp={beforeHp}->{afterHp}, frameDelta={frameDelta}, pos=({pos.x:F3},{pos.y:F3}), code={_unitCode}, id={Id}\nStack:\n{System.Environment.StackTrace}"); // 输出调用栈帮助定位来源（子弹/近战）
             }
         }
 #endif
 
-        var newHp = _currentHp - damage;
-        SetCurrentHp(newHp);
-        PostDamagePopupEvent(damage, isCrit);
+        var newHp = _currentHp - finalDamage; // 计算受伤后的生命值
+        SetCurrentHp(newHp); // 写入当前生命值并派发变化事件
+        PostDamagePopupEvent(finalDamage, isCrit, false); // 派发伤害飘字事件
+        PostUnitDamagedEvent(finalDamage); // 派发单位受伤事件（扣血触发）
 
-        if (_currentHp <= 0)
+        if (_currentHp <= 0) // 死亡判定
         {
-            SetLifeState(UnitLifeState.Dead);
+            SetLifeState(UnitLifeState.Dead); // 切换到死亡状态
         }
 
-        return true;
+        return true; // 返回受伤成功
     }
 
     /// <summary>
@@ -352,7 +417,7 @@ public abstract class UnitEntity : EntityBase
         }
         else
         {
-            attackSuccess = target.TryApplyDamage(damage, isCrit); // 近战攻击直接伤害
+            attackSuccess = target.TryApplyDamage(this, damage, isCrit); // 近战攻击按防御/暴击/闪避结算
         }
 
         if (!attackSuccess)
@@ -690,18 +755,36 @@ public abstract class UnitEntity : EntityBase
     }
 
     /// <summary>
+    /// 派发单位受伤事件。
+    /// </summary>
+    /// <param name="damage">伤害数值。</param>
+    private void PostUnitDamagedEvent(int damage) // 单位受伤事件派发入口
+    {
+        var evt = new UnitDamagedEvent // 创建受伤事件
+        {
+            Unit = this, // 写入单位引用
+            Damage = damage, // 写入伤害值
+            CurrentHp = _currentHp, // 写入当前生命
+            MaxHp = _baseStats.MaxHp // 写入最大生命
+        };
+        CY.Event.Post(ref evt); // 派发事件
+    }
+
+    /// <summary>
     /// 派发伤害飘字事件。
     /// </summary>
     /// <param name="damage">伤害数值。</param>
     /// <param name="isCrit">是否暴击。</param>
-    private void PostDamagePopupEvent(int damage, bool isCrit)
+    /// <param name="isDodge">是否闪避。</param>
+    private void PostDamagePopupEvent(int damage, bool isCrit, bool isDodge) // 伤害飘字事件派发入口
     {
-        var evt = new UnitDamagePopupEvent
+        var evt = new UnitDamagePopupEvent // 创建飘字事件
         {
-            Unit = this,
-            Damage = damage,
-            IsCrit = isCrit
+            Unit = this, // 写入单位引用
+            Damage = damage, // 写入伤害数值
+            IsCrit = isCrit, // 写入暴击标记
+            IsDodge = isDodge // 写入闪避标记
         };
-        CY.Event.Post(ref evt);
+        CY.Event.Post(ref evt); // 派发事件
     }
 }

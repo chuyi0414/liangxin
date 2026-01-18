@@ -155,16 +155,16 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
             return; // 关闭自动推进时退出
         }
 
+        if (!evt.AutoAdvance) // 波次未开启自动推进判定
+        {
+            return; // 未开启自动推进时退出
+        }
+
         var waveManager = CY.Wave; // 获取波次管理器
         if (waveManager == null) // 管理器判定
         {
             CY.LogWarning("[WaveAutoAdvanceManager] WaveManager 未就绪，无法推进下一波。"); // 输出警告
             return; // 管理器为空时退出
-        }
-
-        if (!waveManager.AutoAdvanceEnabled) // 波次配置判定
-        {
-            return; // 未启用自动推进时退出
         }
 
         if (waveManager.IsPaused) // 暂停判定
@@ -179,11 +179,11 @@ public sealed class WaveAutoAdvanceManager : MonoBehaviour, IInitializable, IUpd
 
         _advanceAllowed = true; // 记录允许自动推进
         _pendingAdvance = true; // 标记已请求自动推进
-        CY.Timer.NextFrame(AdvanceNextWave); // 下一帧执行推进，确保当前波次已完成清理
+        AdvanceNextWave(); // 立即执行推进，避免 UI 出现波次空档
     }
 
     /// <summary>
-    /// 下一帧执行自动推进。
+    /// 执行自动推进。
     /// </summary>
     private void AdvanceNextWave() // 自动推进执行入口
     {

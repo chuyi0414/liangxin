@@ -34,6 +34,8 @@ public sealed class EmployeeUnitRow : IDataRow // 员工数据表行定义
     public float DefensePenetrationRate; // 员工百分比防御穿透
     /// <summary>暴击率（0-1）。</summary>
     public float CritRate; // 员工暴击率
+    /// <summary>暴击倍率（>=1）。</summary>
+    public float CritMultiplier; // 员工暴击倍率
     /// <summary>闪避率（0-1）。</summary>
     public float DodgeRate; // 员工闪避率
     /// <summary>是否远程单位。</summary>
@@ -89,6 +91,7 @@ public sealed class EmployeeUnitRow : IDataRow // 员工数据表行定义
         StyleIds = values[19]; // 解析风格 Id 列表字符串
         IconPath = values.Length > 20 ? values[20] : string.Empty; // 解析头像图标路径（兼容旧表）
         PrefabPath = values.Length > 21 ? values[21] : string.Empty; // 解析预制体路径（兼容旧表）
+        CritMultiplier = values.Length > 22 ? float.Parse(values[22], CultureInfo.InvariantCulture) : 2f; // 解析暴击倍率（兼容旧表）
     }
 
     /// <summary>

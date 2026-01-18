@@ -12,6 +12,8 @@ using NavMeshPlus.Components; // NavMeshSurface 组件引用
 using NavMeshPlus.Extensions; // NavMeshPlus 扩展引用
 // 引用 UnityEngine 命名空间，使用 Transform/Vector2 等类型
 using UnityEngine; // Unity 引擎类型引用
+// 引用序列化兼容命名空间，使用 FormerlySerializedAs
+using UnityEngine.Serialization; // 序列化兼容特性引用
 
 /// <summary>
 /// LevelEntity 实体：负责在关卡显示时创建公司与老板实体。
@@ -26,8 +28,9 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
 
     /// <summary>NavMeshGround 根节点（用于 NavMesh 收集）。</summary>
     [SerializeField] private Transform _navMeshGroundRoot; // NavMesh 收集根节点
-    /// <summary>怪物刷新点根节点（仅做层级组织）。</summary>
-    [SerializeField] private Transform _enemySpawnPointsRoot; // 刷新点根节点引用
+    /// <summary>刷新点根节点（用于波次与招聘刷新点挂载）。</summary>
+    [FormerlySerializedAs("_enemySpawnPointsRoot")] // 兼容旧字段名
+    [SerializeField] private Transform _spawnPointsRoot; // 刷新点根节点引用
     /// <summary>公司出生点。</summary>
     [SerializeField] private Transform _companySpawnPoint; // 公司出生点引用
     /// <summary>玩家出生点。</summary>
@@ -99,9 +102,9 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
             StartEmployeeNavMeshUpdateLoop(); // 启动员工 NavMesh 更新循环（用于动态障碍方案）
         }
 
-        if (_enemySpawnPointsRoot != null)
+        if (_spawnPointsRoot != null)
         {
-            WaveSpawnPoint.RefreshAll(_enemySpawnPointsRoot); // 强制刷新怪物刷新点注册
+            WaveSpawnPoint.RefreshAll(_spawnPointsRoot); // 强制刷新刷新点注册
         }
 
         TryStartFirstWave(); // 关卡完成初始化后启动第一波
@@ -139,9 +142,9 @@ public sealed class LevelEntity : EntityBase // 关卡实体定义
             CY.LogWarning("[LevelEntity] NavMeshGroundRoot 未配置，NavMesh 收集可能异常。"); // 输出 NavMesh 根缺失提示
         }
 
-        if (_enemySpawnPointsRoot == null)
+        if (_spawnPointsRoot == null)
         {
-            CY.LogWarning("[LevelEntity] EnemySpawnPointsRoot 未配置，波次刷新点需挂在该节点下。"); // 输出刷新点根缺失提示
+            CY.LogWarning("[LevelEntity] SpawnPointsRoot 未配置，波次刷新点需挂在该节点下。"); // 输出刷新点根缺失提示
         }
 
         if (_companySpawnPoint == null)

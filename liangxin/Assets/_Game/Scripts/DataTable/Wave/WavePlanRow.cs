@@ -28,8 +28,6 @@ public sealed class WavePlanRow : IDataRow // 波次计划数据行定义
     public int ExpireAfterWave; // 过期波次阈值
     /// <summary>随机权重（>0 才进入随机池）。</summary>
     public int RandomWeight; // 随机权重
-    /// <summary>显示波次编号（用于 UI）。</summary>
-    public int DisplayIndex; // 显示波次编号
 
     int IDataRow.Id => WaveId; // IDataRow 主键映射
 
@@ -50,6 +48,5 @@ public sealed class WavePlanRow : IDataRow // 波次计划数据行定义
         UnlockAfterWave = values.Length > 8 ? int.Parse(values[8]) : 0; // 解析解锁波次阈值
         ExpireAfterWave = values.Length > 9 ? int.Parse(values[9]) : 0; // 解析过期波次阈值
         RandomWeight = values.Length > 10 ? int.Parse(values[10]) : 0; // 解析随机权重
-        DisplayIndex = values.Length > 11 ? int.Parse(values[11]) : 0; // 解析显示波次编号
     }
 }

@@ -60,6 +60,9 @@ public sealed partial class WaveManager : MonoBehaviour, IInitializable, IUpdate
     private int _lastWaveId; // 最近波次 Id
     /// <summary>已完成波次数（用于解锁随机波次）。</summary>
     private int _completedWaveCount; // 已完成波次数
+    /// <summary>当前波次编号（计数器，默认1）。</summary>
+    private int _currentWaveCount = 1; // 波数计数
+
 
     /// <summary>敌人实体到轨道映射（用于存活统计）。</summary>
     private readonly Dictionary<UnitEntity, TrackRuntime> _enemyTrackMap = new Dictionary<UnitEntity, TrackRuntime>(128); // 敌人轨道映射
@@ -81,6 +84,9 @@ public sealed partial class WaveManager : MonoBehaviour, IInitializable, IUpdate
     public bool IsPaused => _paused; // 暂停状态
     /// <summary>是否允许自动推进下一波（只读）。</summary>
     public bool AutoAdvanceEnabled => _currentWave != null && _currentWave.Plan != null && _currentWave.Plan.AutoAdvance != 0; // 自动推进开关
+    /// <summary>当前波数（只读）。</summary>
+    public int CurrentWaveCount => _currentWaveCount; // 波数访问器
+
 
     /// <summary>
     /// Unity Awake：注册到 ServiceLocator。
@@ -205,6 +211,7 @@ public sealed partial class WaveManager : MonoBehaviour, IInitializable, IUpdate
         ResetRuntimeInternal(); // 执行内部清理
         _completedWaveCount = 0; // 重置已完成波次数
         _lastWaveId = 0; // 重置最近波次 Id
+        _currentWaveCount = 1; // 重置波数
     }
 
     /// <summary>
@@ -255,6 +262,11 @@ public sealed partial class WaveManager : MonoBehaviour, IInitializable, IUpdate
         {
             CY.LogWarning($"[WaveManager] 波次未配置轨道，WaveId={waveId}"); // 输出缺失警告
             return false; // 无轨道时失败
+        }
+
+        if (_lastWaveId > 0) // 非首波启动判定
+        {
+            _currentWaveCount++; // 波数递增
         }
 
         ResetRuntimeInternal(); // 清理旧运行时
@@ -448,8 +460,78 @@ public sealed partial class WaveManager : MonoBehaviour, IInitializable, IUpdate
         }
 
         stage = _currentWave.HasSpawnStarted ? WaveStage.Spawn : WaveStage.Prepare; // 计算阶段
-        remainingSeconds = GetWaveRemaining(_currentWave); // 计算剩余时间
+        
+        if (stage == WaveStage.Prepare)
+        {
+            remainingSeconds = GetWaveStartRemaining(_currentWave); // 准备阶段返回启动倒计时
+        }
+        else
+        {
+            remainingSeconds = GetWaveRemaining(_currentWave); // 刷怪阶段返回结束倒计时
+        }
+        
         return true; // 返回成功
+    }
+
+    /// <summary>
+    /// 获取波次启动剩余时间（Prepare 阶段）。
+    /// </summary>
+    /// <param name="runtime">波次运行时。</param>
+    private float GetWaveStartRemaining(WaveRuntime runtime) // 波次启动时间入口
+    {
+        if (runtime == null || runtime.Tracks == null)
+        {
+            return 0f;
+        }
+
+        var minDelay = float.MaxValue;
+        var found = false;
+
+        for (int i = 0; i < runtime.Tracks.Count; i++) // 遍历轨道
+        {
+            var track = runtime.Tracks[i];
+            if (track == null || track.Row == null)
+            {
+                continue;
+            }
+
+            if (track.IsStarted) // 已开始轨道不算（ theoretically shouldn't happen in Prepare but safe check）
+            {
+                continue;
+            }
+
+            // 如果已经满足条件正在倒计时
+            if (track.StartConditionMet)
+            {
+                if (track.StartDelayRemaining < minDelay)
+                {
+                    minDelay = track.StartDelayRemaining;
+                    found = true;
+                }
+            }
+            // 如果还没满足条件，尝试预测时间类型的条件
+            else
+            {
+                var startType = (WaveTriggerType)track.Row.StartType;
+                if (startType == WaveTriggerType.Time)
+                {
+                    var timeUntilCondition = track.Row.StartValue - runtime.ElapsedTime;
+                    if (timeUntilCondition < 0f)
+                    {
+                        timeUntilCondition = 0f;
+                    }
+
+                    var total = timeUntilCondition + track.Row.StartDelay;
+                    if (total < minDelay)
+                    {
+                        minDelay = total;
+                        found = true;
+                    }
+                }
+            }
+        }
+
+        return found ? minDelay : 0f;
     }
 
     /// <summary>
@@ -469,15 +551,7 @@ public sealed partial class WaveManager : MonoBehaviour, IInitializable, IUpdate
             return false; // 无波次时返回失败
         }
 
-        var plan = _currentWave != null ? _currentWave.Plan : null; // 获取当前波次计划
-        if (plan != null && plan.DisplayIndex > 0) // 显示编号有效判定
-        {
-            displayIndex = plan.DisplayIndex; // 使用自定义显示编号
-        }
-        else
-        {
-            displayIndex = waveId; // 回退使用 WaveId
-        }
+        displayIndex = waveId; // 使用 WaveId 作为显示编号
 
         return true; // 返回成功
     }
@@ -707,12 +781,13 @@ public sealed partial class WaveManager : MonoBehaviour, IInitializable, IUpdate
     /// <summary>
     /// 派发波次结束事件。
     /// </summary>
-    private void PostWaveFinished() // 事件派发入口
+    private void PostWaveFinished(int waveId, bool isAssault, bool autoAdvance) // 事件派发入口
     {
         var evt = new WaveFinishedEvent // 创建事件
         {
-            WaveId = _currentWaveId, // 写入波次 Id
-            IsAssault = false // 写入奇袭标记
+            WaveId = waveId, // 写入波次 Id
+            IsAssault = isAssault, // 写入奇袭标记
+            AutoAdvance = autoAdvance // 写入自动推进标记
         };
         CY.Event.Post(ref evt); // 派发事件
     }

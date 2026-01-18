@@ -122,6 +122,7 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             DefensePenetration = row.DefensePenetration,
             DefensePenetrationRate = row.DefensePenetrationRate,
             CritRate = row.CritRate,
+            CritMultiplier = row.CritMultiplier, // 暴击倍率
             DodgeRate = row.DodgeRate,
             IsRanged = row.IsRanged,
             MoveSpeed = row.MoveSpeed,
@@ -213,6 +214,7 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             }
         }
 
+        TryClearSelectedEmployeeIfOutOfRange(); // 检测选中员工是否超出范围
         TryHandleAttackInput(); // 处理攻击输入
         TryHandleLeftClick(); // 处理左键：黑心优先，其次员工选中/取消
         TryHandleRightClick(); // 处理右键：黑心优先，否则命令选中员工移动
@@ -249,7 +251,7 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             return; // 选中成功时退出
         }
 
-        _selectedEmployee = null; // 点击空处则取消当前选中员工
+        SetSelectedEmployee(null); // 点击空处则取消当前选中员工
     }
 
     /// <summary>
@@ -274,7 +276,7 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
 
         if (_selectedEmployee.Unit == null || _selectedEmployee.Unit.LifeState == UnitLifeState.Dead) // 选中员工无效/死亡判定
         {
-            _selectedEmployee = null; // 死亡时清空选中引用
+            SetSelectedEmployee(null); // 死亡时清空选中引用
             return; // 直接退出
         }
 
@@ -294,7 +296,54 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             return; // 命中员工时直接退出
         }
 
+        if (!IsInSelectionRange(worldPosition)) // 点击点不在拾取范围判定
+        {
+            return; // 不在范围内时不下发移动命令
+        }
+
         _selectedEmployee.TryCommandMove(worldPosition); // 黑心不可拾取时，将右键位置作为移动目标点
+    }
+
+    /// <summary>
+    /// 若选中员工超出拾取范围则取消选中。
+    /// </summary>
+    private void TryClearSelectedEmployeeIfOutOfRange() // 选中员工范围校验入口
+    {
+        if (_selectedEmployee == null) // 未选中员工判定
+        {
+            return; // 未选中时直接退出
+        }
+
+        var selectedUnit = _selectedEmployee.Unit; // 获取选中员工单位
+        if (selectedUnit == null) // 单位为空判定
+        {
+            SetSelectedEmployee(null); // 单位为空时清空选中
+            return; // 单位为空时退出
+        }
+
+        if (selectedUnit.LifeState == UnitLifeState.Dead) // 选中员工死亡判定
+        {
+            SetSelectedEmployee(null); // 死亡时清空选中
+            return; // 死亡时退出
+        }
+
+        var employeeCollider = selectedUnit.CachedCollider2D; // 获取选中员工碰撞体
+        if (employeeCollider != null) // 碰撞体存在判定
+        {
+            if (!IsInSelectionRange(employeeCollider)) // 不在拾取范围判定
+            {
+                SetSelectedEmployee(null); // 超出范围时清空选中
+            }
+
+            return; // 已使用碰撞体判定时直接退出
+        }
+
+        var employeeTransform = selectedUnit.CachedTransform != null ? selectedUnit.CachedTransform : selectedUnit.transform; // 获取选中员工 Transform
+        var employeePosition = employeeTransform.position; // 读取选中员工位置
+        if (!IsInSelectionRange(employeePosition)) // 员工位置超出范围判定
+        {
+            SetSelectedEmployee(null); // 超出范围时清空选中
+        }
     }
 
     /// <summary>
@@ -454,6 +503,11 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
                 continue; // 死亡员工不允许选中
             }
 
+            if (!IsInSelectionRange(hitCollider)) // 员工不在拾取范围判定
+            {
+                continue; // 超出范围时跳过
+            }
+
             var closestPoint = hitCollider.ClosestPoint(clickWorldPosition); // 计算点击点到碰撞体的最近点
             var diff = closestPoint - clickWorldPosition; // 计算最近点到点击点的差向量
             var distanceSqr = diff.sqrMagnitude; // 计算距离平方
@@ -471,8 +525,30 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
             return false; // 未找到时返回失败
         }
 
-        _selectedEmployee = bestEmployee; // 写入选中员工
+        SetSelectedEmployee(bestEmployee); // 写入选中员工
         return true; // 选中成功返回 true
+    }
+
+    /// <summary>
+    /// 设置当前选中的员工并派发选中事件。
+    /// </summary>
+    /// <param name="employee">员工接口引用（为空表示取消选中）。</param>
+    private void SetSelectedEmployee(IEmployeeControllable employee) // 选中员工设置入口
+    {
+        if (_selectedEmployee == employee) // 选中对象未变化判定
+        {
+            return; // 未变化时直接退出
+        }
+
+        _selectedEmployee = employee; // 写入新的选中对象
+
+        var selectedUnit = _selectedEmployee != null ? _selectedEmployee.Unit : null; // 获取选中员工单位
+        var evt = new EmployeeSelectedEvent // 创建选中事件
+        {
+            Employee = selectedUnit, // 写入选中单位
+            IsSelected = selectedUnit != null // 写入选中状态
+        };
+        CY.Event.Post(ref evt); // 派发选中事件
     }
 
     /// <summary>
@@ -542,6 +618,28 @@ public sealed class PlayerEntity : UnitEntity, IEntityPreShowData<PlayerPreShowD
         var rangeClosest = _selectionRange.ClosestPoint(targetClosest); // 获取拾取范围最近点
         var delta = targetClosest - rangeClosest; // 计算最近点偏差
         return delta.sqrMagnitude <= 0.0001f; // 判断是否在拾取范围内
+    }
+
+    /// <summary>
+    /// 判断世界坐标是否在拾取范围内。
+    /// </summary>
+    /// <param name="worldPosition">世界坐标（XY）。</param>
+    /// <returns>是否在拾取范围内。</returns>
+    private bool IsInSelectionRange(Vector2 worldPosition) // 拾取范围坐标检测入口
+    {
+        if (_selectionRange == null) // 拾取范围未配置判定
+        {
+            return false; // 未配置拾取范围时返回 false
+        }
+
+        var rangeTransform = _selectionRange.transform; // 获取拾取范围 Transform
+        var rangeOffset = _selectionRange.offset; // 获取拾取范围偏移
+        var worldCenter = rangeTransform.TransformPoint(rangeOffset); // 计算拾取范围中心世界坐标
+        var lossyScale = rangeTransform.lossyScale; // 获取拾取范围缩放
+        var maxScale = Mathf.Max(Mathf.Abs(lossyScale.x), Mathf.Abs(lossyScale.y)); // 获取最大缩放因子
+        var worldRadius = _selectionRange.radius * maxScale; // 计算拾取范围世界半径
+        var diff = worldPosition - (Vector2)worldCenter; // 计算中心到目标点差向量
+        return diff.sqrMagnitude <= worldRadius * worldRadius + 0.0001f; // 判断是否在拾取范围内
     }
 
     /// <summary>

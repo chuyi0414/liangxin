@@ -356,6 +356,7 @@ public abstract class EmployeeEntityBase : UnitEntity, IEntityPreShowData<Employ
             DefensePenetration = row.DefensePenetration, // 固定防御穿透
             DefensePenetrationRate = row.DefensePenetrationRate, // 百分比防御穿透
             CritRate = row.CritRate, // 暴击率
+            CritMultiplier = row.CritMultiplier, // 暴击倍率
             DodgeRate = row.DodgeRate, // 闪避率
             IsRanged = isRanged, // 是否远程
             MoveSpeed = row.MoveSpeed, // 移动速度

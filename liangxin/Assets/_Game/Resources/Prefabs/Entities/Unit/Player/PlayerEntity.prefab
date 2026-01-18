@@ -67,7 +67,7 @@ CircleCollider2D:
   m_UsedByComposite: 0
   m_Offset: {x: 0, y: 0.5}
   serializedVersion: 2
-  m_Radius: 1.5
+  m_Radius: 4
 --- !u!1 &386069248260271518
 GameObject:
   m_ObjectHideFlags: 0
@@ -339,21 +339,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _moveSpeed: 5
   _stoppingDistance: 0.1
-  _enableDestinationSpread: 0
-  _destinationSpreadMask:
-    serializedVersion: 2
-    m_Bits: 0
-  _destinationSpreadCheckRadius: 0.45
-  _destinationSpreadRadius: 1
-  _destinationSpreadStep: 0.25
-  _destinationSpreadMaxTries: 16
   _defaultMode: 0
   _navMeshPlane: 1
+  _navMeshAgentTypeId: 0
   _agentRadius: 0.4
   _dynamicObstacleMask:
     serializedVersion: 2
     m_Bits: 2112
   _repathInterval: 0.5
+  _fallbackSampleRadius: 8
+  _gridFallbackSearchRadius: 6
 --- !u!114 &747897525588927213
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -379,6 +374,7 @@ MonoBehaviour:
     DefensePenetration: 0
     DefensePenetrationRate: 0
     CritRate: 0
+    CritMultiplier: 0
     DodgeRate: 0
     IsRanged: 0
     MoveSpeed: 0
@@ -420,7 +416,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.5, z: 0}
-  m_LocalScale: {x: 3, y: 3, z: 3}
+  m_LocalScale: {x: 8, y: 8, z: 8}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 5913892075644917792}
