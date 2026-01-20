@@ -44,7 +44,8 @@ namespace UnityGameFramework.Runtime
             }
 
             Transform transform = gameObject.transform;
-            transform.SetParent(((MonoBehaviour)uiGroup.Helper).transform);
+            // 备注：保持预制体本地布局，避免转换为世界坐标导致 RectTransform 偏移。
+            transform.SetParent(((MonoBehaviour)uiGroup.Helper).transform, false);
             transform.localScale = Vector3.one;
 
             return gameObject.GetOrAddComponent<UIForm>();

@@ -33,6 +33,12 @@ namespace UnityGameFramework.Editor
         private SerializedProperty m_ResourceCapacity = null;
         private SerializedProperty m_ResourceExpireTime = null;
         private SerializedProperty m_ResourcePriority = null;
+#if GF_USE_RESOURCES_BACKEND
+        /// <summary>
+        /// Resources 后端开关的序列化字段。
+        /// </summary>
+        private SerializedProperty m_UseResourcesBackend = null;
+#endif
         private SerializedProperty m_UpdatePrefixUri = null;
         private SerializedProperty m_GenerateReadWriteVersionListLength = null;
         private SerializedProperty m_UpdateRetryCount = null;
@@ -79,6 +85,14 @@ namespace UnityGameFramework.Editor
                 m_ReadWritePathType.enumValueIndex = (int)(ReadWritePathType)EditorGUILayout.EnumPopup("Read-Write Path Type", t.ReadWritePathType);
             }
             EditorGUI.EndDisabledGroup();
+
+#if GF_USE_RESOURCES_BACKEND
+            EditorGUI.BeginDisabledGroup(EditorApplication.isPlayingOrWillChangePlaymode);
+            {
+                EditorGUILayout.PropertyField(m_UseResourcesBackend, new GUIContent("Use Resources Backend"));
+            }
+            EditorGUI.EndDisabledGroup();
+#endif
 
             float minUnloadUnusedAssetsInterval = EditorGUILayout.Slider("Min Unload Unused Assets Interval", m_MinUnloadUnusedAssetsInterval.floatValue, 0f, 3600f);
             if (minUnloadUnusedAssetsInterval != m_MinUnloadUnusedAssetsInterval.floatValue)
@@ -362,6 +376,9 @@ namespace UnityGameFramework.Editor
             m_ResourceCapacity = serializedObject.FindProperty("m_ResourceCapacity");
             m_ResourceExpireTime = serializedObject.FindProperty("m_ResourceExpireTime");
             m_ResourcePriority = serializedObject.FindProperty("m_ResourcePriority");
+#if GF_USE_RESOURCES_BACKEND
+            m_UseResourcesBackend = serializedObject.FindProperty("m_UseResourcesBackend");
+#endif
             m_UpdatePrefixUri = serializedObject.FindProperty("m_UpdatePrefixUri");
             m_GenerateReadWriteVersionListLength = serializedObject.FindProperty("m_GenerateReadWriteVersionListLength");
             m_UpdateRetryCount = serializedObject.FindProperty("m_UpdateRetryCount");

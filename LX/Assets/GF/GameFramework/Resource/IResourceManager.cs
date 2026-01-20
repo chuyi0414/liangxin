@@ -309,6 +309,17 @@ namespace GameFramework.Resource
             set;
         }
 
+#if GF_USE_RESOURCES_BACKEND
+        /// <summary>
+        /// 获取或设置是否启用 Resources 后端资源加载。
+        /// </summary>
+        bool UseResourcesBackend
+        {
+            get;
+            set;
+        }
+#endif
+
         /// <summary>
         /// 资源校验开始事件。
         /// </summary>

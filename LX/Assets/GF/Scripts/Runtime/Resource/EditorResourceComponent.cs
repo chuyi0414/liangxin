@@ -476,6 +476,23 @@ namespace UnityGameFramework.Runtime
             }
         }
 
+#if GF_USE_RESOURCES_BACKEND
+        /// <summary>
+        /// 获取或设置是否启用 Resources 后端资源加载。
+        /// </summary>
+        public bool UseResourcesBackend
+        {
+            get
+            {
+                return false;
+            }
+            set
+            {
+                // 编辑器资源模式不使用 Resources 后端开关，保持默认逻辑。
+            }
+        }
+#endif
+
         /// <summary>
         /// 获取等待编辑器加载的资源数量。
         /// </summary>

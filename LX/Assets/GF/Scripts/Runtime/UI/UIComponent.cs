@@ -316,8 +316,35 @@ namespace UnityGameFramework.Runtime
             uiGroupHelper.name = Utility.Text.Format("UI Group - {0}", uiGroupName);
             uiGroupHelper.gameObject.layer = LayerMask.NameToLayer("UI");
             Transform transform = uiGroupHelper.transform;
-            transform.SetParent(m_InstanceRoot);
+            // 备注：UIGroup 需要使用本地坐标挂到根节点，避免世界坐标换算导致偏移。
+            transform.SetParent(m_InstanceRoot, false);
+            // 备注：确保默认缩放为 1，避免父子缩放叠加造成尺寸异常。
             transform.localScale = Vector3.one;
+            RectTransform rectTransform = transform as RectTransform;
+            if (rectTransform == null)
+            {
+                // 备注：Default UIGroupHelper 使用 new GameObject 创建，仅有 Transform，需要补 RectTransform。
+                rectTransform = uiGroupHelper.gameObject.AddComponent<RectTransform>();
+                // 备注：补齐 RectTransform 后重新挂到根节点，确保层级与坐标体系正确。
+                rectTransform.SetParent(m_InstanceRoot, false);
+            }
+
+            // 备注：UIGroup 需要铺满父节点，避免偏移导致界面被挤到左下角。
+            rectTransform.anchorMin = Vector2.zero;
+            // 备注：UIGroup 需要铺满父节点，确保右上偏移为 0。
+            rectTransform.anchorMax = Vector2.one;
+            // 备注：归零偏移，避免出现 Right/Top 变成屏幕尺寸的问题。
+            rectTransform.anchoredPosition = Vector2.zero;
+            // 备注：归零尺寸增量，确保与父节点尺寸一致。
+            rectTransform.sizeDelta = Vector2.zero;
+            // 备注：保持居中枢轴，避免缩放与旋转引入偏移。
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            // 备注：重置本地旋转，防止继承旋转影响布局。
+            rectTransform.localRotation = Quaternion.identity;
+            // 备注：重置本地位置，避免世界坐标残留。
+            rectTransform.localPosition = Vector3.zero;
+            // 备注：确保缩放为 1，避免父子缩放叠加造成尺寸异常。
+            rectTransform.localScale = Vector3.one;
 
             return m_UIManager.AddUIGroup(uiGroupName, depth, uiGroupHelper);
         }

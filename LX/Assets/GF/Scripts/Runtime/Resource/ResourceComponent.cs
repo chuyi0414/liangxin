@@ -25,6 +25,12 @@ namespace UnityGameFramework.Runtime
     {
         private const int DefaultPriority = 0;
         private const int OneMegaBytes = 1024 * 1024;
+#if GF_USE_RESOURCES_BACKEND
+        /// <summary>
+        /// Resources 后端加载资源代理辅助器的默认类型名称。
+        /// </summary>
+        private const string ResourcesLoadResourceAgentHelperTypeName = "UnityGameFramework.Runtime.ResourcesLoadResourceAgentHelper";
+#endif
 
         private IResourceManager m_ResourceManager = null;
         private EventComponent m_EventComponent = null;
@@ -71,6 +77,14 @@ namespace UnityGameFramework.Runtime
 
         [SerializeField]
         private int m_ResourcePriority = 0;
+
+#if GF_USE_RESOURCES_BACKEND
+        /// <summary>
+        /// 是否启用 Resources 后端资源加载。
+        /// </summary>
+        [SerializeField]
+        private bool m_UseResourcesBackend = false;
+#endif
 
         [SerializeField]
         private string m_UpdatePrefixUri = null;
@@ -611,6 +625,14 @@ namespace UnityGameFramework.Runtime
                 Log.Fatal("Resource manager is invalid.");
                 return;
             }
+
+#if GF_USE_RESOURCES_BACKEND
+            if (!m_EditorResourceMode)
+            {
+                // 备注：Resources 后端开关由组件配置驱动，原资源表模式保持不变。
+                m_ResourceManager.UseResourcesBackend = m_UseResourcesBackend;
+            }
+#endif
 
             m_ResourceManager.ResourceVerifyStart += OnResourceVerifyStart;
             m_ResourceManager.ResourceVerifySuccess += OnResourceVerifySuccess;
@@ -1428,7 +1450,17 @@ namespace UnityGameFramework.Runtime
         /// <param name="index">加载资源代理辅助器索引。</param>
         private void AddLoadResourceAgentHelper(int index)
         {
-            LoadResourceAgentHelperBase loadResourceAgentHelper = Helper.CreateHelper(m_LoadResourceAgentHelperTypeName, m_CustomLoadResourceAgentHelper, index);
+            string loadResourceAgentHelperTypeName = m_LoadResourceAgentHelperTypeName;
+            LoadResourceAgentHelperBase customLoadResourceAgentHelper = m_CustomLoadResourceAgentHelper;
+#if GF_USE_RESOURCES_BACKEND
+            if (m_UseResourcesBackend)
+            {
+                // 备注：Resources 后端统一使用专用的加载资源代理辅助器。
+                loadResourceAgentHelperTypeName = ResourcesLoadResourceAgentHelperTypeName;
+                customLoadResourceAgentHelper = null;
+            }
+#endif
+            LoadResourceAgentHelperBase loadResourceAgentHelper = Helper.CreateHelper(loadResourceAgentHelperTypeName, customLoadResourceAgentHelper, index);
             if (loadResourceAgentHelper == null)
             {
                 Log.Error("Can not create load resource agent helper.");
