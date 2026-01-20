@@ -39,12 +39,23 @@ public class GameUIForm : UIFormLogic
         base.OnInit(userData);
         GameFramework.DataTable.IDataTable<DRBattleData> dRBattleDatas = GameEntry.DataTable.GetDataTable<DRBattleData>();
         DRBattleData dRBattleData = dRBattleDatas.GetDataRow(1);
-        SetValueText(_txtMoney, dRBattleData.Money);
+        GameEntry.DataBinding.Set<int>("Money", dRBattleData.Money);
     }
 
-    private static void SetValueText(TMP_Text target, int value)
+    protected override void OnOpen(object userData)
     {
-        if (target == null) return;
-        target.SetText("{0}", value);
+        base.OnOpen(userData);
+        GameEntry.DataBinding.Bind<int>(
+              "Money",
+              0,
+              v => _txtMoney.SetText("{0}", v),
+              this
+          );
+    }
+
+    protected override void OnClose(bool isShutdown, object userData)
+    {
+        base.OnClose(isShutdown, userData);
+        GameEntry.DataBinding.UnbindAll(this);
     }
 }
