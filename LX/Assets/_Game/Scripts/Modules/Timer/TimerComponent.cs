@@ -1,19 +1,19 @@
 using System;
-using System.Collections.Generic;
+using GameFramework;
+using GameFramework.Timer;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 
 /// <summary>
-/// 计时器组件（模块形式）。
-/// 使用框架的流逝时间：逻辑时间=Time.deltaTime，真实时间=Time.unscaledDeltaTime，
-/// 与 BaseComponent 中调用 GameFrameworkEntry.Update 的时间来源保持一致。
+/// 计时器组件（框架模块包装）。
+/// 仅提供 Unity 侧入口，计时更新由框架模块统一轮询驱动。
 /// </summary>
 [DisallowMultipleComponent]
 [AddComponentMenu("Game/Timer")]
 public sealed class TimerComponent : GameFrameworkComponent
 {
     /// <summary>
-    /// 计时器列表初始容量（避免频繁扩容）。
+    /// 计时器列表初始容量（用于减少模块内部扩容开销）。
     /// </summary>
     [SerializeField]
     private int m_InitialCapacity = 32;
@@ -25,29 +25,21 @@ public sealed class TimerComponent : GameFrameworkComponent
     private bool m_DefaultUseUnscaledTime = false;
 
     /// <summary>
-    /// 所有激活中的计时器。
+    /// 计时器模块实例（由框架创建并统一轮询）。
     /// </summary>
-    private List<Timer> m_Timers;
-
-    /// <summary>
-    /// 下一帧要执行的回调（真正的下一帧）。
-    /// </summary>
-    private readonly List<Action> m_NextFrameActions = new();
-
-    /// <summary>
-    /// 执行中的回调缓存（避免遍历时修改集合）。
-    /// </summary>
-    private readonly List<Action> m_ExecutingActions = new();
-
-    /// <summary>
-    /// 计时器 ID 自增计数器。
-    /// </summary>
-    private int m_NextId = 1;
+    private ITimerManager m_TimerManager;
 
     /// <summary>
     /// 当前激活计时器数量。
     /// </summary>
-    public int ActiveCount => m_Timers?.Count ?? 0;
+    public int ActiveCount
+    {
+        get
+        {
+            EnsureTimerManager();
+            return m_TimerManager != null ? m_TimerManager.ActiveCount : 0;
+        }
+    }
 
     /// <summary>
     /// 默认时间模式（true：真实时间；false：逻辑时间）。
@@ -59,7 +51,7 @@ public sealed class TimerComponent : GameFrameworkComponent
     }
 
     /// <summary>
-    /// 初始化计时器列表。
+    /// 初始化组件并配置计时器模块。
     /// </summary>
     protected override void Awake()
     {
@@ -70,7 +62,8 @@ public sealed class TimerComponent : GameFrameworkComponent
             m_InitialCapacity = 1;
         }
 
-        m_Timers = new List<Timer>(m_InitialCapacity);
+        EnsureTimerManager();
+        m_TimerManager?.SetInitialCapacity(m_InitialCapacity);
     }
 
     /// <summary>
@@ -86,10 +79,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public Timer Delay(float seconds, Action onComplete, bool useUnscaledTime)
     {
-        EnsureInitialized();
-        Timer timer = new Timer(seconds, onComplete, false, useUnscaledTime) { Id = m_NextId++ };
-        m_Timers.Add(timer);
-        return timer;
+        EnsureTimerManager();
+        return m_TimerManager != null ? m_TimerManager.Delay(seconds, onComplete, useUnscaledTime) : null;
     }
 
     /// <summary>
@@ -98,7 +89,7 @@ public sealed class TimerComponent : GameFrameworkComponent
     public Timer Delay(float seconds, Action onComplete, Action<float> onProgress, bool useUnscaledTime)
     {
         Timer timer = Delay(seconds, onComplete, useUnscaledTime);
-        if (onProgress != null)
+        if (timer != null && onProgress != null)
         {
             timer.OnUpdate(onProgress);
         }
@@ -118,10 +109,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public Timer Loop(float interval, Action onTick, bool useUnscaledTime)
     {
-        EnsureInitialized();
-        Timer timer = new Timer(interval, onTick, true, useUnscaledTime) { Id = m_NextId++ };
-        m_Timers.Add(timer);
-        return timer;
+        EnsureTimerManager();
+        return m_TimerManager != null ? m_TimerManager.Loop(interval, onTick, useUnscaledTime) : null;
     }
 
     /// <summary>
@@ -130,7 +119,7 @@ public sealed class TimerComponent : GameFrameworkComponent
     public Timer Loop(float interval, Action onTick, Action<float> onProgress, bool useUnscaledTime)
     {
         Timer timer = Loop(interval, onTick, useUnscaledTime);
-        if (onProgress != null)
+        if (timer != null && onProgress != null)
         {
             timer.OnUpdate(onProgress);
         }
@@ -142,10 +131,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public void NextFrame(Action onComplete)
     {
-        if (onComplete != null)
-        {
-            m_NextFrameActions.Add(onComplete);
-        }
+        EnsureTimerManager();
+        m_TimerManager?.NextFrame(onComplete);
     }
 
     /// <summary>
@@ -161,13 +148,12 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public void Cancel(Timer timer)
     {
-        if (timer == null || m_Timers == null)
+        if (timer == null)
         {
             return;
         }
 
-        timer.Stop();
-        m_Timers.Remove(timer);
+        Cancel(timer.Id);
     }
 
     /// <summary>
@@ -175,7 +161,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public void Cancel(int timerId)
     {
-        RemoveTimerById(timerId, out _);
+        EnsureTimerManager();
+        m_TimerManager?.Cancel(timerId);
     }
 
     /// <summary>
@@ -183,7 +170,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public bool TryCancel(int timerId)
     {
-        return RemoveTimerById(timerId, out _);
+        EnsureTimerManager();
+        return m_TimerManager != null && m_TimerManager.TryCancel(timerId);
     }
 
     /// <summary>
@@ -191,8 +179,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public Timer GetTimer(int timerId)
     {
-        int index = FindTimerIndex(timerId);
-        return index >= 0 ? m_Timers[index] : null;
+        EnsureTimerManager();
+        return m_TimerManager != null ? m_TimerManager.GetTimer(timerId) : null;
     }
 
     /// <summary>
@@ -200,8 +188,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public bool HasTimer(int timerId)
     {
-        Timer timer = GetTimer(timerId);
-        return timer != null && !timer.IsCompleted;
+        EnsureTimerManager();
+        return m_TimerManager != null && m_TimerManager.HasTimer(timerId);
     }
 
     /// <summary>
@@ -209,7 +197,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public void Pause(int timerId)
     {
-        GetTimer(timerId)?.Pause();
+        EnsureTimerManager();
+        m_TimerManager?.Pause(timerId);
     }
 
     /// <summary>
@@ -217,7 +206,8 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public void Resume(int timerId)
     {
-        GetTimer(timerId)?.Resume();
+        EnsureTimerManager();
+        m_TimerManager?.Resume(timerId);
     }
 
     /// <summary>
@@ -225,123 +215,18 @@ public sealed class TimerComponent : GameFrameworkComponent
     /// </summary>
     public void CancelAll()
     {
-        if (m_Timers == null)
-        {
-            return;
-        }
-
-        m_Timers.Clear();
+        EnsureTimerManager();
+        m_TimerManager?.CancelAll();
     }
 
     /// <summary>
-    /// Unity Update。
-    /// 注意：这里使用的逻辑/真实流逝时间与框架更新一致。
+    /// 确保计时器模块已创建并缓存。
     /// </summary>
-    private void Update()
+    private void EnsureTimerManager()
     {
-        if (m_Timers == null)
+        if (m_TimerManager == null)
         {
-            return;
+            m_TimerManager = GameFrameworkEntry.GetModule<ITimerManager>();
         }
-
-        ExecuteNextFrameActions();
-
-        float elapseSeconds = Time.deltaTime; // 逻辑流逝时间（受 Time.timeScale 影响）
-        float realElapseSeconds = Time.unscaledDeltaTime; // 真实流逝时间（不受 Time.timeScale 影响）
-
-        UpdateTimers(elapseSeconds, realElapseSeconds);
-    }
-
-    /// <summary>
-    /// 执行下一帧回调队列。
-    /// </summary>
-    private void ExecuteNextFrameActions()
-    {
-        if (m_NextFrameActions.Count <= 0)
-        {
-            return;
-        }
-
-        m_ExecutingActions.Clear();
-        m_ExecutingActions.AddRange(m_NextFrameActions);
-        m_NextFrameActions.Clear();
-
-        for (int i = 0; i < m_ExecutingActions.Count; i++)
-        {
-            try
-            {
-                m_ExecutingActions[i]?.Invoke();
-            }
-            catch (Exception exception)
-            {
-                Log.Warning("Timer NextFrame callback exception: {0}", exception.Message);
-            }
-        }
-    }
-
-    /// <summary>
-    /// 使用框架时间更新计时器列表。
-    /// </summary>
-    private void UpdateTimers(float elapseSeconds, float realElapseSeconds)
-    {
-        for (int i = m_Timers.Count - 1; i >= 0; i--)
-        {
-            Timer timer = m_Timers[i];
-            float step = timer.UseUnscaledTime ? realElapseSeconds : elapseSeconds;
-            if (timer.Update(step))
-            {
-                m_Timers.RemoveAt(i);
-            }
-        }
-    }
-
-    /// <summary>
-    /// 确保计时器列表已初始化。
-    /// </summary>
-    private void EnsureInitialized()
-    {
-        if (m_Timers == null)
-        {
-            m_Timers = new List<Timer>(m_InitialCapacity < 1 ? 1 : m_InitialCapacity);
-        }
-    }
-
-    /// <summary>
-    /// 查找计时器索引（按 ID）。
-    /// </summary>
-    private int FindTimerIndex(int timerId)
-    {
-        if (timerId <= 0 || m_Timers == null)
-        {
-            return -1;
-        }
-
-        for (int i = 0; i < m_Timers.Count; i++)
-        {
-            if (m_Timers[i] != null && m_Timers[i].Id == timerId)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    /// <summary>
-    /// 根据 ID 移除计时器。
-    /// </summary>
-    private bool RemoveTimerById(int timerId, out Timer timer)
-    {
-        timer = null;
-        int index = FindTimerIndex(timerId);
-        if (index < 0)
-        {
-            return false;
-        }
-
-        timer = m_Timers[index];
-        timer?.Stop();
-        m_Timers.RemoveAt(index);
-        return true;
     }
 }
