@@ -1,2 +1,2 @@
-#,Id,Code,Name,Camp,PrefabPath,MoveSeep,ProtagonistPath,ProtagonistSpeed
- ,1,P001,陈良,1,Entity/Unit/Protagonist/ProtagonistEntity,3,Entity/Projectile/Unit/ProjectileBase,5
+#,Id,Code,Name,Camp,PrefabPath,MoveSeep,ProjectileId,ProtagonistSpeed
+ ,1,P0001,陈良,1,Entity/Unit/Protagonist/ProtagonistEntity,3,1,5

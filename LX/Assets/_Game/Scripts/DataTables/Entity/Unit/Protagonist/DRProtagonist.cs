@@ -37,7 +37,7 @@ public class DRProtagonist : DataRowBase
     /// <summary>
     /// 子弹预制体路径
     /// </summary>
-    public string ProtagonistPath { get; set; }
+    public int ProjectileId { get; set; }
     /// <summary>
     /// 子弹速度
     /// </summary>
@@ -54,6 +54,8 @@ public class DRProtagonist : DataRowBase
         Camp = int.Parse(colString[index++]);
         PrefabPath = colString[index++];
         MoveSeep = float.Parse(colString[index++]);
+        ProjectileId = int.Parse(colString[index++]);
+        ProtagonistSpeed = float.Parse(colString[index++]);
         return true;
     }
 }

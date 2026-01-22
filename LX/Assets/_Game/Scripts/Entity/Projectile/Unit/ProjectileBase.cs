@@ -8,5 +8,10 @@ using UnityGameFramework.Runtime;
 /// </summary>
 public class ProjectileBase : EntityLogic
 {
-    
+    protected override void OnInit(object userData)
+    {
+        base.OnInit(userData);
+        object[] os = userData as object[];
+        transform.position = (Vector2)os[0];
+    }
 }

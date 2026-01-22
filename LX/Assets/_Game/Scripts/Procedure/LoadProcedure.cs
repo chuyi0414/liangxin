@@ -15,7 +15,7 @@ using UnityGameFramework.Runtime;
 public class LoadProcedure : ProcedureBase
 {
     //总加载数量
-    private int _loadNumber = 2;
+    private int _loadNumber = 3;
     //已经加载的数量
     private int _accomplishLoadNumber = 0;
 
@@ -27,6 +27,8 @@ public class LoadProcedure : ProcedureBase
     private DataTableBase _dRBattleData;
     //DRProtagonist
     private DataTableBase _dRProtagonist;
+    //DRProjectile
+    private DataTableBase _dRProjectile;
 
 
     protected override void OnInit(IFsm<IProcedureManager> procedureOwner)
@@ -70,6 +72,21 @@ public class LoadProcedure : ProcedureBase
             {
                 this,
                 "Protagonist"
+            });
+        //子弹
+        if (GameEntry.DataTable.HasDataTable<DRProjectile>())
+        {
+            _dRProjectile = (DataTableBase)GameEntry.DataTable.GetDataTable<DRProjectile>();
+        }
+        else
+        {
+            _dRProjectile = (DataTableBase)GameEntry.DataTable.CreateDataTable<DRProjectile>();
+        }
+        _dRProjectile.ReadData("DataTables/Entity/Projectile/Unit/Projectile"
+            , new object[]
+            {
+                this,
+                "Projectile"
             });
     }
 
@@ -115,6 +132,10 @@ public class LoadProcedure : ProcedureBase
             DRBattleData battleData = dRBattleDatas.GetDataRow(1);
         }
         if (os[1].Equals("Protagonist"))
+        {
+            
+        }
+        if (os[1].Equals("Projectile"))
         {
             
         }
