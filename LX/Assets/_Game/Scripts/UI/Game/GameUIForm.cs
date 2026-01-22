@@ -10,46 +10,58 @@ using UnityGameFramework.Runtime;
 
 public class GameUIForm : UIFormLogic
 {
-    /// <summary>×Ê½ğÎÄ±¾</summary>
+    /// <summary>èµ„é‡‘æ–‡æœ¬</summary>
     [SerializeField] private TMP_Text _txtMoney;
-    /// <summary>Á¼ĞÄÎÄ±¾</summary>
+    /// <summary>è‰¯å¿ƒæ–‡æœ¬</summary>
     [SerializeField] private TMP_Text _txtConscience;
-    /// <summary>ºÚĞÄÎÄ±¾</summary>
+    /// <summary>é»‘å¿ƒæ–‡æœ¬</summary>
     [SerializeField] private TMP_Text _txtBlackHeart;
     /// <summary>
-    /// ¹«Ë¾Á¼ĞÄ
+    /// å…¬å¸è‰¯å¿ƒ
     /// </summary>
     [SerializeField] private TMP_Text _txtCompanyConscience;
     /// <summary>
-    /// ¹«Ë¾ÎÛÈ¾
+    /// å½“å‰å…¬å¸è‰¯å¿ƒæœ€å¤§å€¼
+    /// </summary>
+    private float _companyConscience;
+    /// <summary>
+    /// å…¬å¸è‰¯å¿ƒä¼¤å®³é˜ˆå€¼
+    /// </summary>
+    private float _companyConscienceDamagePerPoint;
+    /// <summary>
+    /// å½“å‰å…¬å¸è‰¯å¿ƒä¼¤å®³
+    /// </summary>
+    private float _currentCompanyConscienceDamagePerPoint;
+    /// <summary>
+    /// å…¬å¸æ±¡æŸ“
     /// </summary>
     [SerializeField] private TMP_Text _txtCompanyPollution;
     /// <summary>
-    /// µ±Ç°¹«Ë¾ÎÛÈ¾°Ù·Ö±È
+    /// å½“å‰å…¬å¸æ±¡æŸ“ç™¾åˆ†æ¯”
     /// </summary>
     private float _companyPollutionPercentage;
     /// <summary>
-    /// µ±Ç°¹«Ë¾ÎÛÈ¾Öµ
-    /// </summary>
-    private float _currentCompanyPollution;
-    /// <summary>
-    /// ¹«Ë¾ÎÛÈ¾×î´óÖµ
+    /// å…¬å¸æ±¡æŸ“æœ€å¤§å€¼
     /// </summary>
     private float _companyPollution;
     /// <summary>
-    /// ¹«Ë¾ÎÛÈ¾ÉËº¦Öµ
+    /// å…¬å¸æ±¡æŸ“ä¼¤å®³é˜ˆå€¼
     /// </summary>
     private float _companyPollutionDamagePerPoint;
     /// <summary>
-    /// ¹«Ë¾»¬¶¯Ìõ
+    /// å½“å‰å…¬å¸æ±¡æŸ“å€¼
+    /// </summary>
+    private float _currentCompanyPollutionDamagePerPoint;
+    /// <summary>
+    /// å…¬å¸æ»‘åŠ¨æ¡
     /// </summary>
     [SerializeField] private Slider _sliderCompanyPollution;
     /// <summary>
-    /// ²¨´Îµ¹¼ÆÊ±
+    /// æ³¢æ¬¡å€’è®¡æ—¶
     /// </summary>
     [SerializeField] private TMP_Text _txtWaveCountdown;
     /// <summary>
-    /// ²¨´Î½×¶Î
+    /// æ³¢æ¬¡é˜¶æ®µ
     /// </summary>
     [SerializeField] private TMP_Text _txtStage;
 
@@ -61,11 +73,14 @@ public class GameUIForm : UIFormLogic
         GameEntry.DataBinding.Set<int>("Money", dRBattleData.Money);
         GameEntry.DataBinding.Set<int>("Conscience", dRBattleData.Conscience);
         GameEntry.DataBinding.Set<int>("CompanyConscience", dRBattleData.CompanyConscience);
-        GameEntry.DataBinding.Set<int>("CompanyPollution", 0);
-        _currentCompanyPollution = 0;
+        _currentCompanyConscienceDamagePerPoint = 0;
+        _companyConscience = dRBattleData.CompanyConscience;
+        _companyConscienceDamagePerPoint = dRBattleData.CompanyConscienceDamagePerPoint;
+        GameEntry.DataBinding.Set<float>("CompanyPollution", 0);
         _companyPollutionPercentage = 0;
         _companyPollution = dRBattleData.CompanyPollution;
         _companyPollutionDamagePerPoint = dRBattleData.CompanyPollutionDamagePerPoint;
+        _currentCompanyPollutionDamagePerPoint = 0;
     }
 
     protected override void OnOpen(object userData)
@@ -92,14 +107,14 @@ public class GameUIForm : UIFormLogic
               v => _txtCompanyConscience.SetText("{0}", v),
               this
           );
-        GameEntry.DataBinding.Bind<int>(
+        GameEntry.DataBinding.Bind<float>(
               "CompanyPollution",
               0,
               v => 
               {
-                  
-                  _txtCompanyPollution.SetText("{0}%", v);
-                  _sliderCompanyPollution.value = v / _companyPollution;
+                  float vPercentage = v / _companyPollution;
+                  _txtCompanyPollution.SetText("{0}%", vPercentage * 100);
+                  _sliderCompanyPollution.value = vPercentage;
               },
               this
           );
@@ -111,8 +126,33 @@ public class GameUIForm : UIFormLogic
         object[] os = ne.UserData as object[];
         int attack = (int)os[0];
 
-        BindableProperty<int> bp = GameEntry.DataBinding.Get<int>("CompanyPollution");
-        bp.Value = attack;
+        _currentCompanyPollutionDamagePerPoint += attack;
+        if(_currentCompanyPollutionDamagePerPoint >= _companyPollutionDamagePerPoint)
+        {
+            _currentCompanyPollutionDamagePerPoint -= _companyPollutionDamagePerPoint;
+            _companyPollutionPercentage++;
+            if(_companyPollutionPercentage >= _companyPollution)
+            {
+                _companyPollutionPercentage -= _companyPollution;
+                //å‘é€æ±¡æŸ“äº‹ä»¶
+            }
+        }
+
+        BindableProperty<float> bp = GameEntry.DataBinding.Get<float>("CompanyPollution");
+        bp.Value = _companyPollutionPercentage;
+
+        _currentCompanyConscienceDamagePerPoint++;
+        if(_currentCompanyConscienceDamagePerPoint >= _companyConscienceDamagePerPoint)
+        {
+            _currentCompanyConscienceDamagePerPoint -= _companyConscienceDamagePerPoint;
+            _companyConscience -= 1;
+            if(_companyConscience <= 0)
+            {
+                _companyConscience = 0;
+                //å‘é€å…¬å¸ç ´äº§äº‹ä»¶
+            }
+        }
+        GameEntry.DataBinding.Get<int>("CompanyConscience").Value = (int)_companyConscience;
     }
 
     protected override void OnClose(bool isShutdown, object userData)

@@ -15,7 +15,7 @@ using UnityGameFramework.Runtime;
 public class LoadProcedure : ProcedureBase
 {
     //总加载数量
-    private int _loadNumber = 1;
+    private int _loadNumber = 2;
     //已经加载的数量
     private int _accomplishLoadNumber = 0;
 
@@ -25,6 +25,9 @@ public class LoadProcedure : ProcedureBase
 
     //DRBattleData
     private DataTableBase _dRBattleData;
+    //DRProtagonist
+    private DataTableBase _dRProtagonist;
+
 
     protected override void OnInit(IFsm<IProcedureManager> procedureOwner)
     {
@@ -38,7 +41,7 @@ public class LoadProcedure : ProcedureBase
 
         GameEntry.Event.Subscribe(LoadDataTableSuccessEventArgs.EventId,OnLoadDataTableSuccess);
         GameEntry.Event.Subscribe(LoadDataTableFailureEventArgs.EventId, OnLoadDataTableFailure);
-
+        //战斗数据
         if (GameEntry.DataTable.HasDataTable<DRBattleData>())
         {
             _dRBattleData = (DataTableBase)GameEntry.DataTable.GetDataTable<DRBattleData>();
@@ -47,12 +50,26 @@ public class LoadProcedure : ProcedureBase
         {
             _dRBattleData = (DataTableBase)GameEntry.DataTable.CreateDataTable<DRBattleData>();
         }
-
         _dRBattleData.ReadData("DataTables/Game/BattleData"
             ,new object[]
             {
                 this,
                 "BattleData"
+            });
+        //主角
+        if (GameEntry.DataTable.HasDataTable<DRProtagonist>())
+        {
+            _dRProtagonist = (DataTableBase)GameEntry.DataTable.GetDataTable<DRProtagonist>();
+        }
+        else
+        {
+            _dRProtagonist = (DataTableBase)GameEntry.DataTable.CreateDataTable<DRProtagonist>();
+        }
+        _dRProtagonist.ReadData("DataTables/Entity/Unit/Protagonist/Protagonist"
+            , new object[]
+            {
+                this,
+                "Protagonist"
             });
     }
 
@@ -96,6 +113,10 @@ public class LoadProcedure : ProcedureBase
         {
             IDataTable<DRBattleData> dRBattleDatas = GameEntry.DataTable.GetDataTable<DRBattleData>();
             DRBattleData battleData = dRBattleDatas.GetDataRow(1);
+        }
+        if (os[1].Equals("Protagonist"))
+        {
+            
         }
 
         _accomplishLoadNumber++;

@@ -1,0 +1,99 @@
+{
+    "version": 1,
+    "name": "ProtagonistActions",
+    "maps": [
+        {
+            "name": "ProtagonistNormal",
+            "id": "f6721275-dabe-404b-b4df-8f5c51c9a7c2",
+            "actions": [
+                {
+                    "name": "Move2d",
+                    "type": "Value",
+                    "id": "7d92fe25-ee19-47fc-9c99-e9eae62945ae",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Attack",
+                    "type": "Button",
+                    "id": "06fe4161-5cb5-4d60-b6f8-10d2cdddfdb0",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "2D Vector",
+                    "id": "fcc90be3-7ea5-4b8b-8b3a-94b5bdd1d361",
+                    "path": "2DVector",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move2d",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "up",
+                    "id": "50970980-55d8-465a-b8da-f2cdc4c8b8f2",
+                    "path": "<Keyboard>/w",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move2d",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "down",
+                    "id": "8789472c-1eab-4459-8c69-e597ed0c17cb",
+                    "path": "<Keyboard>/s",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move2d",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "left",
+                    "id": "f60467af-0f38-427a-99f9-98d32beaf993",
+                    "path": "<Keyboard>/a",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move2d",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "right",
+                    "id": "08733404-f1ad-4155-b206-6389cfd633e8",
+                    "path": "<Keyboard>/d",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move2d",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "",
+                    "id": "438a4c0e-c0dc-460f-8a81-e43966e91bd2",
+                    "path": "<Keyboard>/space",
+                    "interactions": "Hold(duration=0.3,pressPoint=0.2)",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Attack",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}

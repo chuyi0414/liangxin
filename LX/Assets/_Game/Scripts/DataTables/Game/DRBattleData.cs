@@ -4,6 +4,9 @@ using System.Data;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 
+/// <summary>
+/// 战斗数据表
+/// </summary>
 public class DRBattleData : DataRowBase
 {
     private int m_Id;

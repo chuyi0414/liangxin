@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityGameFramework.Runtime;
 
 /// <summary>
-/// GameProcedure¡˜≥Ã
+/// GameProcedureÊµÅÁ®ã
 /// </summary>
 public class GameProcedure: ProcedureBase
 {
@@ -22,6 +22,24 @@ public class GameProcedure: ProcedureBase
     {
         base.OnEnter(procedureOwner);
         _gameUIFormId = GameEntry.UI.OpenUIForm("UI/Game/GameUIForm", "Normal");
+        GameFramework.DataTable.IDataTable<DRProtagonist> dRProtagonists = GameEntry.DataTable.GetDataTable<DRProtagonist>();
+        if (dRProtagonists != null)
+        {
+            DRProtagonist dRProtagonist = dRProtagonists.GetDataRow(1);
+            if (dRProtagonist != null)
+            {
+                int entityId = GameEntry.EntityIdPool.Acquire();
+                GameEntry.Entity.ShowEntity<ProtagonistEntity>(
+                    entityId
+                    , dRProtagonist.PrefabPath
+                    , "Character"
+                    , new object[]
+                    {
+                        dRProtagonist
+                    }
+                );
+            }
+        }
     }
 
     protected override void OnUpdate(IFsm<IProcedureManager> procedureOwner, float elapseSeconds, float realElapseSeconds)

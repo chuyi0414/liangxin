@@ -119,7 +119,15 @@ namespace UnityGameFramework.Runtime
                 m_EntityLogic = null;
             }
 
-            m_EntityLogic = gameObject.AddComponent(entityLogicType) as EntityLogic;
+            // 优先复用预制体上已挂的实体逻辑脚本，避免重复添加组件
+            if (m_EntityLogic == null)
+            {
+                m_EntityLogic = gameObject.GetComponent(entityLogicType) as EntityLogic;
+                if (m_EntityLogic == null)
+                {
+                    m_EntityLogic = gameObject.AddComponent(entityLogicType) as EntityLogic;
+                }
+            }
             if (m_EntityLogic == null)
             {
                 Log.Error("Entity '{0}' can not add entity logic.", entityAssetName);
