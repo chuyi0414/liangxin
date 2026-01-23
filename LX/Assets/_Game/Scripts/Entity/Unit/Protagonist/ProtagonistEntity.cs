@@ -29,7 +29,7 @@ public class ProtagonistEntity : UnitBaseEntity
         object[] os = userData as object[];
         _dRProtagonist = os[0] as DRProtagonist;
 
-        _dRProjectile = _dRProjectiles.GetDataRow(_dRProtagonist.ProjectileId);
+        _dRProjectile = GameEntry.StartGame.DRProjectiles.GetDataRow(_dRProtagonist.ProjectileId);
         _input = new ProtagonistActions();
         _input.ProtagonistNormal.Move2d.performed += Move;
         _input.ProtagonistNormal.Move2d.canceled += StopMove;
@@ -100,7 +100,7 @@ public class ProtagonistEntity : UnitBaseEntity
           mouseScreen.y,
           depth));
         //计算角色指向鼠标的方向向量，并归一化
-        Vector2 direction = ((Vector2)mouseWorld - (Vector2)transform.position).normalized;
+        //Vector2 direction = ((Vector2)mouseWorld - (Vector2)transform.position).normalized;
 
         GameEntry.Entity.ShowEntity<ProjectileBase>(
             GameEntry.EntityIdPool.Acquire(),
@@ -109,7 +109,9 @@ public class ProtagonistEntity : UnitBaseEntity
             new object[]
             {
                 (Vector2)transform.position,
-                (Vector2)mouseWorld
+                (Vector2)mouseWorld,
+                _dRProtagonist.ProjectileSpeed,
+                _dRProtagonist.Camp
             });
     }
     /// <summary>

@@ -1,3 +1,4 @@
+using GameFramework.DataTable;
 using GameFramework.Fsm;
 using GameFramework.Procedure;
 using System.Collections;
@@ -22,7 +23,7 @@ public class GameProcedure: ProcedureBase
     {
         base.OnEnter(procedureOwner);
         _gameUIFormId = GameEntry.UI.OpenUIForm("UI/Game/GameUIForm", "Normal");
-        GameFramework.DataTable.IDataTable<DRProtagonist> dRProtagonists = GameEntry.DataTable.GetDataTable<DRProtagonist>();
+        IDataTable<DRProtagonist> dRProtagonists = GameEntry.StartGame.DRProtagonists;
         if (dRProtagonists != null)
         {
             DRProtagonist dRProtagonist = dRProtagonists.GetDataRow(1);

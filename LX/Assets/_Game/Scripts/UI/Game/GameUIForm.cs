@@ -68,8 +68,7 @@ public class GameUIForm : UIFormLogic
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
-        GameFramework.DataTable.IDataTable<DRBattleData> dRBattleDatas = GameEntry.DataTable.GetDataTable<DRBattleData>();
-        DRBattleData dRBattleData = dRBattleDatas.GetDataRow(1);
+        DRBattleData dRBattleData = GameEntry.StartGame.DRBattleDatas.GetDataRow(1);
         GameEntry.DataBinding.Set<int>("Money", dRBattleData.Money);
         GameEntry.DataBinding.Set<int>("Conscience", dRBattleData.Conscience);
         GameEntry.DataBinding.Set<int>("CompanyConscience", dRBattleData.CompanyConscience);

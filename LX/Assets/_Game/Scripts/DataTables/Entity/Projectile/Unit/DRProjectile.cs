@@ -19,7 +19,7 @@ public class DRProjectile : DataRowBase
 
     public override bool ParseDataRow(string dataRowString, object userData)
     {
-        string[] colString = dataRowString.Split(',');
+        string[] colString = dataRowString.Split(' ');
         int index = 1;
         m_Id = int.Parse(colString[index++]);
         Code = colString[index++];

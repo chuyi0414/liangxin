@@ -41,12 +41,12 @@ public class DRProtagonist : DataRowBase
     /// <summary>
     /// 子弹速度
     /// </summary>
-    public float ProtagonistSpeed { get; set; }
+    public float ProjectileSpeed { get; set; }
 
 
     public override bool ParseDataRow(string dataRowString, object userData)
     {
-        string[] colString = dataRowString.Split(',');
+        string[] colString = dataRowString.Split(' ');
         int index = 1;
         m_Id = int.Parse(colString[index++]);
         Code = colString[index++];
@@ -55,7 +55,7 @@ public class DRProtagonist : DataRowBase
         PrefabPath = colString[index++];
         MoveSeep = float.Parse(colString[index++]);
         ProjectileId = int.Parse(colString[index++]);
-        ProtagonistSpeed = float.Parse(colString[index++]);
+        ProjectileSpeed = float.Parse(colString[index++]);
         return true;
     }
 }

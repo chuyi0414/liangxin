@@ -171,7 +171,7 @@ public partial class @ProtagonistActions: IInputActionCollection2, IDisposable
                     ""name"": """",
                     ""id"": ""438a4c0e-c0dc-460f-8a81-e43966e91bd2"",
                     ""path"": ""<Keyboard>/space"",
-                    ""interactions"": ""Hold(duration=0.2,pressPoint=0.1)"",
+                    ""interactions"": ""Hold(duration=0.1,pressPoint=0.1)"",
                     ""processors"": """",
                     ""groups"": """",
                     ""action"": ""Attack"",
