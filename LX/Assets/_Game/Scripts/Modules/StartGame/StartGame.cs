@@ -53,4 +53,8 @@ public class StartGame : GameFrameworkComponent
             _dRBattleDatas = value;
         }
     }
+    /// <summary>
+    /// Ö÷½Ç
+    /// </summary>
+    public ProtagonistEntity protagonistEntity;
 }

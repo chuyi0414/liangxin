@@ -1,4 +1,5 @@
 using GameFramework.DataTable;
+using Pathfinding;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -21,6 +22,10 @@ public class UnitBaseEntity : EntityLogic
     protected Vector2 _moveInput;
     //当前子弹
     protected DRProjectile _dRProjectile;
+    /// <summary>
+    /// A* 自带的目标设置组件
+    /// </summary>
+    protected AIDestinationSetter _aIDestinationSetter; 
 
     protected override void OnInit(object userData)
     {

@@ -26,6 +26,8 @@ public class ProtagonistEntity : UnitBaseEntity
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
+        GameEntry.StartGame.protagonistEntity = this;
+
         object[] os = userData as object[];
         _dRProtagonist = os[0] as DRProtagonist;
 
