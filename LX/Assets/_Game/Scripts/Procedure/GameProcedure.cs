@@ -22,25 +22,8 @@ public class GameProcedure: ProcedureBase
     protected override void OnEnter(IFsm<IProcedureManager> procedureOwner)
     {
         base.OnEnter(procedureOwner);
+        GameEntry.Entity.ShowEntity<DefaultMap>(GameEntry.EntityIdPool.Acquire(), "Entity/Map/Map1", "Environment");
         _gameUIFormId = GameEntry.UI.OpenUIForm("UI/Game/GameUIForm", "Normal");
-        IDataTable<DRProtagonist> dRProtagonists = GameEntry.StartGame.DRProtagonists;
-        if (dRProtagonists != null)
-        {
-            DRProtagonist dRProtagonist = dRProtagonists.GetDataRow(1);
-            if (dRProtagonist != null)
-            {
-                int entityId = GameEntry.EntityIdPool.Acquire();
-                GameEntry.Entity.ShowEntity<ProtagonistEntity>(
-                    entityId
-                    , dRProtagonist.PrefabPath
-                    , "Character"
-                    , new object[]
-                    {
-                        dRProtagonist
-                    }
-                );
-            }
-        }
     }
 
     protected override void OnUpdate(IFsm<IProcedureManager> procedureOwner, float elapseSeconds, float realElapseSeconds)

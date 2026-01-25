@@ -244,8 +244,8 @@ MonoBehaviour:
     visualizeSensitivity: 0
   simulateMovement: 1
   speed: 3
-  orientation: 0
-  enableRotation: 1
+  orientation: 1
+  enableRotation: 0
   rotationSpeed: 10
   interpolatePathSwitches: 1
   switchPathInterpolationSpeed: 5
