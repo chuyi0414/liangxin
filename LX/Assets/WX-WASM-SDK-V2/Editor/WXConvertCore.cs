@@ -1298,8 +1298,8 @@ namespace WeChatWASM
                 // brotli失败后，因为无法知道wasmcode大小，则得不到最终小游戏总包体大小。不能使用小游戏分包加载资源，还原成cdn的方式。
                 if (config.ProjectConf.assetLoadType == 1)
                 {
-                    UnityEngine.Debug.LogWarning("brotli失败，无法检测文件大小，请上传资源文件到CDN");
-                    config.ProjectConf.assetLoadType = 0;
+                    // brotli失败时无法统计大小，这里仅提示风险，仍保持小游戏包内加载模式
+                    UnityEngine.Debug.LogWarning("brotli失败，无法检测文件大小，将继续按小游戏包内加载，请确认总包体大小限制");
                 }
 
                 // ShowNotification(new GUIContent("Brotli压缩失败，请到转出目录手动压缩！！！"));
@@ -1338,18 +1338,21 @@ namespace WeChatWASM
                 var brcodeSize = brcodeInfo.Length;
                 // 计算首资源包大小
                 var tempDataInfo = new FileInfo(tempDataPath);
-                var tempFileSize = tempDataInfo.Length.ToString();
+                var tempFileSize = tempDataInfo.Length;
                 // 胶水层及sdk可能占一定大小，粗略按照1M来算，则剩余29M
-                if (brcodeSize + int.Parse(tempFileSize) > (30 - 1) * 1024 * 1024)
+                var maxTotalSize = (30 - 1) * 1024 * 1024;
+                var totalSize = brcodeSize + tempFileSize;
+                if (totalSize > maxTotalSize)
                 {
-                    config.ProjectConf.assetLoadType = 0;
-                    Debug.LogError("资源文件过大，不适宜用放小游戏包内加载，请上传资源文件到CDN");
+                    // 超限时仅提示大小，不再自动切换到CDN
+                    var brcodeSizeMb = Math.Round(brcodeSize / 1024d / 1024d, 2);
+                    var tempDataSizeMb = Math.Round(tempFileSize / 1024d / 1024d, 2);
+                    var totalSizeMb = Math.Round(totalSize / 1024d / 1024d, 2);
+                    var maxSizeMb = Math.Round(maxTotalSize / 1024d / 1024d, 2);
+                    Debug.LogError($"资源文件过大（wasm:{brcodeSizeMb}MB, data:{tempDataSizeMb}MB, total:{totalSizeMb}MB > {maxSizeMb}MB），仍按小游戏包内加载继续生成，请自行评估是否可用。");
                 }
-                else
-                {
-                    // 小游戏分包加载时，压缩成功且总大小符合要求，将br文件copy到小游戏目录
-                    File.Copy(tempDataPath, config.ProjectConf.compressDataPackage ? brMinigameDataPath : originMinigameDataPath, true);
-                }
+                // 无论是否超限，都继续将资源包拷贝到小游戏目录，保持包内加载模式
+                File.Copy(tempDataPath, config.ProjectConf.compressDataPackage ? brMinigameDataPath : originMinigameDataPath, true);
             }
             // 设置InstantGame的首资源包路径，上传用
             FirstBundlePath = tempDataPath;

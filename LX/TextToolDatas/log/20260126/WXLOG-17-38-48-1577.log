@@ -1,0 +1,47 @@
+﻿<wxlog>
+  <threadId>#main</threadId>
+  <timestamp>17:38:48:1881</timestamp>
+  <msgtype>MsgWXLogLaunch</msgtype>
+  <content>[The WXLogger is launched!]</content>
+  <stackFrames>
+[CALL STACK][0]: Method:WXTextureTools.Application.Options.OptionsConfig..ctor; File:.0
+[CALL STACK][1]: Method:WXTextureTools.Application.App..ctor; File:.0
+[CALL STACK][2]: Method:WXTextureTools.Program.Main; File:.0
+</stackFrames>
+</wxlog>
+<wxlog>
+  <threadId>#main</threadId>
+  <timestamp>17:38:48:1991</timestamp>
+  <msgtype>MsgMixture</msgtype>
+  <content>string|String[]
+OptionsConfig,-option=mirrorImage
+-dataDir=C:/Users/ChuYi/Desktop/Unity/xm/liangxin/LX/TextToolDatas
+-inPath=C:/Users/ChuYi/Desktop/Unity/xm/liangxin/LX/TextToolDatas\firstBundleTextures\png\128\UnityWatermark-small.d7411008.png
+-outPath=C:/Users/ChuYi/Desktop/Unity/xm/liangxin/LX/TextToolDatas\mirrorImageTemp\temp4231.png
+-execRoot=C:/Users/ChuYi/Desktop/Unity/xm/liangxin/LX/Assets\WX-WASM-SDK-V2\Editor\TextureEditor\Node
+</content>
+  <stackFrames>
+[CALL STACK][0]: Method:WXTextureTools.Application.App..ctor; File:.0
+[CALL STACK][1]: Method:WXTextureTools.Program.Main; File:.0
+</stackFrames>
+</wxlog>
+<wxlog>
+  <threadId>#main</threadId>
+  <timestamp>17:38:48:2006</timestamp>
+  <msgtype>MsgMixture</msgtype>
+  <content>string|string
+UnityBridgeHandler - SetDataDir,C:/Users/ChuYi/Desktop/Unity/xm/liangxin/LX/TextToolDatas\temp</content>
+  <stackFrames>
+[CALL STACK][0]: Method:WXTextureTools.Program.Main; File:.0
+</stackFrames>
+</wxlog>
+<wxlog>
+  <threadId>#main</threadId>
+  <timestamp>17:38:48:2080</timestamp>
+  <msgtype>MsgString</msgtype>
+  <content>WXMirrorImageExec</content>
+  <stackFrames>
+[CALL STACK][0]: Method:WXTextureTools.Application.App..ctor; File:.0
+[CALL STACK][1]: Method:WXTextureTools.Program.Main; File:.0
+</stackFrames>
+</wxlog>
