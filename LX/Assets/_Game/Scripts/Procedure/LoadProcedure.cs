@@ -77,7 +77,7 @@ public class LoadProcedure : ProcedureBase
         {
             _dRProjectile = (DataTableBase)GameEntry.DataTable.CreateDataTable<DRProjectile>();
         }
-        _dRProjectile.ReadData("DataTables/Entity/Projectile/Unit/Projectile"
+        _dRProjectile.ReadData("DataTables/Entity/Projectile/Projectile"
             , new object[]
             {
                 this,
