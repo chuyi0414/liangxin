@@ -38,6 +38,19 @@ public class StartGame : GameFrameworkComponent
         }
     }
 
+    private IDataTable<DREnemy> _drEnemys;
+    public IDataTable<DREnemy> DREnemies
+    {
+        get
+        {
+            return _drEnemys;
+        }
+        set
+        {
+            _drEnemys = value;
+        }
+    }
+
     private IDataTable<DRBattleData> _dRBattleDatas;
     /// <summary>
     /// 战斗数据表
@@ -61,8 +74,16 @@ public class StartGame : GameFrameworkComponent
     /// <summary>
     /// 在指定地方创建敌人
     /// </summary>
-    public void TryCreationEnemy(string id,Transform transform)
+    public void TryCreationEnemy(string id,Vector3 v3)
     {
-
+        DREnemy dREnemy = DREnemies.GetDataRow(1);
+        GameEntry.Entity.ShowEntity<EnemyEntity_JW>(
+            GameEntry.EntityIdPool.Acquire(),
+            dREnemy.PrefabPath,
+            "Enemy",
+            new object[]
+            {
+                transform.position
+            });
     }
 }

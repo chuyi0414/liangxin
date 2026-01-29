@@ -24,7 +24,8 @@ public class LoadProcedure : ProcedureBase
     private DataTableBase _dRProtagonist;
     //DRProjectile
     private DataTableBase _dRProjectile;
-
+    //DREnemy
+    private DataTableBase _dREnemy;
 
     protected override void OnInit(IFsm<IProcedureManager> procedureOwner)
     {
@@ -83,6 +84,21 @@ public class LoadProcedure : ProcedureBase
                 this,
                 "Projectile"
             });
+        //µ–»À
+        if(GameEntry.DataTable.HasDataTable<DREnemy>())
+        {
+            _dREnemy = (DataTableBase)GameEntry.DataTable.GetDataTable<DREnemy>();
+        }
+        else
+        {
+            _dREnemy = (DataTableBase)GameEntry.DataTable.CreateDataTable<DREnemy>();
+        }
+        _dREnemy.ReadData("DataTables/Entity/Unit/Enemy/Enemy"
+            ,new object[]
+            {
+                this,
+                "Enemy"
+            });
     }
 
     protected override void OnUpdate(IFsm<IProcedureManager> procedureOwner, float elapseSeconds, float realElapseSeconds)
@@ -135,6 +151,11 @@ public class LoadProcedure : ProcedureBase
         {
             IDataTable<DRProjectile> dRProjectiles = GameEntry.DataTable.GetDataTable<DRProjectile>();
             GameEntry.StartGame.DRProjectiles = dRProjectiles;
+        }
+        if (os[1].Equals("Enemy"))
+        {
+            IDataTable<DREnemy> dREnemys = GameEntry.DataTable.GetDataTable<DREnemy>();
+            GameEntry.StartGame.DREnemies = dREnemys;
         }
 
         _accomplishLoadNumber++;

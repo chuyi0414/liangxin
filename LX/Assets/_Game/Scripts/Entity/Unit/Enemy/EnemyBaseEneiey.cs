@@ -10,5 +10,8 @@ public class EnemyBaseEneiey : UnitBaseEntity
     {
         base.OnInit(userData);
         _aIDestinationSetter = GetComponent<AIDestinationSetter>();
+        _aIPath = GetComponent<AIPath>();
+        object[] os = userData as object[];
+        transform.position = (Vector3)os[0];
     }
 }

@@ -25,7 +25,11 @@ public class UnitBaseEntity : EntityLogic
     /// <summary>
     /// A* 自带的目标设置组件
     /// </summary>
-    protected AIDestinationSetter _aIDestinationSetter; 
+    protected AIDestinationSetter _aIDestinationSetter;
+    /// <summary>
+    /// A*的寻路组件
+    /// </summary>
+    protected AIPath _aIPath;
 
     protected override void OnInit(object userData)
     {
@@ -33,6 +37,9 @@ public class UnitBaseEntity : EntityLogic
     }
 }
 
+/// <summary>
+/// 阵营
+/// </summary>
 public enum CAMP
 {
     Protagonist = 1,
