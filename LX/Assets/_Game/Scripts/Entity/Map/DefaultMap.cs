@@ -13,7 +13,12 @@ public class DefaultMap : EntityLogic
     /// 主角生成位置
     /// </summary>
     [SerializeField]
-    private Transform _ProtagonistTransform;
+    private Transform _protagonistTransform;
+    /// <summary>
+    /// 公司生成位置
+    /// </summary>
+    [SerializeField]
+    private Transform _companyTransform;
 
     protected override void OnInit(object userData)
     {
@@ -31,10 +36,28 @@ public class DefaultMap : EntityLogic
                     , "Character"
                     , new object[]
                     {
-                        dRProtagonist
+                        dRProtagonist,
+                        _protagonistTransform
                     }
                 );
             }
         }
+        // 创建公司实体
+        GameEntry.Entity.ShowEntity<CompanyEntity>(
+            GameEntry.EntityIdPool.Acquire()
+            , "Entity/Company/CompanyEntity"
+            , "Environment"
+            , new object[]
+            {
+                _companyTransform
+            }
+        );
+
+    }
+
+    protected override void OnRecycle()
+    {
+        base.OnRecycle();
+
     }
 }

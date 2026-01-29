@@ -57,4 +57,12 @@ public class StartGame : GameFrameworkComponent
     /// 主角
     /// </summary>
     public ProtagonistEntity protagonistEntity;
+
+    /// <summary>
+    /// 在指定地方创建敌人
+    /// </summary>
+    public void TryCreationEnemy(string id,Transform transform)
+    {
+
+    }
 }

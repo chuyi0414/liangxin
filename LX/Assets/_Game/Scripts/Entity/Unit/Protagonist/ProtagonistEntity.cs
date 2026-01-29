@@ -37,6 +37,8 @@ public class ProtagonistEntity : UnitBaseEntity
         _input.ProtagonistNormal.Move2d.canceled += StopMove;
         _input.ProtagonistNormal.Attack.performed += Attack_performed;
         _input.ProtagonistNormal.Attack.canceled += Attack_canceled;
+
+        transform.position = ((Transform)os[1]).position;
     }
     /// <summary>
     /// 松开按键后触发（停止持续发射）

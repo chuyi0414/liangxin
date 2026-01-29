@@ -23,10 +23,6 @@ public class TextModule : GameFrameworkComponent
     private void HandleQPressed()
     {
         // TODO: 在此处实现按键触发后的具体逻辑。
-        GameEntry.Event.Fire(this, PollutionAttackEventArgs.Create(
-        new object[]
-        {
-            1
-        }));
+        
     }
 }

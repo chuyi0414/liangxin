@@ -10,6 +10,11 @@ using UnityGameFramework.Runtime;
 
 public class GameUIForm : UIFormLogic
 {
+    /// <summary>
+    /// 暂停按钮
+    /// </summary>
+    [SerializeField]private Button _btnPause;
+
     /// <summary>资金文本</summary>
     [SerializeField] private TMP_Text _txtMoney;
     /// <summary>良心文本</summary>
@@ -80,6 +85,12 @@ public class GameUIForm : UIFormLogic
         _companyPollution = dRBattleData.CompanyPollution;
         _companyPollutionDamagePerPoint = dRBattleData.CompanyPollutionDamagePerPoint;
         _currentCompanyPollutionDamagePerPoint = 0;
+
+        _btnPause.onClick.AddListener(() =>
+        {
+            GameFramework.Procedure.ProcedureBase currentProcedure = GameEntry.Procedure.CurrentProcedure;
+            currentProcedure.ChangeState<MainProcedure>(currentProcedure.procedureOwner);
+        });
     }
 
     protected override void OnOpen(object userData)

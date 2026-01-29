@@ -36,6 +36,8 @@ public class GameProcedure: ProcedureBase
     {
         base.OnLeave(procedureOwner, isShutdown);
         GameEntry.UI.CloseUIForm(_gameUIFormId);
+        GameEntry.Entity.HideAllLoadedEntities();
+        GameEntry.Entity.HideAllLoadingEntities();
     }
 
     protected override void OnDestroy(IFsm<IProcedureManager> procedureOwner)
