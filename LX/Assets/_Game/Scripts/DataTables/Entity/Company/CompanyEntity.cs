@@ -11,6 +11,7 @@ public class CompanyEntity : EntityLogic
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
+        GameEntry.StartGame.companyEntity = this;
 
         object[] os = userData as object[];
         transform.position = ((Transform)os[0]).position;

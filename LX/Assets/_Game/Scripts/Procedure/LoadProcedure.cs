@@ -142,17 +142,17 @@ public class LoadProcedure : ProcedureBase
             IDataTable<DRBattleData> dRBattleDatas = GameEntry.DataTable.GetDataTable<DRBattleData>();
             GameEntry.StartGame.DRBattleDatas = dRBattleDatas;
         }
-        if (os[1].Equals("Protagonist"))
+        else if (os[1].Equals("Protagonist"))
         {
             IDataTable<DRProtagonist> dRProtagonists = GameEntry.DataTable.GetDataTable<DRProtagonist>();
             GameEntry.StartGame.DRProtagonists = dRProtagonists;
         }
-        if (os[1].Equals("Projectile"))
+        else if (os[1].Equals("Projectile"))
         {
             IDataTable<DRProjectile> dRProjectiles = GameEntry.DataTable.GetDataTable<DRProjectile>();
             GameEntry.StartGame.DRProjectiles = dRProjectiles;
         }
-        if (os[1].Equals("Enemy"))
+        else if (os[1].Equals("Enemy"))
         {
             IDataTable<DREnemy> dREnemys = GameEntry.DataTable.GetDataTable<DREnemy>();
             GameEntry.StartGame.DREnemies = dREnemys;

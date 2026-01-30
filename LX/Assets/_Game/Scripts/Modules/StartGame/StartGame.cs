@@ -70,6 +70,10 @@ public class StartGame : GameFrameworkComponent
     /// 主角
     /// </summary>
     public ProtagonistEntity protagonistEntity;
+    /// <summary>
+    /// 公司
+    /// </summary>
+    public CompanyEntity companyEntity;
 
     /// <summary>
     /// 在指定地方创建敌人
@@ -83,7 +87,8 @@ public class StartGame : GameFrameworkComponent
             "Enemy",
             new object[]
             {
-                transform.position
+                v3,
+                dREnemy
             });
     }
 }

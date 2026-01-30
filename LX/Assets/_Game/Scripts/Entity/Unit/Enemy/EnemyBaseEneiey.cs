@@ -6,6 +6,11 @@ using UnityGameFramework.Runtime;
 
 public class EnemyBaseEneiey : UnitBaseEntity
 {
+    /// <summary>
+    /// µÐÈËÊý¾Ý
+    /// </summary>
+    protected DREnemy _dREnemy;
+
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
@@ -13,5 +18,8 @@ public class EnemyBaseEneiey : UnitBaseEntity
         _aIPath = GetComponent<AIPath>();
         object[] os = userData as object[];
         transform.position = (Vector3)os[0];
+        _dREnemy = (DREnemy)os[1];
+
+        _aIDestinationSetter.target = GameEntry.StartGame.companyEntity.transform;
     }
 }

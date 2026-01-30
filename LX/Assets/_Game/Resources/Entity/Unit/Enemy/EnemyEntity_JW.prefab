@@ -125,15 +125,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   version: 1073741824
-  radius: 0.71
-  height: 1.01
+  radius: 0.1
+  height: 1
   simulateMovement: 1
   maxSpeed: 1
-  gravity: {x: NaN, y: NaN, z: NaN}
+  gravity: {x: 0, y: 0, z: 0}
   groundMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  endReachedDistance: 0.2
+  endReachedDistance: 0.5
   whenCloseToDestination: 0
   rvoDensityBehavior:
     enabled: 1
@@ -143,17 +143,17 @@ MonoBehaviour:
     lastJobDensityResult: 0
   repathRateCompatibility: NaN
   canSearchCompability: 0
-  orientation: 0
+  orientation: 1
   enableRotation: 0
   autoRepath:
-    mode: 2
+    mode: 1
     period: 0.5
-    sensitivity: 10
+    sensitivity: 7.9
     maximumPeriod: 2
     visualizeSensitivity: 0
   maxAcceleration: -2.5
   rotationSpeed: 360
-  slowdownDistance: 0.6
+  slowdownDistance: 0.5
   pickNextWaypointDist: 2
   alwaysDrawGizmos: 0
   slowWhenNotFacingTarget: 1
@@ -200,7 +200,7 @@ Transform:
   m_GameObject: {fileID: 4660549165988012134}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.5, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -290,10 +290,10 @@ BoxCollider2D:
   m_IsTrigger: 1
   m_UsedByEffector: 0
   m_UsedByComposite: 0
-  m_Offset: {x: 0, y: 0}
+  m_Offset: {x: 0, y: 0.5}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.5, y: 0.5}
+    pivot: {x: 0.5, y: 0}
     oldSize: {x: 1, y: 1}
     newSize: {x: 1, y: 1}
     adaptiveTilingThreshold: 0.5
