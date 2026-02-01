@@ -28,6 +28,10 @@ public partial class GameEntry
     /// </summary>
     public static StartGame StartGame { get; private set; }
 
+    /// <summary>
+    /// 路径重建调度器
+    /// </summary>
+    public static FlowFieldManager FlowFieldManager { get; private set; }
 
     private static void InitCustomComponents()
     {
@@ -37,5 +41,6 @@ public partial class GameEntry
         DataBinding = GFGameEntry.GetComponent<DataBindingComponent>();
         EntityIdPool = GFGameEntry.GetComponent<EntityIdPoolComponent>();
         StartGame = GFGameEntry.GetComponent<StartGame>();
+        FlowFieldManager = GFGameEntry.GetComponent<FlowFieldManager>();
     }
 }

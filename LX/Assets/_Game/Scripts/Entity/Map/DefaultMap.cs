@@ -20,9 +20,21 @@ public class DefaultMap : EntityLogic
     [SerializeField]
     private Transform _companyTransform;
 
+    /// <summary>
+    /// A*重新扫描协程引用，避免重复并发扫描
+    /// </summary>
+    private Coroutine _rescanCoroutine;
+
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
+        
+    }
+
+    protected override void OnShow(object userData)
+    {
+        base.OnShow(userData);
+
         IDataTable<DRProtagonist> dRProtagonists = GameEntry.StartGame.DRProtagonists;
         if (dRProtagonists != null)
         {
@@ -53,11 +65,35 @@ public class DefaultMap : EntityLogic
             }
         );
 
+
+        if (_rescanCoroutine != null)
+        {
+            StopCoroutine(_rescanCoroutine);
+            _rescanCoroutine = null;
+        }
+
+        _rescanCoroutine = StartCoroutine(RescanGraph());
     }
+
+    private IEnumerator RescanGraph()
+    {
+        yield return null;
+
+        if (AstarPath.active == null)
+            yield break;
+
+        foreach (var _ in AstarPath.active.ScanAsync())
+            yield return null;
+    }
+
 
     protected override void OnRecycle()
     {
         base.OnRecycle();
-
+        if (_rescanCoroutine != null)
+        {
+            StopCoroutine(_rescanCoroutine);
+            _rescanCoroutine = null;
+        }
     }
 }

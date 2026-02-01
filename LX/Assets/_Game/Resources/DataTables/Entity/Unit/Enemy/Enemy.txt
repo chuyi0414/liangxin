@@ -1,2 +1,0 @@
-#Id,Code,Name,Camp,PrefabPath,MoveSeep
-	1	DR00001	卷 王	2	Entity/Unit/Enemy/EnemyEntity_JW	1

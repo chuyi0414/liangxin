@@ -1,2 +1,0 @@
-#	Id	Code	Name	PrefabPath
-	1	ZD0001	子弹基类	Entity/Projectile/ProjectileBase

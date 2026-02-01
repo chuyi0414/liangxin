@@ -44,7 +44,7 @@ public class ProjectileBase : EntityLogic
         Vector2 v2 = (Vector2)os[1];
         _speed = float.Parse(os[2].ToString());
         _direction = (v2 - (Vector2)transform.position).normalized;
-        Camp = (CAMP)int.Parse(os[3].ToString());
+        Camp = (CAMP)os[3];
     }
 
     protected override void OnUpdate(float elapseSeconds, float realElapseSeconds)

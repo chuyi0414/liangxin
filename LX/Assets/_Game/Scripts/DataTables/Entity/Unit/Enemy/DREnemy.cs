@@ -1,43 +1,19 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
 using UnityGameFramework.Runtime;
 
-public class DREnemy : DataRowBase
+/// <summary>
+/// æ•Œäººæ•°æ®è¡¨è¡Œæ•°æ®ã€‚
+/// </summary>
+public class DREnemy : DRUnit
 {
     /// <summary>
-    /// Ö÷¼ü Id µÄÄÚ²¿´æ´¢£¬¶ÔÓ¦Êı¾İ±íµÄ Id ÁĞ¡£
+    /// è§£ææ•°æ®è¡¨è¡Œï¼ŒæŒ‰ Tab åˆ†éš”å­—æ®µã€‚
     /// </summary>
-    private int m_Id;
-
-    /// <summary>
-    /// Êı¾İĞĞÎ¨Ò» Id¡£
-    /// </summary>
-    public override int Id => m_Id;
-    /// <summary>
-    /// Code
-    /// </summary>
-    public string Code { get; private set; }
-    /// <summary>
-    /// Ãû³Æ
-    /// </summary>
-    public string Name { get; private set; }
-    /// <summary>
-    /// ÕóÓª
-    /// </summary>
-    public CAMP Camp {  get; private set; }
-    /// <summary>
-    /// Ô¤ÖÆÌåÂ·¾¶
-    /// </summary>
-    public string PrefabPath { get; private set; }
-    /// <summary>
-    /// ¹ÖÎïËÙ¶È
-    /// </summary>
-    public float MoveSeep { get; private set; }
-
+    /// <param name="dataRowString">åŸå§‹è¡Œå­—ç¬¦ä¸²ã€‚</param>
+    /// <param name="userData">ç”¨æˆ·è‡ªå®šä¹‰æ•°æ®ã€‚</param>
+    /// <returns>è§£ææ˜¯å¦æˆåŠŸã€‚</returns>
     public override bool ParseDataRow(string dataRowString, object userData)
     {
-        string[] colString = dataRowString.Split('\t');
+        string[] colString = dataRowString.Split('	');
         int index = 1;
         m_Id = int.Parse(colString[index++]);
         Code = colString[index++];
@@ -45,6 +21,14 @@ public class DREnemy : DataRowBase
         Camp = (CAMP)int.Parse(colString[index++]);
         PrefabPath = colString[index++];
         MoveSeep = float.Parse(colString[index++]);
+        AttackRange = float.Parse(colString[index++]);
+        VisualScope = float.Parse(colString[index++]);
+        AttackType = (ATTACKTYPE)int.Parse(colString[index++]);
+        ProjectileId = int.Parse(colString[index++]);
+        ProjectileSpeed = float.Parse(colString[index++]);
+        HP = float.Parse(colString[index++]);
+        Attack = float.Parse(colString[index++]);
+        AttackSpeed = float.Parse(colString[index++]);
         return true;
     }
 }

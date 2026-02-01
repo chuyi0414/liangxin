@@ -1,2 +1,0 @@
-#	Id	Code	Name	Camp	PrefabPath	MoveSeep	ProjectileId	ProjectileSpeed
-	1	LB00001	陈 良	1	Entity/Unit/Protagonist/ProtagonistEntity	3	1	5

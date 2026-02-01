@@ -73,18 +73,6 @@ public class GameUIForm : UIFormLogic
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
-        DRBattleData dRBattleData = GameEntry.StartGame.DRBattleDatas.GetDataRow(1);
-        GameEntry.DataBinding.Set<int>("Money", dRBattleData.Money);
-        GameEntry.DataBinding.Set<int>("Conscience", dRBattleData.Conscience);
-        GameEntry.DataBinding.Set<int>("CompanyConscience", dRBattleData.CompanyConscience);
-        _currentCompanyConscienceDamagePerPoint = 0;
-        _companyConscience = dRBattleData.CompanyConscience;
-        _companyConscienceDamagePerPoint = dRBattleData.CompanyConscienceDamagePerPoint;
-        GameEntry.DataBinding.Set<float>("CompanyPollution", 0);
-        _companyPollutionPercentage = 0;
-        _companyPollution = dRBattleData.CompanyPollution;
-        _companyPollutionDamagePerPoint = dRBattleData.CompanyPollutionDamagePerPoint;
-        _currentCompanyPollutionDamagePerPoint = 0;
 
         _btnPause.onClick.AddListener(() =>
         {
@@ -98,6 +86,19 @@ public class GameUIForm : UIFormLogic
         base.OnOpen(userData);
 
         GameEntry.Event.Subscribe(PollutionAttackEventArgs.EventId, OnPollutionAttackEvent);
+
+        DRBattleData dRBattleData = GameEntry.StartGame.DRBattleDatas.GetDataRow(1);
+        GameEntry.DataBinding.Set<int>("Money", dRBattleData.Money);
+        GameEntry.DataBinding.Set<int>("Conscience", dRBattleData.Conscience);
+        GameEntry.DataBinding.Set<int>("CompanyConscience", dRBattleData.CompanyConscience);
+        _currentCompanyConscienceDamagePerPoint = 0;
+        _companyConscience = dRBattleData.CompanyConscience;
+        _companyConscienceDamagePerPoint = dRBattleData.CompanyConscienceDamagePerPoint;
+        GameEntry.DataBinding.Set<float>("CompanyPollution", 0);
+        _companyPollutionPercentage = 0;
+        _companyPollution = dRBattleData.CompanyPollution;
+        _companyPollutionDamagePerPoint = dRBattleData.CompanyPollutionDamagePerPoint;
+        _currentCompanyPollutionDamagePerPoint = 0;
 
         GameEntry.DataBinding.Bind<int>(
               "Money",

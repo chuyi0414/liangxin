@@ -17,19 +17,24 @@ public class ProtagonistEntity : UnitBaseEntity
     //主角数据表
     private DRProtagonist _dRProtagonist;
     /// <summary>
-    /// 持续发射计时器句柄（为空表示未在持续发射）。
-    /// </summary>
-    private GameFramework.Timer.Timer _fireTimer;
-    /// <summary>
     /// 初始化主角实体的运行时数据
     /// </summary>
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
-        GameEntry.StartGame.protagonistEntity = this;
+        
+    }
+
+    /// <summary>
+    /// 实体显示
+    /// </summary>
+    protected override void OnShow(object userData)
+    {
+        base.OnShow(userData);
 
         object[] os = userData as object[];
         _dRProtagonist = os[0] as DRProtagonist;
+        Camp = _dRProtagonist.Camp;
 
         _dRProjectile = GameEntry.StartGame.DRProjectiles.GetDataRow(_dRProtagonist.ProjectileId);
         _input = new ProtagonistActions();
@@ -39,14 +44,20 @@ public class ProtagonistEntity : UnitBaseEntity
         _input.ProtagonistNormal.Attack.canceled += Attack_canceled;
 
         transform.position = ((Transform)os[1]).position;
+        _input.ProtagonistNormal.Enable();
+
+        GameEntry.StartGame.protagonistEntity = this;
+        _attackElapsedTime = 0;
     }
+
     /// <summary>
     /// 松开按键后触发（停止持续发射）
     /// </summary>
     /// <param name="context"></param>
     private void Attack_canceled(InputAction.CallbackContext context)
     {
-        StopFire();
+        //StopFire();
+        _isAttacking = false;
     }
 
     /// <summary>
@@ -55,38 +66,8 @@ public class ProtagonistEntity : UnitBaseEntity
     /// <param name="obj"></param>
     private void Attack_performed(InputAction.CallbackContext obj)
     {
-        StartFire();
-    }
-    /// <summary>
-    /// 开始持续发射（先立即发一发，再进入循环）。
-    /// </summary>
-    private void StartFire()
-    {
-        // 已经在持续发射时不重复启动
-        if (_fireTimer != null)
-        {
-            return;
-        }
-
-        // 先发一发，保证手感
-        FireOnce();
-
-        // 使用计时器循环发射
-        _fireTimer = GameEntry.Timer.Loop(0.1f, FireOnce, false);
-    }
-
-    /// <summary>
-    /// 停止持续发射（取消计时器）。
-    /// </summary>
-    private void StopFire()
-    {
-        if (_fireTimer == null)
-        {
-            return;
-        }
-
-        GameEntry.Timer.Cancel(_fireTimer);
-        _fireTimer = null;
+        //StartFire();
+        _isAttacking = true;
     }
     /// <summary>
     /// 发射一次子弹（你原来的鼠标取点逻辑放这里）。
@@ -136,15 +117,6 @@ public class ProtagonistEntity : UnitBaseEntity
     }
 
     /// <summary>
-    /// 实体显示
-    /// </summary>
-    protected override void OnShow(object userData)
-    {
-        base.OnShow(userData);
-        _input.ProtagonistNormal.Enable();
-    }
-
-    /// <summary>
     /// 每帧驱动刚体移动
     /// </summary>
     protected override void OnUpdate(float elapseSeconds, float realElapseSeconds)
@@ -152,6 +124,27 @@ public class ProtagonistEntity : UnitBaseEntity
         base.OnUpdate(elapseSeconds, realElapseSeconds);
 
         _rigidbody2D.velocity = _moveInput.normalized * _dRProtagonist.MoveSeep;
+
+        if(_isAttacking && _isAttack)
+        {
+            FireOnce();
+            _attackElapsedTime = 0;
+            _isAttack = false;
+        }
+        else
+        {
+            _attackElapsedTime += elapseSeconds;
+            if (_attackElapsedTime >= _dRProtagonist.AttackSpeed)
+            {
+                _isAttack = true;
+                if (_isAttacking && _isAttack)
+                {
+                    FireOnce();
+                    _attackElapsedTime = 0;
+                    _isAttack = false;
+                }
+            }
+        }
     }
 
     /// <summary>
