@@ -1,29 +1,36 @@
 using GameFramework.DataTable;
+using Pathfinding;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 
 /// <summary>
-/// µØÍ¼ÊµÌå
+/// ï¿½ï¿½Í¼Êµï¿½ï¿½
 /// </summary>
 public class DefaultMap : EntityLogic
 {
     /// <summary>
-    /// Ö÷½ÇÉú³ÉÎ»ÖÃ
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
     /// </summary>
     [SerializeField]
     private Transform _protagonistTransform;
     /// <summary>
-    /// ¹«Ë¾Éú³ÉÎ»ÖÃ
+    /// ï¿½ï¿½Ë¾ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
     /// </summary>
     [SerializeField]
     private Transform _companyTransform;
 
     /// <summary>
-    /// A*ÖØĞÂÉ¨ÃèĞ­³ÌÒıÓÃ£¬±ÜÃâÖØ¸´²¢·¢É¨Ãè
+    /// A*æ‰«æåç¨‹å˜é‡ï¼Œé¿å…é‡å¤å¯åŠ¨æ‰«æ
     /// </summary>
     private Coroutine _rescanCoroutine;
+
+    /// <summary>
+    /// A*ç½‘æ ¼èŠ‚ç‚¹å¤§å°ï¼ˆè¶Šå¤§è¶Šçœæ€§èƒ½ï¼Œä½†å¯»è·¯ç²¾åº¦æ›´ä½ï¼‰
+    /// </summary>
+    [SerializeField]
+    private float _gridNodeSize = EnemyAIConfig.GridNodeSize;
 
     protected override void OnInit(object userData)
     {
@@ -35,7 +42,7 @@ public class DefaultMap : EntityLogic
     {
         base.OnShow(userData);
 
-        IDataTable<DRProtagonist> dRProtagonists = GameEntry.StartGame.DRProtagonists;
+        IDataTable<DRProtagonist> dRProtagonists = GameEntry.GameManager.DRProtagonists;
         if (dRProtagonists != null)
         {
             DRProtagonist dRProtagonist = dRProtagonists.GetDataRow(1);
@@ -54,7 +61,7 @@ public class DefaultMap : EntityLogic
                 );
             }
         }
-        // ´´½¨¹«Ë¾ÊµÌå
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë¾Êµï¿½ï¿½
         GameEntry.Entity.ShowEntity<CompanyEntity>(
             GameEntry.EntityIdPool.Acquire()
             , "Entity/Company/CompanyEntity"
@@ -81,6 +88,13 @@ public class DefaultMap : EntityLogic
 
         if (AstarPath.active == null)
             yield break;
+
+        // å°è¯•è®¾ç½®ç½‘æ ¼å›¾èŠ‚ç‚¹å¤§å°ï¼Œé™ä½èŠ‚ç‚¹æ•°é‡æå‡æ€§èƒ½
+        GridGraph gridGraph = AstarPath.active.data != null ? AstarPath.active.data.gridGraph : null;
+        if (gridGraph != null)
+        {
+            gridGraph.nodeSize = Mathf.Max(0.5f, _gridNodeSize);
+        }
 
         foreach (var _ in AstarPath.active.ScanAsync())
             yield return null;

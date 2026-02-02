@@ -172,5 +172,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _rigidbody2D: {fileID: 8427784783165254144}
-  _attackRangeCollider: {fileID: 0}
-  _visualScopeCollider: {fileID: 0}
+  _hurtBoxCollider: {fileID: 541358514223660516}

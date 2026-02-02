@@ -11,12 +11,12 @@ public class GraphUpdateOnMove2D : MonoBehaviour
     /// <summary>
     /// 触发更新的最小位移（世界坐标，单位：米）
     /// </summary>
-    public float minMoveDistance = 0.02f;
+    public float minMoveDistance = EnemyAIConfig.DynamicObstacleMinMove;
 
     /// <summary>
     /// 最小更新间隔（秒），用于节流
     /// </summary>
-    public float updateInterval = 0.2f;
+    public float updateInterval = EnemyAIConfig.DynamicObstacleUpdateInterval;
 
     /// <summary>
     /// GraphUpdateScene 组件，用于生成图更新参数

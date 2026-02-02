@@ -21,6 +21,6 @@ public class CompanyEntity : EntityLogic
         object[] os = userData as object[];
         transform.position = ((Transform)os[0]).position;
 
-        GameEntry.StartGame.companyEntity = this;
+        GameEntry.GameManager.companyEntity = this;
     }
 }

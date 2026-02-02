@@ -6,30 +6,30 @@ using UnityGameFramework.Runtime;
 
 public class FlowFieldManager : GameFrameworkComponent
 {
-    /// <summary>Ã¿Ö¡×î¶àÖ´ĞĞ¶àÉÙ¸öÖØ½¨ÇëÇó</summary>
-    public int MaxPerFrame = 30;
+    /// <summary>æ¯å¸§æœ€å¤šæ‰§è¡Œçš„é‡ç®—ä»»åŠ¡æ•°é‡ï¼ˆé™ä½å•å¸§å³°å€¼å¼€é”€ï¼‰</summary>
+    public int MaxPerFrame = EnemyAIConfig.FlowFieldMaxPerFrame;
 
-    /// <summary>µÈ´ıÖ´ĞĞµÄÖØ½¨ÇëÇó¶ÓÁĞ</summary>
+    /// <summary>ç­‰å¾…æ‰§è¡Œçš„é‡ç®—ä»»åŠ¡é˜Ÿåˆ—</summary>
     private readonly Queue<Action> _queue = new Queue<Action>();
 
-    /// <summary>±ÜÃâÖØ¸´Èë¶ÓµÄ¼¯ºÏ£¨¿ÉÑ¡£©</summary>
+    /// <summary>å»é‡é›†åˆï¼ˆé¿å…é‡å¤åŠ å…¥ç›¸åŒä»»åŠ¡ï¼‰</summary>
     private readonly HashSet<object> _dedup = new HashSet<object>();
     /// <summary>
-    /// ×é¼ş³õÊ¼»¯£¬±ØĞëµ÷ÓÃ»ùÀà×¢²áÂß¼­
+    /// ç»„ä»¶åˆå§‹åŒ–ï¼ˆä¿ç•™æ¥å£ï¼Œæš‚æ— é¢å¤–é€»è¾‘ï¼‰
     /// </summary>
     protected override void Awake()
     {
         base.Awake();
     }
     /// <summary>
-    /// Èë¶ÓÒ»¸öÖØ½¨ÇëÇó£¨keyÓÃÓÚÈ¥ÖØ£¬¿É´«null±íÊ¾²»È¥ÖØ£©
+    /// åŠ å…¥ä¸€ä¸ªé‡ç®—ä»»åŠ¡ï¼›å¯é€‰ key ç”¨äºå»é‡ï¼ˆä¼  null è¡¨ç¤ºä¸å»é‡ï¼‰
     /// </summary>
     public void Enqueue(Action action, object key = null)
     {
         if (action == null)
             return;
 
-        // Èç¹ûÓĞkey²¢ÇÒÒÑÔÚ¶ÓÁĞÖĞ£¬ÔòºöÂÔ
+        // å¦‚æœ key å·²å­˜åœ¨äºå»é‡é›†åˆä¸­ï¼Œåˆ™å¿½ç•¥æœ¬æ¬¡åŠ å…¥
         if (key != null && _dedup.Contains(key))
             return;
 
@@ -40,7 +40,7 @@ public class FlowFieldManager : GameFrameworkComponent
     }
 
     /// <summary>
-    /// Ã¿Ö¡Ö´ĞĞÓĞÏŞÊıÁ¿µÄÖØ½¨ÇëÇó
+    /// æ¯å¸§æ‰§è¡ŒæŒ‡å®šæ•°é‡çš„é‡ç®—ä»»åŠ¡
     /// </summary>
     private void Update()
     {
@@ -52,7 +52,7 @@ public class FlowFieldManager : GameFrameworkComponent
             count++;
         }
 
-        // Ö´ĞĞÍê±¾Ö¡ºó£¬ÇåÀíÈ¥ÖØ¼¯ºÏ£¨¼òµ¥×ö·¨£©
+        // é˜Ÿåˆ—æ‰§è¡Œå®Œåæ¸…ç©ºå»é‡é›†åˆï¼Œé¿å…å†…å­˜å ç”¨å¢é•¿
         if (_queue.Count == 0)
             _dedup.Clear();
     }

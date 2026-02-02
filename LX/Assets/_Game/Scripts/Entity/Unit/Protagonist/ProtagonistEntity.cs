@@ -31,12 +31,16 @@ public class ProtagonistEntity : UnitBaseEntity
     protected override void OnShow(object userData)
     {
         base.OnShow(userData);
+        // 注册主角为关键单位（影响敌人AI分级）
+        GameEntry.GameManager.RegisterKeyUnit(this);
+        // 注册到空间网格（让敌人空间查询能发现主角）
+        GameEntry.GameManager.UnitBatchUpdateManager.RegisterUnit(this);
 
         object[] os = userData as object[];
         _dRProtagonist = os[0] as DRProtagonist;
         Camp = _dRProtagonist.Camp;
 
-        _dRProjectile = GameEntry.StartGame.DRProjectiles.GetDataRow(_dRProtagonist.ProjectileId);
+        _dRProjectile = GameEntry.GameManager.DRProjectiles.GetDataRow(_dRProtagonist.ProjectileId);
         _input = new ProtagonistActions();
         _input.ProtagonistNormal.Move2d.performed += Move;
         _input.ProtagonistNormal.Move2d.canceled += StopMove;
@@ -46,7 +50,7 @@ public class ProtagonistEntity : UnitBaseEntity
         transform.position = ((Transform)os[1]).position;
         _input.ProtagonistNormal.Enable();
 
-        GameEntry.StartGame.protagonistEntity = this;
+        GameEntry.GameManager.protagonistEntity = this;
         _attackElapsedTime = 0;
     }
 
@@ -154,6 +158,10 @@ public class ProtagonistEntity : UnitBaseEntity
     {
         base.OnHide(isShutdown, userData);
         _input.ProtagonistNormal.Disable();
+        // 注销主角关键单位
+        GameEntry.GameManager.UnregisterKeyUnit(this);
+        // 从空间网格移除
+        GameEntry.GameManager.UnitBatchUpdateManager.UnregisterUnit(this);
     }
 
    

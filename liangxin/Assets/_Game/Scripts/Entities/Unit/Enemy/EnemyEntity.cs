@@ -12,6 +12,12 @@ using UnityEngine;
 [EntityPrefab("Prefabs/Entities/Unit/Enemy/EnemyEntity", "EnemyEntity", "Enemys")] // 绑定实体预制体信息
 public sealed class EnemyEntity : UnitEntity // 敌人实体定义
 {
+    /// <summary>出生挤出最大迭代次数（防止过度迭代导致卡顿）。</summary>
+    private const int SpawnPushMaxIterations = 4; // 出生挤出最大迭代次数
+    /// <summary>出生挤出最小移动阈值平方（低于该值则提前终止）。</summary>
+    private const float SpawnPushMinMoveSqr = 0.01f; // 出生挤出最小移动阈值平方
+    /// <summary>出生挤出重叠检测缓存（NonAlloc，避免频繁 GC）。</summary>
+    private readonly Collider2D[] _spawnOverlapBuffer = new Collider2D[16]; // 出生挤出重叠检测缓存
     /// <summary>目的地刷新阈值（差值超过该距离会重新寻路）。</summary>
     [SerializeField] private float _destinationRefreshThreshold = 0.5f; // 目的地更新阈值
     /// <summary>身位距离（与目标保持的最小距离，<=0 表示贴近）。</summary>
@@ -112,6 +118,96 @@ public sealed class EnemyEntity : UnitEntity // 敌人实体定义
         _hasDestination = false; // 重置目的地标记
         _hasDeathRecycled = false; // 重置死亡回收标记
         SetAI(null, true); // 显示时强制重置为默认 AI
+        ResolveSpawnOverlap(); // 出生时尝试挤出同层重叠，避免堆叠
+    }
+
+    /// <summary>
+    /// 出生时尝试将自身从同层单位重叠位置挤出，避免生成堆叠。
+    /// </summary>
+    private void ResolveSpawnOverlap() // 出生挤出入口
+    {
+        var selfCollider = CachedCollider2D; // 获取自身碰撞体缓存
+        if (selfCollider == null || !selfCollider.enabled) // 碰撞体无效或未启用判定
+        {
+            return; // 无碰撞体时不处理
+        }
+
+        var bounds = selfCollider.bounds; // 获取自身包围盒
+        var selfRadius = Mathf.Max(bounds.extents.x, bounds.extents.y); // 使用包围盒最大半轴作为半径
+        if (selfRadius <= 0f) // 半径无效判定
+        {
+            return; // 半径无效时退出
+        }
+
+        var sameLayerMask = 1 << gameObject.layer; // 同层检测掩码
+        var t = transform; // 缓存 Transform
+        var currentPos = (Vector2)t.position; // 获取当前坐标
+
+        for (int iteration = 0; iteration < SpawnPushMaxIterations; iteration++) // 多次迭代挤出
+        {
+            var overlapCount = Physics2D.OverlapCircleNonAlloc( // 扫描同层重叠
+                currentPos, // 扫描中心
+                selfRadius * 2f, // 扫描半径：以自身直径为基准
+                _spawnOverlapBuffer, // 重叠缓存数组
+                sameLayerMask); // 仅检测同层单位
+
+            if (overlapCount <= 0) // 未检测到重叠判定
+            {
+                break; // 没有重叠时退出
+            }
+
+            var repel = Vector2.zero; // 累积排斥向量
+            var hitCount = 0; // 记录参与排斥的数量
+
+            for (int i = 0; i < overlapCount; i++) // 遍历重叠结果
+            {
+                var hit = _spawnOverlapBuffer[i]; // 获取重叠碰撞体
+                if (hit == null || hit == selfCollider || !hit.enabled) // 过滤自身或无效碰撞体
+                {
+                    continue; // 无效时跳过
+                }
+
+                var hitBounds = hit.bounds; // 获取对方包围盒
+                var hitRadius = Mathf.Max(hitBounds.extents.x, hitBounds.extents.y); // 推导对方半径
+                if (hitRadius <= 0f) // 半径无效判定
+                {
+                    continue; // 半径无效时跳过
+                }
+
+                var otherPos = (Vector2)hitBounds.center; // 使用包围盒中心作为位置
+                var diff = currentPos - otherPos; // 从对方向自己方向的向量
+                var dist = diff.magnitude; // 当前距离
+                var minDist = selfRadius + hitRadius; // 理论最小距离
+
+                if (dist < 0.0001f) // 距离过小判定（避免归一化异常）
+                {
+                    diff = Random.insideUnitCircle.normalized; // 使用随机方向作为退路
+                    dist = 0f; // 重置距离
+                }
+
+                if (dist < minDist) // 未达到最小距离判定
+                {
+                    var push = minDist - dist; // 计算挤出距离
+                    repel += diff.normalized * push; // 叠加排斥向量
+                    hitCount++; // 计数参与排斥的对象
+                }
+            }
+
+            if (hitCount <= 0) // 没有有效排斥判定
+            {
+                break; // 无排斥时退出
+            }
+
+            repel /= hitCount; // 取平均排斥向量
+            if (repel.sqrMagnitude <= SpawnPushMinMoveSqr) // 移动幅度过小判定
+            {
+                break; // 变化过小时退出
+            }
+
+            currentPos += repel; // 累积移动位置
+        }
+
+        t.position = new Vector3(currentPos.x, currentPos.y, t.position.z); // 回写最终位置（保持 Z）
     }
 
     /// <summary>

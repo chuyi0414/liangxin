@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &2183571310786497918
+--- !u!1 &2147162117957785478
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,23 +8,22 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 2331808335691392565}
-  - component: {fileID: 8555109648651264640}
-  - component: {fileID: 5948846741727845134}
+  - component: {fileID: 9027770736282038505}
+  - component: {fileID: 5030657356245912699}
   m_Layer: 7
-  m_Name: VisualScope
+  m_Name: AttackRange
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &2331808335691392565
+--- !u!4 &9027770736282038505
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2183571310786497918}
+  m_GameObject: {fileID: 2147162117957785478}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -33,14 +32,14 @@ Transform:
   m_Children: []
   m_Father: {fileID: 3840887330776740889}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!58 &8555109648651264640
+--- !u!58 &5030657356245912699
 CircleCollider2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2183571310786497918}
-  m_Enabled: 1
+  m_GameObject: {fileID: 2147162117957785478}
+  m_Enabled: 0
   m_Density: 1
   m_Material: {fileID: 0}
   m_IncludeLayers:
@@ -62,26 +61,12 @@ CircleCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_UsedByEffector: 0
   m_UsedByComposite: 0
   m_Offset: {x: 0, y: 0.5}
   serializedVersion: 2
-  m_Radius: 2
---- !u!114 &5948846741727845134
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2183571310786497918}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a883974bcbea21145a81adcf7045dffe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _triggerId: VisualScope
-  _receiverBehaviour: {fileID: 5228934948509910677}
+  m_Radius: 0.7
 --- !u!1 &2352017446963717418
 GameObject:
   m_ObjectHideFlags: 0
@@ -116,8 +101,8 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 4336840901089414348}
-  - {fileID: 3722913981776984934}
-  - {fileID: 2331808335691392565}
+  - {fileID: 5916652967033137310}
+  - {fileID: 9027770736282038505}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &5228934948509910677
@@ -256,8 +241,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _rigidbody2D: {fileID: 0}
-  _attackRangeCollider: {fileID: 4174462515612122923}
-  _visualScopeCollider: {fileID: 8555109648651264640}
+  _hurtBoxCollider: {fileID: 2064593335454149909}
+  _visualScopeDataCollider: {fileID: 8524188829812127971}
+  _attackRangeDataCollider: {fileID: 5030657356245912699}
 --- !u!1 &4660549165988012134
 GameObject:
   m_ObjectHideFlags: 0
@@ -416,7 +402,7 @@ Rigidbody2D:
   m_SleepingMode: 1
   m_CollisionDetection: 0
   m_Constraints: 4
---- !u!1 &7337285176228790996
+--- !u!1 &7899522386961500327
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -424,39 +410,38 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 3722913981776984934}
-  - component: {fileID: 4174462515612122923}
-  - component: {fileID: 2149662059311481190}
+  - component: {fileID: 5916652967033137310}
+  - component: {fileID: 8524188829812127971}
   m_Layer: 7
-  m_Name: 'AttackRange '
+  m_Name: VisualScope
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &3722913981776984934
+--- !u!4 &5916652967033137310
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7337285176228790996}
+  m_GameObject: {fileID: 7899522386961500327}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.5, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 3840887330776740889}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!58 &4174462515612122923
+--- !u!58 &8524188829812127971
 CircleCollider2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7337285176228790996}
-  m_Enabled: 1
+  m_GameObject: {fileID: 7899522386961500327}
+  m_Enabled: 0
   m_Density: 1
   m_Material: {fileID: 0}
   m_IncludeLayers:
@@ -478,23 +463,9 @@ CircleCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_UsedByEffector: 0
   m_UsedByComposite: 0
-  m_Offset: {x: 0, y: 0}
+  m_Offset: {x: 0, y: 0.5}
   serializedVersion: 2
-  m_Radius: 0.7
---- !u!114 &2149662059311481190
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7337285176228790996}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a883974bcbea21145a81adcf7045dffe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _triggerId: AttackRange
-  _receiverBehaviour: {fileID: 5228934948509910677}
+  m_Radius: 2

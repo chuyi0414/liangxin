@@ -87,7 +87,7 @@ public class GameUIForm : UIFormLogic
 
         GameEntry.Event.Subscribe(PollutionAttackEventArgs.EventId, OnPollutionAttackEvent);
 
-        DRBattleData dRBattleData = GameEntry.StartGame.DRBattleDatas.GetDataRow(1);
+        DRBattleData dRBattleData = GameEntry.GameManager.DRBattleDatas.GetDataRow(1);
         GameEntry.DataBinding.Set<int>("Money", dRBattleData.Money);
         GameEntry.DataBinding.Set<int>("Conscience", dRBattleData.Conscience);
         GameEntry.DataBinding.Set<int>("CompanyConscience", dRBattleData.CompanyConscience);

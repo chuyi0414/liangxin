@@ -26,7 +26,7 @@ public partial class GameEntry
     /// <summary>
     /// 游戏模块入口。
     /// </summary>
-    public static StartGame StartGame { get; private set; }
+    public static GameManager GameManager { get; private set; }
 
     /// <summary>
     /// 路径重建调度器
@@ -40,7 +40,7 @@ public partial class GameEntry
         Camera = GFGameEntry.GetComponent<CameraComponent>();
         DataBinding = GFGameEntry.GetComponent<DataBindingComponent>();
         EntityIdPool = GFGameEntry.GetComponent<EntityIdPoolComponent>();
-        StartGame = GFGameEntry.GetComponent<StartGame>();
+        GameManager = GFGameEntry.GetComponent<GameManager>();
         FlowFieldManager = GFGameEntry.GetComponent<FlowFieldManager>();
     }
 }

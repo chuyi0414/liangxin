@@ -8,73 +8,91 @@ using UnityGameFramework.Runtime;
 using static UnityEngine.GraphicsBuffer;
 
 /// <summary>
-/// µ¥Î»ÊµÌå»ùÀà
+/// å•ä½å®ä½“åŸºç±»
 /// </summary>
 public class UnitBaseEntity : EntityLogic
 {
     /// <summary>
-    /// ÖØÁ¦
+    /// é‡åŠ›
     /// </summary>
     [SerializeField]
     protected Rigidbody2D _rigidbody2D;
     /// <summary>
-    /// ÒÆ¶¯ÏòÁ¿
+    /// ç§»åŠ¨å‘é‡
     /// </summary>
     protected Vector2 _moveInput;
-    //µ±Ç°×Óµ¯
+    //å½“å‰å­å¼¹
     protected DRProjectile _dRProjectile;
     /// <summary>
-    /// A* ×Ô´øµÄÄ¿±êÉèÖÃ×é¼ş
+    /// A* è‡ªå¸¦çš„ç›®æ ‡è®¾ç½®ç»„ä»¶
     /// </summary>
     protected AIDestinationSetter _aIDestinationSetter;
     /// <summary>
-    /// A*µÄÑ°Â·×é¼ş
+    /// A*çš„å¯»è·¯ç»„ä»¶
     /// </summary>
     protected AIPath _aIPath;
     /// <summary>
-    /// ÊÓ¾õ·¶Î§´¥·¢Æ÷µÄ±êÊ¶×Ö·û´®£¬ĞèÒªÓë×ÓÎïÌå UnitTriggerProxy µÄ TriggerId Ò»ÖÂ¡£
+    /// è§†è§‰èŒƒå›´æ ‡è¯†å­—ç¬¦ä¸²ï¼ˆä¿ç•™å­—æ®µï¼Œå½“å‰ä½¿ç”¨ç©ºé—´æŸ¥è¯¢æ›¿ä»£è§¦å‘å™¨ï¼‰ã€‚
     /// </summary>
     protected string _visualScopeTriggerId = "VisualScope";
     /// <summary>
-    /// ¹¥»÷·¶Î§´¥·¢Æ÷µÄ±êÊ¶×Ö·û´®£¬ĞèÒªÓë×ÓÎïÌå UnitTriggerProxy µÄ TriggerId Ò»ÖÂ¡£
+    /// æ”»å‡»èŒƒå›´æ ‡è¯†å­—ç¬¦ä¸²ï¼ˆä¿ç•™å­—æ®µï¼Œå½“å‰ä½¿ç”¨ç©ºé—´æŸ¥è¯¢æ›¿ä»£è§¦å‘å™¨ï¼‰ã€‚
     /// </summary>
     protected string _attackRangeTriggerId = "AttackRange";
     /// <summary>
-    /// µ¥Î»ÕóÓª
+    /// å•ä½é˜µè¥
     /// </summary>
     public CAMP Camp {  get; protected set; }
     /// <summary>
-    /// ¿ÉÊÓ·¶Î§
+    /// å®ä½“å—ä¼¤ç›’ï¼ˆä»£è¡¨æ”»å‡»/å­å¼¹å¯å‘½ä¸­çš„åŒºåŸŸï¼‰
     /// </summary>
-    [SerializeField] protected CircleCollider2D _attackRangeCollider;
+    [SerializeField]
+    protected BoxCollider2D _hurtBoxCollider;
     /// <summary>
-    /// ¹¥»÷·¶Î§µÄµ¥Î»
+    /// è·å–å®ä½“å—ä¼¤ç›’
+    /// </summary>
+    public BoxCollider2D GetHurtBoxCollider()
+    {
+        return _hurtBoxCollider;
+    }
+    /// <summary>
+    /// æ”»å‡»èŒƒå›´çš„å•ä½
     /// </summary>
     protected List<UnitBaseEntity> _attackRangeUnitList = new List<UnitBaseEntity>();
     /// <summary>
-    /// ¹¥»÷·¶Î§
-    /// </summary>
-    [SerializeField] protected CircleCollider2D _visualScopeCollider;
-    /// <summary>
-    /// ¿ÉÊÓ·¶Î§µÄµ¥Î»
+    /// å¯è§†èŒƒå›´çš„å•ä½
     /// </summary>
     protected List<UnitBaseEntity> _visualScopeUnitList = new List<UnitBaseEntity>();
     /// <summary>
-    /// Ä¿±ê
+    /// ç›®æ ‡
     /// </summary>
     protected Transform _targetTransform;
     /// <summary>
-    /// ÊÇ·ñÄÜ¹¥»÷
+    /// æ˜¯å¦èƒ½æ”»å‡»
     /// </summary>
     protected bool _isAttack;
     /// <summary>
-    /// ÊÇ·ñÕıÔÚ¹¥»÷
+    /// æ˜¯å¦æ­£åœ¨æ”»å‡»
     /// </summary>
     protected bool _isAttacking;
     /// <summary>
-    /// ÒÑ¾­¾­¹ıµÄ¹¥»÷¼ä¸ô
+    /// å·²ç»ç»è¿‡çš„æ”»å‡»é—´éš”
     /// </summary>
     protected float _attackElapsedTime;
+    /// <summary>
+    /// å®ä½“ç»„ä»¶ç¼“å­˜ï¼šé¿å…é¢‘ç¹ GetComponent å¯¼è‡´æ€§èƒ½ä¸‹é™ã€‚
+    /// </summary>
+    private static Dictionary<GameObject, UnitBaseEntity> _entityCache = new Dictionary<GameObject, UnitBaseEntity>();
+
+    /// <summary>
+    /// ä¸Šä¸€æ¬¡è·¯å¾„æ›´æ–°çš„æ—¶é—´ï¼ˆç”¨äºé™åˆ¶å¯»è·¯é¢‘ç‡ï¼‰ã€‚
+    /// </summary>
+    protected float _lastPathUpdateTime = 0f;
+
+    /// <summary>
+    /// è·¯å¾„æ›´æ–°æœ€å°é—´éš”ï¼ˆç§’ï¼‰ï¼Œé»˜è®¤0.5ç§’ã€‚
+    /// </summary>
+    protected float _pathUpdateInterval = 0.5f;
 
     protected override void OnShow(object userData)
     {
@@ -82,20 +100,29 @@ public class UnitBaseEntity : EntityLogic
 
         _isAttack = false;
         _isAttacking = false;
+        // æ³¨å†Œåˆ°ç¼“å­˜
+        _entityCache[gameObject] = this;
     }
 
+	protected override void OnHide(bool isShutdown, object userData)
+	{
+		base.OnHide(isShutdown, userData);
+        // ä»ç¼“å­˜ç§»é™¤
+        _entityCache.Remove(gameObject);
+	}
+
     /// <summary>
-    /// ÈÃAIPathÒÔ½üËÆÔÈËÙÔË¶¯µÄÉèÖÃ·½·¨
+    /// è®©AIPathä»¥è¿‘ä¼¼åŒ€é€Ÿè¿åŠ¨çš„è®¾ç½®æ–¹æ³•
     /// </summary>
     protected void ApplyConstantSpeedSettings()
     {
-        // ¼ÓËÙ¶ÈÉèºÜ´ó£¬¼¸ºõÁ¢¼´´ïµ½×î´óËÙ¶È
+        // åŠ é€Ÿåº¦è®¾å¾ˆå¤§ï¼Œå‡ ä¹ç«‹å³è¾¾åˆ°æœ€å¤§é€Ÿåº¦
         _aIPath.maxAcceleration = 1000f;
 
-        // ½Ó½üÄ¿±ê²»¼õËÙ
+        // æ¥è¿‘ç›®æ ‡ä¸å‡é€Ÿ
         _aIPath.slowdownDistance = 0f;
 
-        // ×ªÏòÊ±²»¼õËÙ
+        // è½¬å‘æ—¶ä¸å‡é€Ÿ
         _aIPath.slowWhenNotFacingTarget = false;
     }
 
@@ -121,35 +148,66 @@ public class UnitBaseEntity : EntityLogic
     }
 
     /// <summary>
-    /// Í£Ö¹A*ÒÆ¶¯²¢Çå¿Õ¾ÉÂ·¾¶
+    /// åœæ­¢A*ç§»åŠ¨å¹¶æ¸…ç©ºæ—§è·¯å¾„
     /// </summary>
     protected void StopAIMove()
     {
         _aIDestinationSetter.target = null;
-        _aIPath.isStopped = true;           // Æ½»¬Í£Ö¹
-        _aIPath.SetPath(null);              // Çå¿Õ¾ÉÂ·¾¶£¬±ÜÃâ¼ÌĞø×ß
-        _aIPath.destination = transform.position;  // ¿ÉÑ¡£ºËø¶¨Ä¿µÄµØ
-        _aIPath.desiredVelocityWithoutLocalAvoidance = Vector3.zero; // Á¢¼´Í£
+        _aIPath.isStopped = true;           // å¹³æ»‘åœæ­¢
+        _aIPath.SetPath(null);              // æ¸…ç©ºæ—§è·¯å¾„ï¼Œé¿å…ç»§ç»­èµ°
+        _aIPath.destination = transform.position;  // å¯é€‰ï¼šé”å®šç›®çš„åœ°
+        _aIPath.desiredVelocityWithoutLocalAvoidance = Vector3.zero; // ç«‹å³åœ
     }
 
+    /// <summary>
+    /// å¼€å§‹ A* ç§»åŠ¨ï¼ˆå¸¦å¯»è·¯é¢‘ç‡é™åˆ¶ï¼‰ã€‚
+    /// </summary>
+    /// <param name="target">ç›®æ ‡ Transformã€‚</param>
     protected void StartAIMove(Transform target)
     {
-        if(target == null)
-          return;
+        if (target == null) return;
 
-        _aIPath.isStopped = false;                  // »Ö¸´ÒÆ¶¯
+        _aIPath.isStopped = false;          
         _aIDestinationSetter.target = target;
-        _aIPath.destination = target.position;      // Ç¿ÖÆÉèÖÃÄ¿µÄµØ
+        _aIPath.destination = target.position;
 
+        // é™åˆ¶å¯»è·¯é¢‘ç‡ï¼Œé¿å…æ¯å¸§è®¡ç®—è·¯å¾„
+        float now = Time.time;
+        if (now - _lastPathUpdateTime >= _pathUpdateInterval)
+        {
         GameEntry.FlowFieldManager.Enqueue(() =>
         {
             _aIPath.SearchPath();
-        });
+        }, this);
+
+            _lastPathUpdateTime = now;
+        }
+    }
+
+    /// <summary>
+    /// è·å–ç¼“å­˜çš„å®ä½“ç»„ä»¶ï¼Œé¿å…é¢‘ç¹ GetComponent è°ƒç”¨ã€‚
+    /// </summary>
+    /// <param name="go">ç›®æ ‡ GameObjectã€‚</param>
+    /// <returns>UnitBaseEntity å®ä¾‹ï¼Œå¦‚æœä¸å­˜åœ¨åˆ™è¿”å› nullã€‚</returns>
+    public static UnitBaseEntity GetCachedEntity(GameObject go)
+    {
+        if (go == null) return null;
+
+        if (!_entityCache.TryGetValue(go, out var entity))
+        {
+            entity = go.GetComponent<UnitBaseEntity>();
+            if (entity != null)
+            {
+                _entityCache[go] = entity;
+            }
+        }
+
+        return entity;
     }
 }
 
 /// <summary>
-/// ÕóÓª
+/// é˜µè¥
 /// </summary>
 public enum CAMP
 {
