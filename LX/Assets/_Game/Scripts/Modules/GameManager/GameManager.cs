@@ -241,13 +241,13 @@ public static class EnemyAIConfig
     public static int UnitsUpdatePerFrame = 25;
 
     /// <summary>每帧最大寻路重算次数</summary>
-    public static int FlowFieldMaxPerFrame = 10;
+    public static int FlowFieldMaxPerFrame = 5;
 
     /// <summary>动态障碍最小移动距离</summary>
     public static float DynamicObstacleMinMove = 0.2f;
     /// <summary>动态障碍更新间隔</summary>
-    public static float DynamicObstacleUpdateInterval = 0.5f;
+    public static float DynamicObstacleUpdateInterval = 0.7f;
 
     /// <summary>A* 网格节点大小</summary>
-    public static float GridNodeSize = 0.5f;
+    public static float GridNodeSize = 2f;
 }

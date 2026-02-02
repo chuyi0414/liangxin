@@ -1,2 +1,0 @@
-Id,Code,Name,Camp,LifeState,Level,MaxHp,Attack,Defense,DefensePenetration,DefensePenetrationRate,CritRate,DodgeRate,IsRanged,MoveSpeed,AttackRange,AttackInterval,BulletSpeed,BulletArrayId,IconPath,PrefabPath,CritMultiplier
-1,P0001,陈良,1,0,1,100,20,5,0,0,0,0.05,True,5,4,0.1,10,1,Pictures/Icons/Player/P0001,Prefabs/Entities/Unit/Player/PlayerEntity,2.0

@@ -23,6 +23,9 @@ public class TextModule : GameFrameworkComponent
     private void HandleQPressed()
     {
         // TODO: 在此处实现按键触发后的具体逻辑。
-        GameEntry.GameManager.TryCreationEnemy("0",new Vector3(10,0 ,0));
+        for(int i =1;i<=10;i++)
+        {
+            GameEntry.GameManager.TryCreationEnemy("0",new Vector3(10,0 ,0));
+        }
     }
 }

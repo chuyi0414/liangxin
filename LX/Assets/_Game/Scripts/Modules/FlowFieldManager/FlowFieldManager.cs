@@ -7,7 +7,7 @@ using UnityGameFramework.Runtime;
 public class FlowFieldManager : GameFrameworkComponent
 {
     /// <summary>每帧最多执行的重算任务数量（降低单帧峰值开销）</summary>
-    public int MaxPerFrame = EnemyAIConfig.FlowFieldMaxPerFrame;
+    private int MaxPerFrame = EnemyAIConfig.FlowFieldMaxPerFrame;
 
     /// <summary>等待执行的重算任务队列</summary>
     private readonly Queue<Action> _queue = new Queue<Action>();

@@ -32,14 +32,6 @@ public class UnitBaseEntity : EntityLogic
     /// </summary>
     protected AIPath _aIPath;
     /// <summary>
-    /// 视觉范围标识字符串（保留字段，当前使用空间查询替代触发器）。
-    /// </summary>
-    protected string _visualScopeTriggerId = "VisualScope";
-    /// <summary>
-    /// 攻击范围标识字符串（保留字段，当前使用空间查询替代触发器）。
-    /// </summary>
-    protected string _attackRangeTriggerId = "AttackRange";
-    /// <summary>
     /// 单位阵营
     /// </summary>
     public CAMP Camp {  get; protected set; }

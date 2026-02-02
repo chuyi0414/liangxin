@@ -63,6 +63,14 @@ public class EnemyBaseEneiey : UnitBaseEntity
     /// 空间查询间隔
     /// </summary>
     private float _spatialQueryInterval = EnemyAIConfig.SpatialQueryInterval;
+    /// <summary>
+    /// 基础空间查询间隔（随AI等级变化）
+    /// </summary>
+    private float _baseSpatialQueryInterval = EnemyAIConfig.SpatialQueryInterval;
+    /// <summary>
+    /// 停止状态下的空间查询间隔（降低频率）
+    /// </summary>
+    private float _stopSpatialQueryInterval = 0.8f;
 
     /// <summary>
     /// 是否在 Full 等级也使用空间查询（用于减少触发器物理开销）
@@ -78,11 +86,43 @@ public class EnemyBaseEneiey : UnitBaseEntity
     /// 目标移动触发重算的距离阈值平方（避免频繁开方）
     /// </summary>
     private float _targetMoveSqrThreshold = 0.04f;
+    /// <summary>
+    /// 随机目标点最小刷新间隔（避免目标轻微移动导致频繁改点）
+    /// </summary>
+    private float _randomTargetRefreshInterval = 1.2f;
+    /// <summary>
+    /// 上次随机目标点刷新时间
+    /// </summary>
+    private float _lastRandomTargetRefreshTime = -999f;
 
     /// <summary>
     /// 随机目标点（用于分散路径，避免所有敌人指向同一点）
     /// </summary>
     private Transform _randomDestinationTransform;
+    /// <summary>
+    /// 当前随机目标点所属的目标
+    /// </summary>
+    private Transform _randomTargetOwner;
+    /// <summary>
+    /// 上一次记录的随机目标所属目标位置
+    /// </summary>
+    private Vector3 _randomTargetOwnerLastPos;
+    /// <summary>
+    /// 当前随机目标点
+    /// </summary>
+    private Vector3 _randomTargetPoint;
+    /// <summary>
+    /// 是否已有可复用的随机目标点
+    /// </summary>
+    private bool _hasRandomTargetPoint = false;
+    /// <summary>
+    /// 是否处于攻击范围停止状态
+    /// </summary>
+    private bool _isInAttackStop = false;
+    /// <summary>
+    /// 是否锁定当前目标（攻击范围内不切换）
+    /// </summary>
+    private bool _isTargetLocked = false;
 
     /// <summary>
     /// 可视范围距离（替代触发器半径）
@@ -269,6 +309,10 @@ public class EnemyBaseEneiey : UnitBaseEntity
             Destroy(_randomDestinationTransform.gameObject);
             _randomDestinationTransform = null;
         }
+        _randomTargetOwner = null;
+        _hasRandomTargetPoint = false;
+        _isInAttackStop = false;
+        _isTargetLocked = false;
     }
 
     /// <summary>
@@ -301,15 +345,22 @@ public class EnemyBaseEneiey : UnitBaseEntity
             {
                 if (_targetTransform != GameEntry.GameManager.companyEntity.transform)
                 {
-                    _targetTransform = null;
-                    StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
-                    _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
+                    _targetTransform = GameEntry.GameManager.companyEntity.transform;
                 }
+                if (IsTargetInAttackRange(GameEntry.GameManager.companyEntity.transform))
+                {
+                    StopAIMove();
+                }
+                else
+                {
+                    StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
+                }
+                _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
             }
         }
 
         // 目标移动时重新计算路径（保证跟随移动目标）
-        if (_targetTransform != null && _currentLevel != AIActiveLevel.Minimal)
+        if (_targetTransform != null && _currentLevel != AIActiveLevel.Minimal && !_isTargetLocked)
         {
             Vector3 currentTargetPosition = _targetTransform.position;
             float moveSqr = (currentTargetPosition - _lastTargetPosition).sqrMagnitude;
@@ -361,18 +412,22 @@ public class EnemyBaseEneiey : UnitBaseEntity
         {
             case AIActiveLevel.Full:
                 _pathUpdateInterval = EnemyAIConfig.PathIntervalFull;
+                _baseSpatialQueryInterval = EnemyAIConfig.SpatialQueryInterval;
                 break;
 
             case AIActiveLevel.LowFrequency:
                 _pathUpdateInterval = EnemyAIConfig.PathIntervalLow;
+                _baseSpatialQueryInterval = EnemyAIConfig.SpatialQueryInterval * 1.5f;
                 break;
 
             case AIActiveLevel.Simplified:
                 _pathUpdateInterval = EnemyAIConfig.PathIntervalSimplified;
+                _baseSpatialQueryInterval = EnemyAIConfig.SpatialQueryInterval * 3f;
                 break;
 
             case AIActiveLevel.Minimal:
                 _pathUpdateInterval = EnemyAIConfig.PathIntervalMinimal;
+                _baseSpatialQueryInterval = EnemyAIConfig.SpatialQueryInterval * 6f;
                 break;
         }
     }
@@ -382,23 +437,64 @@ public class EnemyBaseEneiey : UnitBaseEntity
     /// </summary>
     private void UpdateSpatialQuery()
     {
+        float effectiveInterval = _isInAttackStop ? Mathf.Max(_baseSpatialQueryInterval, _stopSpatialQueryInterval) : _baseSpatialQueryInterval;
+        _spatialQueryInterval = effectiveInterval;
         if (Time.time - _lastSpatialQueryTime < _spatialQueryInterval) return;
         _lastSpatialQueryTime = Time.time;
 
         SpatialGrid grid = GameEntry.GameManager.UnitBatchUpdateManager.GetSpatialGrid();
         if (grid == null) return;
 
-        List<UnitBaseEntity> nearby = grid.GetNearbyCandidates(GetVisualScopeCenter(), _visualScopeDistance);
-
-        _visualScopeUnitList.Clear();
-        for (int i = 0; i < nearby.Count; i++)
+        if (_targetTransform != null && IsTargetInAttackRange(_targetTransform))
         {
-            UnitBaseEntity unit = nearby[i];
+            _isTargetLocked = true;
+            _isInAttackStop = true;
+            StopAIMove();
+            return;
+        }
+        else
+        {
+            _isTargetLocked = false;
+            _isInAttackStop = false;
+        }
+
+        List<UnitBaseEntity> nearbyAttack = grid.GetNearbyCandidates(GetAttackRangeCenter(), _attackRangeDistance);
+        _attackRangeUnitList.Clear();
+        for (int i = 0; i < nearbyAttack.Count; i++)
+        {
+            UnitBaseEntity unit = nearbyAttack[i];
+            if (unit == null) continue;
+
+            if (unit.Camp == CAMP.Protagonist && IsTargetInAttackRange(unit.transform))
+            {
+                _attackRangeUnitList.Add(unit);
+            }
+        }
+
+        List<UnitBaseEntity> nearbyVisual = grid.GetNearbyCandidates(GetVisualScopeCenter(), _visualScopeDistance);
+        _visualScopeUnitList.Clear();
+        for (int i = 0; i < nearbyVisual.Count; i++)
+        {
+            UnitBaseEntity unit = nearbyVisual[i];
             if (unit == null) continue;
 
             if (unit.Camp == CAMP.Protagonist && IsTargetInVisualScope(unit.transform))
             {
                 _visualScopeUnitList.Add(unit);
+            }
+        }
+
+        if (_attackRangeUnitList.Count > 0)
+        {
+            UnitBaseEntity nearest = GetNearestUnit(_attackRangeUnitList, transform.position);
+            if (nearest != null)
+            {
+                _targetTransform = nearest.transform;
+                _isTargetLocked = true;
+                _isInAttackStop = true;
+                StopAIMove();
+                _lastTargetPosition = nearest.transform.position;
+                return;
             }
         }
 
@@ -408,25 +504,30 @@ public class EnemyBaseEneiey : UnitBaseEntity
             if (nearest != null)
             {
                 _targetTransform = nearest.transform;
-                if (IsTargetInAttackRange(nearest.transform))
-                {
-                    StopAIMove();
-                }
-                else
-                {
-                    StartAIMoveRandomAroundTarget(nearest.transform);
-                }
+                _isTargetLocked = false;
+                _isInAttackStop = false;
+                StartAIMoveRandomAroundTarget(nearest.transform);
                 _lastTargetPosition = nearest.transform.position;
+                return;
             }
         }
-        else
+
+        if (GameEntry.GameManager.companyEntity != null)
         {
-            if (GameEntry.GameManager.companyEntity != null)
+            _targetTransform = GameEntry.GameManager.companyEntity.transform;
+            if (IsTargetInAttackRange(GameEntry.GameManager.companyEntity.transform))
             {
-                _targetTransform = null;
-                StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
-                _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
+                _isTargetLocked = true;
+                _isInAttackStop = true;
+                StopAIMove();
             }
+            else
+            {
+                _isTargetLocked = false;
+                _isInAttackStop = false;
+                StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
+            }
+            _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
         }
     }
 
@@ -438,7 +539,27 @@ public class EnemyBaseEneiey : UnitBaseEntity
         if (target == null) return;
 
         EnsureRandomDestinationTransform();
-        _randomDestinationTransform.position = GetRandomPointAroundTarget(target);
+        bool needNewPoint = !_hasRandomTargetPoint || target != _randomTargetOwner;
+        if (!needNewPoint)
+        {
+            Vector3 currentOwnerPos = target.position;
+            float moveSqr = (currentOwnerPos - _randomTargetOwnerLastPos).sqrMagnitude;
+            if (moveSqr >= _targetMoveSqrThreshold && Time.time - _lastRandomTargetRefreshTime >= _randomTargetRefreshInterval)
+            {
+                needNewPoint = true;
+            }
+        }
+
+        if (needNewPoint)
+        {
+            _randomTargetPoint = GetRandomPointAroundTarget(target);
+            _randomTargetOwner = target;
+            _randomTargetOwnerLastPos = target.position;
+            _hasRandomTargetPoint = true;
+            _lastRandomTargetRefreshTime = Time.time;
+        }
+
+        _randomDestinationTransform.position = _randomTargetPoint;
         StartAIMove(_randomDestinationTransform);
     }
 
