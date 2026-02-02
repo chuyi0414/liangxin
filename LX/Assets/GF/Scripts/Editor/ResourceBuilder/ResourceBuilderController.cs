@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Game Framework
 // Copyright © 2013-2021 Jiang Yin. All rights reserved.
 // Homepage: https://gameframework.cn/
@@ -1410,7 +1410,7 @@ namespace UnityGameFramework.Editor.ResourceTools
 
         private BuildAssetBundleOptions GetBuildAssetBundleOptions()
         {
-            BuildAssetBundleOptions buildOptions = BuildAssetBundleOptions.DeterministicAssetBundle;
+            BuildAssetBundleOptions buildOptions = BuildAssetBundleOptions.None;
 
             if (ForceRebuildAssetBundleSelected)
             {
