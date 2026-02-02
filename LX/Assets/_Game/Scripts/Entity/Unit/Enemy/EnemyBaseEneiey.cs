@@ -80,6 +80,11 @@ public class EnemyBaseEneiey : UnitBaseEntity
     private float _targetMoveSqrThreshold = 0.04f;
 
     /// <summary>
+    /// 随机目标点（用于分散路径，避免所有敌人指向同一点）
+    /// </summary>
+    private Transform _randomDestinationTransform;
+
+    /// <summary>
     /// 可视范围距离（替代触发器半径）
     /// </summary>
     private float _visualScopeDistance = 0f;
@@ -251,7 +256,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
             _attackRangeDataCollider.enabled = false;
         }
         ResolveSpawnOverlap();
-        StartAIMove(GameEntry.GameManager.companyEntity.transform);
+        StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
         _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
     }
 
@@ -259,6 +264,11 @@ public class EnemyBaseEneiey : UnitBaseEntity
     {
         base.OnHide(isShutdown, userData);
         GameEntry.GameManager.UnitBatchUpdateManager.UnregisterUnit(this);
+        if (_randomDestinationTransform != null)
+        {
+            Destroy(_randomDestinationTransform.gameObject);
+            _randomDestinationTransform = null;
+        }
     }
 
     /// <summary>
@@ -292,7 +302,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
                 if (_targetTransform != GameEntry.GameManager.companyEntity.transform)
                 {
                     _targetTransform = null;
-                    StartAIMove(GameEntry.GameManager.companyEntity.transform);
+                    StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
                     _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
                 }
             }
@@ -308,7 +318,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
                 // 如果目标仍在攻击范围内，不需要重算路径
                 if (!IsTargetInAttackRange(_targetTransform))
                 {
-                    StartAIMove(_targetTransform);
+                    StartAIMoveRandomAroundTarget(_targetTransform);
                 }
                 _lastTargetPosition = currentTargetPosition;
             }
@@ -404,7 +414,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
                 }
                 else
                 {
-                    StartAIMove(nearest.transform);
+                    StartAIMoveRandomAroundTarget(nearest.transform);
                 }
                 _lastTargetPosition = nearest.transform.position;
             }
@@ -414,10 +424,75 @@ public class EnemyBaseEneiey : UnitBaseEntity
             if (GameEntry.GameManager.companyEntity != null)
             {
                 _targetTransform = null;
-                StartAIMove(GameEntry.GameManager.companyEntity.transform);
+                StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
                 _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
             }
         }
+    }
+
+    /// <summary>
+    /// 让敌人朝目标范围内的随机点移动（分散路径）。
+    /// </summary>
+    private void StartAIMoveRandomAroundTarget(Transform target)
+    {
+        if (target == null) return;
+
+        EnsureRandomDestinationTransform();
+        _randomDestinationTransform.position = GetRandomPointAroundTarget(target);
+        StartAIMove(_randomDestinationTransform);
+    }
+
+    /// <summary>
+    /// 确保随机目标点对象存在。
+    /// </summary>
+    private void EnsureRandomDestinationTransform()
+    {
+        if (_randomDestinationTransform != null) return;
+
+        GameObject go = new GameObject("EnemyRandomDestination");
+        go.hideFlags = HideFlags.HideInHierarchy;
+        _randomDestinationTransform = go.transform;
+    }
+
+    /// <summary>
+    /// 获取目标碰撞体范围内的随机点，并投射到最近可行走节点。
+    /// </summary>
+    private Vector3 GetRandomPointAroundTarget(Transform target)
+    {
+        Collider2D targetCollider = null;
+        UnitBaseEntity targetUnit = target.GetComponent<UnitBaseEntity>();
+        if (targetUnit != null)
+        {
+            targetCollider = targetUnit.GetHurtBoxCollider();
+        }
+        if (targetCollider == null)
+        {
+            targetCollider = target.GetComponent<Collider2D>();
+        }
+
+        if (targetCollider != null)
+        {
+            Bounds bounds = targetCollider.bounds;
+            if (bounds.size.sqrMagnitude > 0f)
+            {
+                float x = Random.Range(bounds.min.x, bounds.max.x);
+                float y = Random.Range(bounds.min.y, bounds.max.y);
+                Vector3 randomPoint = new Vector3(x, y, target.position.z);
+                return GetNearestWalkablePoint(randomPoint);
+            }
+        }
+
+        return GetNearestWalkablePoint(target.position);
+    }
+
+    /// <summary>
+    /// 返回离位置最近的可行走点（A*网格节点）。
+    /// </summary>
+    private Vector3 GetNearestWalkablePoint(Vector3 position)
+    {
+        if (AstarPath.active == null) return position;
+
+        return (Vector3)AstarPath.active.GetNearest(position).position;
     }
 
     /// <summary>
