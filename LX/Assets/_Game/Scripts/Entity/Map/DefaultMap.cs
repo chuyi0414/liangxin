@@ -6,17 +6,17 @@ using UnityEngine;
 using UnityGameFramework.Runtime;
 
 /// <summary>
-/// ��ͼʵ��
+/// 地图实体
 /// </summary>
 public class DefaultMap : EntityLogic
 {
     /// <summary>
-    /// ��������λ��
+    /// 主角出生位置
     /// </summary>
     [SerializeField]
     private Transform _protagonistTransform;
     /// <summary>
-    /// ��˾����λ��
+    /// 公司出生位置
     /// </summary>
     [SerializeField]
     private Transform _companyTransform;
@@ -29,15 +29,20 @@ public class DefaultMap : EntityLogic
     /// <summary>
     /// A*网格节点大小（越大越省性能，但寻路精度更低）
     /// </summary>
-    [SerializeField]
     private float _gridNodeSize = EnemyAIConfig.GridNodeSize;
 
+    /// <summary>
+    /// 实体初始化（当前仅走基类流程）
+    /// </summary>
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
         
     }
 
+    /// <summary>
+    /// 实体显示时创建主角与公司，并启动 A* 扫描
+    /// </summary>
     protected override void OnShow(object userData)
     {
         base.OnShow(userData);
@@ -61,7 +66,7 @@ public class DefaultMap : EntityLogic
                 );
             }
         }
-        // ������˾ʵ��
+        // 创建公司实体
         GameEntry.Entity.ShowEntity<CompanyEntity>(
             GameEntry.EntityIdPool.Acquire()
             , "Entity/Company/CompanyEntity"
@@ -82,6 +87,9 @@ public class DefaultMap : EntityLogic
         _rescanCoroutine = StartCoroutine(RescanGraph());
     }
 
+    /// <summary>
+    /// 重新扫描 A* 网格（延后一帧以确保场景就绪）
+    /// </summary>
     private IEnumerator RescanGraph()
     {
         yield return null;
@@ -101,6 +109,9 @@ public class DefaultMap : EntityLogic
     }
 
 
+    /// <summary>
+    /// 实体回收时停止扫描协程
+    /// </summary>
     protected override void OnRecycle()
     {
         base.OnRecycle();

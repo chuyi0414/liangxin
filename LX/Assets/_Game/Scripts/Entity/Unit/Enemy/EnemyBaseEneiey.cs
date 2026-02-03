@@ -14,7 +14,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
     /// <summary>
     /// 出生挤出最小移动阈值平方（低于该值则提前终止）。
     /// </summary>
-    private const float SpawnPushMinMoveSqr = 0.01f;
+    private const float SpawnPushMinMoveSqr = 0.0001f;
     /// <summary>
     /// 出生挤出重叠检测缓存（NonAlloc，避免频繁 GC）。
     /// </summary>

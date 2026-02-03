@@ -1,21 +1,21 @@
-using GameFramework.DataTable;
+ï»¿using GameFramework.DataTable;
 using GameFramework.Event;
 using GameFramework.Fsm;
 using GameFramework.Procedure;
 using UnityGameFramework.Runtime;
 
 /// <summary>
-/// ¼ÓÔØÁ÷³Ì
+/// åŠ è½½æµç¨‹
 /// </summary>
 public class LoadProcedure : ProcedureBase
 {
-    //×Ü¼ÓÔØÊıÁ¿
+    //æ€»åŠ è½½æ•°é‡
     private int _loadNumber = 3;
-    //ÒÑ¾­¼ÓÔØµÄÊıÁ¿
+    //å·²ç»åŠ è½½çš„æ•°é‡
     private int _accomplishLoadNumber = 0;
 
 
-    //LoadUIForm±íId
+    //LoadUIFormè¡¨Id
     private int _loadUIFormId;
 
     //DRBattleData
@@ -39,7 +39,7 @@ public class LoadProcedure : ProcedureBase
 
         GameEntry.Event.Subscribe(LoadDataTableSuccessEventArgs.EventId,OnLoadDataTableSuccess);
         GameEntry.Event.Subscribe(LoadDataTableFailureEventArgs.EventId, OnLoadDataTableFailure);
-        //Õ½¶·Êı¾İ
+        //æˆ˜æ–—æ•°æ®
         if (GameEntry.DataTable.HasDataTable<DRBattleData>())
         {
             _dRBattleData = (DataTableBase)GameEntry.DataTable.GetDataTable<DRBattleData>();
@@ -54,7 +54,7 @@ public class LoadProcedure : ProcedureBase
                 this,
                 "BattleData"
             });
-        //Ö÷½Ç
+        //ä¸»è§’
         if (GameEntry.DataTable.HasDataTable<DRProtagonist>())
         {
             _dRProtagonist = (DataTableBase)GameEntry.DataTable.GetDataTable<DRProtagonist>();
@@ -69,7 +69,7 @@ public class LoadProcedure : ProcedureBase
                 this,
                 "Protagonist"
             });
-        //×Óµ¯
+        //å­å¼¹
         if (GameEntry.DataTable.HasDataTable<DRProjectile>())
         {
             _dRProjectile = (DataTableBase)GameEntry.DataTable.GetDataTable<DRProjectile>();
@@ -84,7 +84,7 @@ public class LoadProcedure : ProcedureBase
                 this,
                 "Projectile"
             });
-        //µĞÈË
+        //æ•Œäºº
         if(GameEntry.DataTable.HasDataTable<DREnemy>())
         {
             _dREnemy = (DataTableBase)GameEntry.DataTable.GetDataTable<DREnemy>();
