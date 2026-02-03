@@ -4,28 +4,36 @@ using UnityEngine;
 using UnityGameFramework.Runtime;
 
 /// <summary>
-/// ×Óµ¯ÊµÌå»ùÀà
+/// å­å¼¹å®ä½“åŸºç±»
 /// </summary>
 public class ProjectileBase : EntityLogic
 {
     /// <summary>
-    /// ×Óµ¯·½Ïò
+    /// å­å¼¹æ–¹å‘
     /// </summary>
     private Vector2 _direction;
     /// <summary>
-    /// ×Óµ¯ËÙ¶È
+    /// å­å¼¹é€Ÿåº¦
     /// </summary>
     private float _speed;
     /// <summary>
-    /// »ØÊÕÊ±¼ä
+    /// å›æ”¶æ—¶é—´
     /// </summary>
     private float _lifeDuration = 5f;
     /// <summary>
-    /// »ØÊÕÁ÷ÊÅÊ±¼ä
+    /// å›æ”¶æµé€æ—¶é—´
     /// </summary>
     private float _lifeElapsed = 0f;
     /// <summary>
-    /// ×Óµ¯ÕóÓª
+    /// æ˜¯å¦å·²ç»å›æ”¶
+    /// </summary>
+    private bool _isHidden;
+    /// <summary>
+    /// å‘å°„è€…
+    /// </summary>
+    private UnitBaseEntity _unitBaseEntity;
+    /// <summary>
+    /// å­å¼¹é˜µè¥
     /// </summary>
     public CAMP Camp;
 
@@ -37,6 +45,7 @@ public class ProjectileBase : EntityLogic
     protected override void OnShow(object userData)
     {
         base.OnShow(userData);
+        _isHidden = false;
         _lifeDuration = 5f;
         _lifeElapsed = 0f;
         object[] os = userData as object[];
@@ -44,7 +53,8 @@ public class ProjectileBase : EntityLogic
         Vector2 v2 = (Vector2)os[1];
         _speed = float.Parse(os[2].ToString());
         _direction = (v2 - (Vector2)transform.position).normalized;
-        Camp = (CAMP)os[3];
+        _unitBaseEntity = (UnitBaseEntity)os[3];
+        Camp = _unitBaseEntity.Camp;
     }
 
     protected override void OnUpdate(float elapseSeconds, float realElapseSeconds)
@@ -72,11 +82,17 @@ public class ProjectileBase : EntityLogic
     protected void TriggerEnter2D(Collider2D collision)
     {
         int layer = collision.gameObject.layer;
+
+        if (layer == LayerMask.NameToLayer("Company"))
+        {
+            MyHideEntity();
+        }
+
         if (Camp == CAMP.Protagonist)
         {
             if (layer == LayerMask.NameToLayer("Enemy"))
             {
-                GameEntry.Entity.HideEntity(Entity.Id);
+                MyHideEntity();
             }
         }
         else if (Camp == CAMP.Enemy)
@@ -87,5 +103,16 @@ public class ProjectileBase : EntityLogic
         {
 
         }
+    }
+
+    
+    private void MyHideEntity()
+    {
+        if(_isHidden)
+        {
+            return;
+        }
+        _isHidden = true;
+        GameEntry.Entity.HideEntity(Entity.Id);
     }
 }

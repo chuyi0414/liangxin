@@ -100,7 +100,7 @@ public class ProtagonistEntity : UnitBaseEntity
                 (Vector2)transform.position,
                 (Vector2)mouseWorld,
                 _dRProtagonist.ProjectileSpeed,
-                _dRProtagonist.Camp
+                this,
             });
     }
     /// <summary>

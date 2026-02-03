@@ -85,18 +85,17 @@ public class GameManager : GameFrameworkComponent
     /// 单位分帧更新管理器（负责空间网格等）
     /// </summary>
     public UnitBatchUpdateManager UnitBatchUpdateManager { get; private set; }
+    /// <summary>
+    /// 路径重建调度器
+    /// </summary>
+    public FlowFieldManager FlowFieldManager { get; private set; }
 
     protected override void Awake()
     {
         base.Awake();
         // 获取场景中已有的 UnitBatchUpdateManager
         UnitBatchUpdateManager = GetComponent<UnitBatchUpdateManager>();
-
-        // 如果没有，就动态创建一个挂到自己身上
-        if (UnitBatchUpdateManager == null)
-        {
-            UnitBatchUpdateManager = gameObject.AddComponent<UnitBatchUpdateManager>();
-        }
+        FlowFieldManager = GetComponent<FlowFieldManager>();
     }
     
     /// <summary>

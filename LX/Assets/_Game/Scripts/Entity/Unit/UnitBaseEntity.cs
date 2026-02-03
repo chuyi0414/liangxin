@@ -167,11 +167,10 @@ public class UnitBaseEntity : EntityLogic
         float now = Time.time;
         if (now - _lastPathUpdateTime >= _pathUpdateInterval)
         {
-        GameEntry.FlowFieldManager.Enqueue(() =>
-        {
-            _aIPath.SearchPath();
-        }, this);
-
+            GameEntry.GameManager.FlowFieldManager.Enqueue(() =>
+            {
+                _aIPath.SearchPath();
+            }, this);
             _lastPathUpdateTime = now;
         }
     }
