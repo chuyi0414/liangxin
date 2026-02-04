@@ -72,11 +72,11 @@ public class GameManager : GameFrameworkComponent
     /// <summary>
     /// 主角
     /// </summary>
-    public ProtagonistEntity protagonistEntity;
+    public ProtagonistEntity ProtagonistEntity;
     /// <summary>
     /// 公司
     /// </summary>
-    public CompanyEntity companyEntity;
+    public CompanyEntity CompanyEntity;
     /// <summary>
     /// 关键单位列表（主角 + 员工）
     /// </summary>

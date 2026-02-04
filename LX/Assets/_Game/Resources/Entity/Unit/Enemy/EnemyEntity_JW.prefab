@@ -240,7 +240,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 56ed5d8e26d01404c8575739d35b97e1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _rigidbody2D: {fileID: 0}
+  _rigidbody2D: {fileID: 898929606012073393}
   _hurtBoxCollider: {fileID: 2064593335454149909}
   _visualScopeDataCollider: {fileID: 8524188829812127971}
   _attackRangeDataCollider: {fileID: 5030657356245912699}

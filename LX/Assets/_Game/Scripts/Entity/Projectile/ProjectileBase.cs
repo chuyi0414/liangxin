@@ -54,7 +54,7 @@ public class ProjectileBase : EntityLogic
         _speed = float.Parse(os[2].ToString());
         _direction = (v2 - (Vector2)transform.position).normalized;
         _unitBaseEntity = (UnitBaseEntity)os[3];
-        Camp = _unitBaseEntity.Camp;
+        Camp = _unitBaseEntity.CurrentDRUnit.Camp;
     }
 
     protected override void OnUpdate(float elapseSeconds, float realElapseSeconds)
@@ -85,14 +85,14 @@ public class ProjectileBase : EntityLogic
 
         if (layer == LayerMask.NameToLayer("Company"))
         {
-            MyHideEntity();
+            MyHideEntity(collision);
         }
 
         if (Camp == CAMP.Protagonist)
         {
             if (layer == LayerMask.NameToLayer("Enemy"))
             {
-                MyHideEntity();
+                MyHideEntity(collision);
             }
         }
         else if (Camp == CAMP.Enemy)
@@ -106,13 +106,21 @@ public class ProjectileBase : EntityLogic
     }
 
     
-    private void MyHideEntity()
+    private void MyHideEntity(Collider2D collision,bool isCompany = true)
     {
         if(_isHidden)
         {
             return;
         }
         _isHidden = true;
+        if(collision.gameObject != GameEntry.GameManager.CompanyEntity.gameObject)
+        {
+            var unit = collision.GetComponentInParent<UnitBaseEntity>();
+            if (unit != null)
+            {
+                unit.OnInjuried(_unitBaseEntity.CurrentDRUnit.Attack);
+            }
+        }
         GameEntry.Entity.HideEntity(Entity.Id);
     }
 }

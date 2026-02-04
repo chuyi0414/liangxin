@@ -19,10 +19,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
     /// 出生挤出重叠检测缓存（NonAlloc，避免频繁 GC）。
     /// </summary>
     private readonly Collider2D[] _spawnOverlapBuffer = new Collider2D[16];
-    /// <summary>
-    /// 敌人数据
-    /// </summary>
-    protected DREnemy _dREnemy;
+
 
     /// <summary>
     /// AI激活等级（基于最近关键单位距离）
@@ -279,11 +276,11 @@ public class EnemyBaseEneiey : UnitBaseEntity
 
         object[] os = userData as object[];
         transform.position = (Vector3)os[0];
-        _dREnemy = (DREnemy)os[1];
-        Camp = _dREnemy.Camp;
-        _aIPath.maxSpeed = _dREnemy.MoveSeep;
-        _visualScopeDistance = _dREnemy.VisualScope;
-        _attackRangeDistance = _dREnemy.AttackRange;
+        _dRUnit = (DREnemy)os[1];
+        CurrentDRUnit = _dRUnit;
+        _aIPath.maxSpeed = CurrentDRUnit.MoveSeep;
+        _visualScopeDistance = CurrentDRUnit.VisualScope;
+        _attackRangeDistance = CurrentDRUnit.AttackRange;
         // 如果拖入了范围碰撞体，则读取半径覆盖数据表数值
         if (_visualScopeDataCollider != null)
         {
@@ -296,8 +293,8 @@ public class EnemyBaseEneiey : UnitBaseEntity
             _attackRangeDataCollider.enabled = false;
         }
         ResolveSpawnOverlap();
-        StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
-        _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
+        StartAIMoveRandomAroundTarget(GameEntry.GameManager.CompanyEntity.transform);
+        _lastTargetPosition = GameEntry.GameManager.CompanyEntity.transform.position;
     }
 
     protected override void OnHide(bool isShutdown, object userData)
@@ -320,8 +317,6 @@ public class EnemyBaseEneiey : UnitBaseEntity
     /// </summary>
     protected override void OnUpdate(float elapseSeconds, float realElapseSeconds)
     {
-        base.OnUpdate(elapseSeconds, realElapseSeconds);
-
         // 定时更新AI等级
         if (Time.time - _lastLevelCheckTime >= _levelCheckInterval)
         {
@@ -341,21 +336,21 @@ public class EnemyBaseEneiey : UnitBaseEntity
         else if (_currentLevel == AIActiveLevel.Simplified || _currentLevel == AIActiveLevel.Minimal)
         {
             // 远距离：只朝公司移动，不做目标检测
-            if (GameEntry.GameManager.companyEntity != null)
+            if (GameEntry.GameManager.CompanyEntity != null)
             {
-                if (_targetTransform != GameEntry.GameManager.companyEntity.transform)
+                if (_targetTransform != GameEntry.GameManager.CompanyEntity.transform)
                 {
-                    _targetTransform = GameEntry.GameManager.companyEntity.transform;
+                    _targetTransform = GameEntry.GameManager.CompanyEntity.transform;
                 }
-                if (IsTargetInAttackRange(GameEntry.GameManager.companyEntity.transform))
+                if (IsTargetInAttackRange(GameEntry.GameManager.CompanyEntity.transform))
                 {
                     StopAIMove();
                 }
                 else
                 {
-                    StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
+                    StartAIMoveRandomAroundTarget(GameEntry.GameManager.CompanyEntity.transform);
                 }
-                _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
+                _lastTargetPosition = GameEntry.GameManager.CompanyEntity.transform.position;
             }
         }
 
@@ -465,7 +460,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
             UnitBaseEntity unit = nearbyAttack[i];
             if (unit == null) continue;
 
-            if (unit.Camp == CAMP.Protagonist && IsTargetInAttackRange(unit.transform))
+            if (unit.CurrentDRUnit.Camp == CAMP.Protagonist && IsTargetInAttackRange(unit.transform))
             {
                 _attackRangeUnitList.Add(unit);
             }
@@ -478,7 +473,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
             UnitBaseEntity unit = nearbyVisual[i];
             if (unit == null) continue;
 
-            if (unit.Camp == CAMP.Protagonist && IsTargetInVisualScope(unit.transform))
+            if (unit.CurrentDRUnit.Camp == CAMP.Protagonist && IsTargetInVisualScope(unit.transform))
             {
                 _visualScopeUnitList.Add(unit);
             }
@@ -512,10 +507,10 @@ public class EnemyBaseEneiey : UnitBaseEntity
             }
         }
 
-        if (GameEntry.GameManager.companyEntity != null)
+        if (GameEntry.GameManager.CompanyEntity != null)
         {
-            _targetTransform = GameEntry.GameManager.companyEntity.transform;
-            if (IsTargetInAttackRange(GameEntry.GameManager.companyEntity.transform))
+            _targetTransform = GameEntry.GameManager.CompanyEntity.transform;
+            if (IsTargetInAttackRange(GameEntry.GameManager.CompanyEntity.transform))
             {
                 _isTargetLocked = true;
                 _isInAttackStop = true;
@@ -525,9 +520,9 @@ public class EnemyBaseEneiey : UnitBaseEntity
             {
                 _isTargetLocked = false;
                 _isInAttackStop = false;
-                StartAIMoveRandomAroundTarget(GameEntry.GameManager.companyEntity.transform);
+                StartAIMoveRandomAroundTarget(GameEntry.GameManager.CompanyEntity.transform);
             }
-            _lastTargetPosition = GameEntry.GameManager.companyEntity.transform.position;
+            _lastTargetPosition = GameEntry.GameManager.CompanyEntity.transform.position;
         }
     }
 
@@ -702,6 +697,16 @@ public class EnemyBaseEneiey : UnitBaseEntity
         }
 
         transform.position = new Vector3(currentPos.x, currentPos.y, transform.position.z);
+    }
+
+    public override void OnInjuried(float damage)
+    {
+        base.OnInjuried(damage);
+        CurrentDRUnit.HP -= damage;
+        if(CurrentDRUnit.HP<=0)
+        {
+            GameEntry.Entity.HideEntity(Entity.Id);
+        }
     }
 
 }

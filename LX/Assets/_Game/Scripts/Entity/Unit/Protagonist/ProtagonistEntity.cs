@@ -14,8 +14,6 @@ public class ProtagonistEntity : UnitBaseEntity
     /// 主角输入
     /// </summary>
     private ProtagonistActions _input;
-    //主角数据表
-    private DRProtagonist _dRProtagonist;
     /// <summary>
     /// 初始化主角实体的运行时数据
     /// </summary>
@@ -37,10 +35,10 @@ public class ProtagonistEntity : UnitBaseEntity
         GameEntry.GameManager.UnitBatchUpdateManager.RegisterUnit(this);
 
         object[] os = userData as object[];
-        _dRProtagonist = os[0] as DRProtagonist;
-        Camp = _dRProtagonist.Camp;
+        _dRUnit = os[0] as DRProtagonist;
+        CurrentDRUnit = _dRUnit;
 
-        _dRProjectile = GameEntry.GameManager.DRProjectiles.GetDataRow(_dRProtagonist.ProjectileId);
+        _dRProjectile = GameEntry.GameManager.DRProjectiles.GetDataRow(CurrentDRUnit.ProjectileId);
         _input = new ProtagonistActions();
         _input.ProtagonistNormal.Move2d.performed += Move;
         _input.ProtagonistNormal.Move2d.canceled += StopMove;
@@ -50,7 +48,7 @@ public class ProtagonistEntity : UnitBaseEntity
         transform.position = ((Transform)os[1]).position;
         _input.ProtagonistNormal.Enable();
 
-        GameEntry.GameManager.protagonistEntity = this;
+        GameEntry.GameManager.ProtagonistEntity = this;
         _attackElapsedTime = 0;
     }
 
@@ -61,7 +59,7 @@ public class ProtagonistEntity : UnitBaseEntity
     private void Attack_canceled(InputAction.CallbackContext context)
     {
         //StopFire();
-        _isAttacking = false;
+        _isAttackTarget = false;
     }
 
     /// <summary>
@@ -71,7 +69,7 @@ public class ProtagonistEntity : UnitBaseEntity
     private void Attack_performed(InputAction.CallbackContext obj)
     {
         //StartFire();
-        _isAttacking = true;
+        _isAttackTarget = true;
     }
     /// <summary>
     /// 发射一次子弹（你原来的鼠标取点逻辑放这里）。
@@ -99,10 +97,18 @@ public class ProtagonistEntity : UnitBaseEntity
             {
                 (Vector2)transform.position,
                 (Vector2)mouseWorld,
-                _dRProtagonist.ProjectileSpeed,
+                CurrentDRUnit.ProjectileSpeed,
                 this,
             });
     }
+
+	protected override void OnAttackDuring()
+	{
+        FireOnce();
+
+        base.OnAttackDuring();
+	}
+
     /// <summary>
     /// 移动
     /// </summary>
@@ -127,28 +133,6 @@ public class ProtagonistEntity : UnitBaseEntity
     {
         base.OnUpdate(elapseSeconds, realElapseSeconds);
 
-        _rigidbody2D.velocity = _moveInput.normalized * _dRProtagonist.MoveSeep;
-
-        if(_isAttacking && _isAttack)
-        {
-            FireOnce();
-            _attackElapsedTime = 0;
-            _isAttack = false;
-        }
-        else
-        {
-            _attackElapsedTime += elapseSeconds;
-            if (_attackElapsedTime >= _dRProtagonist.AttackSpeed)
-            {
-                _isAttack = true;
-                if (_isAttacking && _isAttack)
-                {
-                    FireOnce();
-                    _attackElapsedTime = 0;
-                    _isAttack = false;
-                }
-            }
-        }
     }
 
     /// <summary>

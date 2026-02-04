@@ -32,9 +32,13 @@ public class UnitBaseEntity : EntityLogic
     /// </summary>
     protected AIPath _aIPath;
     /// <summary>
-    /// 单位阵营
+    /// 单位数据表
     /// </summary>
-    public CAMP Camp {  get; protected set; }
+    protected DRUnit _dRUnit;
+    /// <summary>
+    /// 当前单位数据表
+    /// </summary>
+    public DRUnit CurrentDRUnit { get; protected set; }
     /// <summary>
     /// 实体受伤盒（代表攻击/子弹可命中的区域）
     /// </summary>
@@ -64,6 +68,10 @@ public class UnitBaseEntity : EntityLogic
     /// </summary>
     protected bool _isAttack;
     /// <summary>
+    /// 是否有攻击触发
+    /// </summary>
+    protected bool _isAttackTarget;
+    /// <summary>
     /// 是否正在攻击
     /// </summary>
     protected bool _isAttacking;
@@ -74,7 +82,7 @@ public class UnitBaseEntity : EntityLogic
     /// <summary>
     /// 实体组件缓存：避免频繁 GetComponent 导致性能下降。
     /// </summary>
-    private static Dictionary<GameObject, UnitBaseEntity> _entityCache = new Dictionary<GameObject, UnitBaseEntity>();
+    public static Dictionary<GameObject, UnitBaseEntity> EntityCache = new Dictionary<GameObject, UnitBaseEntity>();
 
     /// <summary>
     /// 上一次路径更新的时间（用于限制寻路频率）。
@@ -85,6 +93,7 @@ public class UnitBaseEntity : EntityLogic
     /// 路径更新最小间隔（秒），默认0.5秒。
     /// </summary>
     protected float _pathUpdateInterval = 0.5f;
+    
 
     protected override void OnShow(object userData)
     {
@@ -92,15 +101,16 @@ public class UnitBaseEntity : EntityLogic
 
         _isAttack = false;
         _isAttacking = false;
+        _isAttackTarget = false;
         // 注册到缓存
-        _entityCache[gameObject] = this;
+        EntityCache[gameObject] = this;
     }
 
 	protected override void OnHide(bool isShutdown, object userData)
 	{
 		base.OnHide(isShutdown, userData);
         // 从缓存移除
-        _entityCache.Remove(gameObject);
+        EntityCache.Remove(gameObject);
 	}
 
     /// <summary>
@@ -184,16 +194,72 @@ public class UnitBaseEntity : EntityLogic
     {
         if (go == null) return null;
 
-        if (!_entityCache.TryGetValue(go, out var entity))
+        if (!EntityCache.TryGetValue(go, out var entity))
         {
             entity = go.GetComponent<UnitBaseEntity>();
             if (entity != null)
             {
-                _entityCache[go] = entity;
+                EntityCache[go] = entity;
             }
         }
 
         return entity;
+    }
+
+	protected override void OnUpdate(float elapseSeconds, float realElapseSeconds)
+	{
+		base.OnUpdate(elapseSeconds, realElapseSeconds);
+        
+        _rigidbody2D.velocity = _moveInput.normalized * CurrentDRUnit.MoveSeep;
+        if(_isAttacking == false)
+        {
+            _attackElapsedTime += elapseSeconds;
+            if (_attackElapsedTime >= CurrentDRUnit.AttackSpeed)
+            {
+                _isAttack = true;
+                if (_isAttacking == false && _isAttack && _isAttackTarget)
+                {
+                    Attack();
+                }
+            }
+        }
+	}
+
+    private void Attack()
+    {
+        OnAttackBefore();
+    }
+    /// <summary>
+    /// 攻击前
+    /// </summary>
+    protected virtual void OnAttackBefore()
+    {
+        _isAttacking = true;
+        _isAttack = false;
+        OnAttackDuring();
+    }
+    /// <summary>
+    /// 攻击中
+    /// </summary>
+    protected virtual void OnAttackDuring()
+    {
+        OnAttackAfter();
+    }
+    /// <summary>
+    /// 攻击后
+    /// </summary>
+    protected virtual void OnAttackAfter()
+    {
+        _isAttacking = false;
+        _isAttack = true;
+        _attackElapsedTime = 0;
+    }
+    /// <summary>
+    /// 受到伤害
+    /// </summary>
+    public virtual void OnInjuried(float damage)
+    {
+        
     }
 }
 
