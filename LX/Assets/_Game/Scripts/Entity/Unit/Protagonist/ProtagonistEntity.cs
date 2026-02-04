@@ -15,12 +15,17 @@ public class ProtagonistEntity : UnitBaseEntity
     /// </summary>
     private ProtagonistActions _input;
     /// <summary>
+    /// 主角运行时数据副本（用于独立血量等运行时变化，避免共享数据表）。
+    /// </summary>
+    private DRProtagonist _runtimeDRUnit;
+    /// <summary>
     /// 初始化主角实体的运行时数据
     /// </summary>
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
-        
+        // 仅在初始化时创建运行时数据副本，避免频繁分配导致 GC。
+        _runtimeDRUnit = new DRProtagonist();
     }
 
     /// <summary>
@@ -36,7 +41,12 @@ public class ProtagonistEntity : UnitBaseEntity
 
         object[] os = userData as object[];
         _dRUnit = os[0] as DRProtagonist;
-        CurrentDRUnit = _dRUnit;
+        if (_runtimeDRUnit == null)
+        {
+            _runtimeDRUnit = new DRProtagonist();
+        }
+        _runtimeDRUnit.CopyFrom(_dRUnit as DRProtagonist);
+        CurrentDRUnit = _runtimeDRUnit;
 
         _dRProjectile = GameEntry.GameManager.DRProjectiles.GetDataRow(CurrentDRUnit.ProjectileId);
         _input = new ProtagonistActions();

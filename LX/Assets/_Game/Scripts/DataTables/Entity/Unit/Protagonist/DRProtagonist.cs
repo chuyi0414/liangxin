@@ -32,4 +32,32 @@ public class DRProtagonist : DRUnit
         AttackSpeed = float.Parse(colString[index++]);
         return true;
     }
+
+    /// <summary>
+    /// 从指定主角数据行复制所有字段（用于运行时独立数据副本）。
+    /// </summary>
+    /// <param name="source">源主角数据行（只读配置）。</param>
+    public void CopyFrom(DRProtagonist source)
+    {
+        if (source == null)
+        {
+            return;
+        }
+
+        // 逐项复制基础属性，确保运行时副本与配置一致但互不共享。
+        m_Id = source.m_Id;
+        Code = source.Code;
+        Name = source.Name;
+        Camp = source.Camp;
+        PrefabPath = source.PrefabPath;
+        MoveSeep = source.MoveSeep;
+        AttackRange = source.AttackRange;
+        VisualScope = source.VisualScope;
+        AttackType = source.AttackType;
+        ProjectileId = source.ProjectileId;
+        ProjectileSpeed = source.ProjectileSpeed;
+        HP = source.HP;
+        Attack = source.Attack;
+        AttackSpeed = source.AttackSpeed;
+    }
 }

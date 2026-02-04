@@ -142,6 +142,10 @@ public class EnemyBaseEneiey : UnitBaseEntity
     /// </summary>
     [SerializeField]
     private CircleCollider2D _attackRangeDataCollider;
+    /// <summary>
+    /// 敌人运行时数据副本（用于独立血量等运行时变化，避免共享数据表）。
+    /// </summary>
+    private DREnemy _runtimeDRUnit;
 
     /// <summary>
     /// 在Scene视图绘制敌人范围（便于调试）
@@ -262,6 +266,9 @@ public class EnemyBaseEneiey : UnitBaseEntity
     {
         base.OnInit(userData);
 
+        // 仅在初始化时创建运行时数据副本，避免频繁分配导致 GC。
+        _runtimeDRUnit = new DREnemy();
+
         _aIDestinationSetter = GetComponent<AIDestinationSetter>();
         _aIPath = GetComponent<AIPath>();
         ApplyConstantSpeedSettings();
@@ -277,7 +284,12 @@ public class EnemyBaseEneiey : UnitBaseEntity
         object[] os = userData as object[];
         transform.position = (Vector3)os[0];
         _dRUnit = (DREnemy)os[1];
-        CurrentDRUnit = _dRUnit;
+        if (_runtimeDRUnit == null)
+        {
+            _runtimeDRUnit = new DREnemy();
+        }
+        _runtimeDRUnit.CopyFrom(_dRUnit as DREnemy);
+        CurrentDRUnit = _runtimeDRUnit;
         _aIPath.maxSpeed = CurrentDRUnit.MoveSeep;
         _visualScopeDistance = CurrentDRUnit.VisualScope;
         _attackRangeDistance = CurrentDRUnit.AttackRange;

@@ -35,7 +35,7 @@ public class ProjectileBase : EntityLogic
     /// <summary>
     /// 子弹阵营
     /// </summary>
-    public CAMP Camp;
+    private CAMP Camp;
 
     protected override void OnInit(object userData)
     {
@@ -85,7 +85,7 @@ public class ProjectileBase : EntityLogic
 
         if (layer == LayerMask.NameToLayer("Company"))
         {
-            MyHideEntity(collision);
+            //MyHideEntity(collision);
         }
 
         if (Camp == CAMP.Protagonist)
@@ -112,12 +112,14 @@ public class ProjectileBase : EntityLogic
         {
             return;
         }
+
         _isHidden = true;
         if(collision.gameObject != GameEntry.GameManager.CompanyEntity.gameObject)
         {
             var unit = collision.GetComponentInParent<UnitBaseEntity>();
             if (unit != null)
             {
+                Log.Info("造成了伤害");
                 unit.OnInjuried(_unitBaseEntity.CurrentDRUnit.Attack);
             }
         }
