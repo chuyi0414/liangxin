@@ -168,8 +168,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 98f6ced9d905de547adec85a4c7771b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  protagonistEntity: {fileID: 0}
-  companyEntity: {fileID: 0}
+  ProtagonistEntity: {fileID: 0}
+  CompanyEntity: {fileID: 0}
 --- !u!114 &335623608
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -341,6 +341,7 @@ GameObject:
   - component: {fileID: 519420031}
   - component: {fileID: 519420029}
   - component: {fileID: 519420030}
+  - component: {fileID: 519420033}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -466,6 +467,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1742473190}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &519420033
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 519420028}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f1ce4ea76088564fabcdd26deafc8f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _priority: 0
+  _useUnscaledTime: 0
+  _cameraComponent: {fileID: 1742473191}
+  _camera: {fileID: 519420031}
+  _target: {fileID: 0}
+  _offset: {x: 0, y: 0, z: -10}
+  _useTargetRotation: 0
+  _smoothTime: 0.1
+  _maxSpeed: 999
 --- !u!1001 &545483712
 PrefabInstance:
   m_ObjectHideFlags: 0

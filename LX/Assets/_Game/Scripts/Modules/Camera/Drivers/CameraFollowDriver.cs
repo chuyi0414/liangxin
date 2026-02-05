@@ -77,4 +77,31 @@ public sealed class CameraFollowDriver : CameraDriverBase
             _maxSpeed,
             deltaTime);
     }
+
+    /// <summary>
+    /// 设置跟随目标。
+    /// </summary>
+    /// <param name="target">要跟随的目标。</param>
+    /// <param name="enable">是否启用驱动。</param>
+    public void SetTarget(Transform target, bool enable = true)
+    {
+        _target = target;
+        if (enable)
+        {
+            enabled = true;
+        }
+    }
+
+    /// <summary>
+    /// 清除跟随目标（可选禁用驱动）。
+    /// </summary>
+    /// <param name="disableDriver">是否禁用驱动组件。</param>
+    public void ClearTarget(bool disableDriver = false)
+    {
+        _target = null;
+        if (disableDriver)
+        {
+            enabled = false;
+        }
+    }
 }

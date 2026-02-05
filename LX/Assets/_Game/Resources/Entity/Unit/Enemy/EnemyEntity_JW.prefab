@@ -80,6 +80,7 @@ GameObject:
   - component: {fileID: 6072421720516237284}
   - component: {fileID: 7914133984607366391}
   - component: {fileID: 8861079297314209440}
+  - component: {fileID: 8743669973011612788}
   m_Layer: 7
   m_Name: EnemyEntity_JW
   m_TagString: Untagged
@@ -244,6 +245,28 @@ MonoBehaviour:
   _hurtBoxCollider: {fileID: 2064593335454149909}
   _visualScopeDataCollider: {fileID: 8524188829812127971}
   _attackRangeDataCollider: {fileID: 5030657356245912699}
+--- !u!114 &8743669973011612788
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2352017446963717418}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cb6a34d769a1e4ac7b0b30e433aa443c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  version: 1073741824
+  smoothType: 0
+  subdivisions: 2
+  iterations: 2
+  strength: 0.5
+  uniformLength: 1
+  maxSegmentLength: 0.25
+  bezierTangentLength: 0.4
+  offset: 0.2
+  factor: 0.1
 --- !u!1 &4660549165988012134
 GameObject:
   m_ObjectHideFlags: 0
@@ -398,7 +421,7 @@ Rigidbody2D:
   m_ExcludeLayers:
     serializedVersion: 2
     m_Bits: 0
-  m_Interpolate: 0
+  m_Interpolate: 1
   m_SleepingMode: 1
   m_CollisionDetection: 0
   m_Constraints: 4

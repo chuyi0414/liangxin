@@ -60,6 +60,10 @@ public class ProtagonistEntity : UnitBaseEntity
 
         GameEntry.GameManager.ProtagonistEntity = this;
         _attackElapsedTime = 0;
+
+        CameraFollowDriver follow = GameEntry.Camera.GetCamera("main").GetComponent<CameraFollowDriver>();
+        follow.SetTarget(transform);
+        follow.transform.position = transform.position;
     }
 
     /// <summary>
@@ -156,6 +160,9 @@ public class ProtagonistEntity : UnitBaseEntity
         GameEntry.GameManager.UnregisterKeyUnit(this);
         // 从空间网格移除
         GameEntry.GameManager.UnitBatchUpdateManager.UnregisterUnit(this);
+
+        CameraFollowDriver follow = GameEntry.Camera.GetCamera("main").GetComponent<CameraFollowDriver>();
+        follow.ClearTarget();
     }
 
    
