@@ -70,6 +70,7 @@ public class GameUIForm : UIFormLogic
     /// </summary>
     [SerializeField] private TMP_Text _txtStage;
 
+    private int _recruitUIFormId;
     protected override void OnInit(object userData)
     {
         base.OnInit(userData);
@@ -129,6 +130,8 @@ public class GameUIForm : UIFormLogic
               },
               this
           );
+
+        _recruitUIFormId = GameEntry.UI.OpenUIForm("UI/Game/RecruitUIForm/RecruitUIForm", "Normal");
     }
 
     private void OnPollutionAttackEvent(object sender, GameEventArgs e)
@@ -164,6 +167,12 @@ public class GameUIForm : UIFormLogic
             }
         }
         GameEntry.DataBinding.Get<int>("CompanyConscience").Value = (int)_companyConscience;
+    }
+
+    protected override void OnRecycle()
+    {
+        base.OnRecycle();
+        GameEntry.UI.CloseUIForm(_recruitUIFormId);
     }
 
     protected override void OnClose(bool isShutdown, object userData)
