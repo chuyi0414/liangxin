@@ -1,4 +1,4 @@
-﻿using GameFramework.DataTable;
+using GameFramework.DataTable;
 using GameFramework.Event;
 using GameFramework.Fsm;
 using GameFramework.Procedure;
@@ -26,6 +26,8 @@ public class LoadProcedure : ProcedureBase
     private DataTableBase _dRProjectile;
     //DREnemy
     private DataTableBase _dREnemy;
+    //DREmployee
+    private DataTableBase _dREmployee;
 
     protected override void OnInit(IFsm<IProcedureManager> procedureOwner)
     {
@@ -37,7 +39,7 @@ public class LoadProcedure : ProcedureBase
     {
         base.OnEnter(procedureOwner);
 
-        GameEntry.Event.Subscribe(LoadDataTableSuccessEventArgs.EventId,OnLoadDataTableSuccess);
+        GameEntry.Event.Subscribe(LoadDataTableSuccessEventArgs.EventId, OnLoadDataTableSuccess);
         GameEntry.Event.Subscribe(LoadDataTableFailureEventArgs.EventId, OnLoadDataTableFailure);
         //战斗数据
         if (GameEntry.DataTable.HasDataTable<DRBattleData>())
@@ -49,7 +51,7 @@ public class LoadProcedure : ProcedureBase
             _dRBattleData = (DataTableBase)GameEntry.DataTable.CreateDataTable<DRBattleData>();
         }
         _dRBattleData.ReadData("DataTables/Game/BattleData"
-            ,new object[]
+            , new object[]
             {
                 this,
                 "BattleData"
@@ -85,7 +87,7 @@ public class LoadProcedure : ProcedureBase
                 "Projectile"
             });
         //敌人
-        if(GameEntry.DataTable.HasDataTable<DREnemy>())
+        if (GameEntry.DataTable.HasDataTable<DREnemy>())
         {
             _dREnemy = (DataTableBase)GameEntry.DataTable.GetDataTable<DREnemy>();
         }
@@ -94,11 +96,26 @@ public class LoadProcedure : ProcedureBase
             _dREnemy = (DataTableBase)GameEntry.DataTable.CreateDataTable<DREnemy>();
         }
         _dREnemy.ReadData("DataTables/Entity/Unit/Enemy/Enemy"
-            ,new object[]
+            , new object[]
             {
                 this,
                 "Enemy"
             });
+        //员工
+        if (GameEntry.DataTable.HasDataTable<DREmployee>())
+        {
+            _dREmployee = (DataTableBase)GameEntry.DataTable.GetDataTable<DREmployee>();
+        }
+        else
+        {
+            _dREmployee = (DataTableBase)GameEntry.DataTable.CreateDataTable<DREmployee>();
+        }
+        _dREmployee.ReadData("DataTables/Entity/Unit/Employee/Employee"
+            ,new object[]
+             {
+                 this,
+                "Employee"
+             });
     }
 
     protected override void OnUpdate(IFsm<IProcedureManager> procedureOwner, float elapseSeconds, float realElapseSeconds)
@@ -157,11 +174,16 @@ public class LoadProcedure : ProcedureBase
             IDataTable<DREnemy> dREnemys = GameEntry.DataTable.GetDataTable<DREnemy>();
             GameEntry.GameManager.DREnemies = dREnemys;
         }
+        else if (os[1].Equals("Employee"))
+        {
+            IDataTable<DREmployee> dDREmployees = GameEntry.DataTable.GetDataTable<DREmployee>();
+            GameEntry.GameManager.DREmployees = dDREmployees;
+        }
 
-        _accomplishLoadNumber++;
+            _accomplishLoadNumber++;
         if(_accomplishLoadNumber == _loadNumber)
         {
-            _loadUIFormId = GameEntry.UI.OpenUIForm("UI/Load/LoadUIForm", "Normal");
+            _loadUIFormId = GameEntry.UI.OpenUIForm("Prefabs/UI/Load/LoadUIForm", "Normal");
         }
     }
 }

@@ -16,5 +16,9 @@ public class EnemyEntity_JW : EnemyBaseEneiey
         base.OnInit(userData);
     }
 
-    
+    protected override void OnShow(object userData)
+    {
+        base.OnShow(userData);
+
+    }
 }

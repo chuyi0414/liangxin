@@ -16,15 +16,15 @@ public class GameUIForm : UIFormLogic
     [SerializeField]private Button _btnPause;
 
     /// <summary>资金文本</summary>
-    [SerializeField] private TMP_Text _txtMoney;
+    [SerializeField] private TextMeshProUGUI _txtMoney;
     /// <summary>良心文本</summary>
-    [SerializeField] private TMP_Text _txtConscience;
+    [SerializeField] private TextMeshProUGUI _txtConscience;
     /// <summary>黑心文本</summary>
-    [SerializeField] private TMP_Text _txtBlackHeart;
+    [SerializeField] private TextMeshProUGUI _txtBlackHeart;
     /// <summary>
     /// 公司良心
     /// </summary>
-    [SerializeField] private TMP_Text _txtCompanyConscience;
+    [SerializeField] private TextMeshProUGUI _txtCompanyConscience;
     /// <summary>
     /// 当前公司良心最大值
     /// </summary>
@@ -40,7 +40,7 @@ public class GameUIForm : UIFormLogic
     /// <summary>
     /// 公司污染
     /// </summary>
-    [SerializeField] private TMP_Text _txtCompanyPollution;
+    [SerializeField] private TextMeshProUGUI _txtCompanyPollution;
     /// <summary>
     /// 当前公司污染百分比
     /// </summary>
@@ -64,11 +64,11 @@ public class GameUIForm : UIFormLogic
     /// <summary>
     /// 波次倒计时
     /// </summary>
-    [SerializeField] private TMP_Text _txtWaveCountdown;
+    [SerializeField] private TextMeshProUGUI _txtWaveCountdown;
     /// <summary>
     /// 波次阶段
     /// </summary>
-    [SerializeField] private TMP_Text _txtStage;
+    [SerializeField] private TextMeshProUGUI _txtStage;
 
     private int _recruitUIFormId;
     protected override void OnInit(object userData)
@@ -131,7 +131,7 @@ public class GameUIForm : UIFormLogic
               this
           );
 
-        _recruitUIFormId = GameEntry.UI.OpenUIForm("UI/Game/RecruitUIForm/RecruitUIForm", "Normal");
+        _recruitUIFormId = GameEntry.UI.OpenUIForm("Prefabs/UI/Game/RecruitUIForm/RecruitUIForm", "Normal");
     }
 
     private void OnPollutionAttackEvent(object sender, GameEventArgs e)

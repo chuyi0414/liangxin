@@ -119,7 +119,6 @@ public class ProjectileBase : EntityLogic
             var unit = collision.GetComponentInParent<UnitBaseEntity>();
             if (unit != null)
             {
-                Log.Info("造成了伤害");
                 unit.OnInjuried(_unitBaseEntity.CurrentDRUnit.Attack);
             }
         }

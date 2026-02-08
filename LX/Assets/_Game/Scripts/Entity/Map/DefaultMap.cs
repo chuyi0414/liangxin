@@ -14,12 +14,17 @@ public class DefaultMap : EntityLogic
     /// 主角出生位置
     /// </summary>
     [SerializeField]
-    private Transform _protagonistTransform;
+    public Transform _protagonistTransform;
     /// <summary>
     /// 公司出生位置
     /// </summary>
     [SerializeField]
-    private Transform _companyTransform;
+    public Transform _companyTransform;
+    /// <summary>
+    /// 员工生成点
+    /// </summary>
+    [SerializeField]
+    public Transform _employeeGenericPoint;
 
     /// <summary>
     /// A*扫描协程变量，避免重复启动扫描
@@ -47,6 +52,7 @@ public class DefaultMap : EntityLogic
     {
         base.OnShow(userData);
 
+        GameEntry.GameManager._defaultMap = this;
         IDataTable<DRProtagonist> dRProtagonists = GameEntry.GameManager.DRProtagonists;
         if (dRProtagonists != null)
         {
@@ -69,7 +75,7 @@ public class DefaultMap : EntityLogic
         // 创建公司实体
         GameEntry.Entity.ShowEntity<CompanyEntity>(
             GameEntry.EntityIdPool.Acquire()
-            , "Entity/Company/CompanyEntity"
+            , "Prefabs/Entity/Company/CompanyEntity"
             , "Environment"
             , new object[]
             {

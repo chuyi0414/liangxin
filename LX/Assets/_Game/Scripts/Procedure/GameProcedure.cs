@@ -22,8 +22,8 @@ public class GameProcedure: ProcedureBase
     protected override void OnEnter(IFsm<IProcedureManager> procedureOwner)
     {
         base.OnEnter(procedureOwner);
-        GameEntry.Entity.ShowEntity<DefaultMap>(GameEntry.EntityIdPool.Acquire(), "Entity/Map/Map1", "Environment");
-        _gameUIFormId = GameEntry.UI.OpenUIForm("UI/Game/GameUIForm", "Normal");
+        GameEntry.Entity.ShowEntity<DefaultMap>(GameEntry.EntityIdPool.Acquire(), "Prefabs/Entity/Map/Map1", "Environment");
+        _gameUIFormId = GameEntry.UI.OpenUIForm("Prefabs/UI/Game/GameUIForm", "Normal");
     }
 
     protected override void OnUpdate(IFsm<IProcedureManager> procedureOwner, float elapseSeconds, float realElapseSeconds)

@@ -42,6 +42,9 @@ public class GameManager : GameFrameworkComponent
     }
 
     private IDataTable<DREnemy> _drEnemys;
+    /// <summary>
+    /// 敌人数据表
+    /// </summary>
     public IDataTable<DREnemy> DREnemies
     {
         get
@@ -69,6 +72,26 @@ public class GameManager : GameFrameworkComponent
             _dRBattleDatas = value;
         }
     }
+
+    private IDataTable<DREmployee> _dREmployees;
+    /// <summary>
+    /// 员工数据表
+    /// </summary>
+    public IDataTable<DREmployee> DREmployees
+    {
+        get
+        {
+            return _dREmployees;
+        }
+        set 
+        {
+            _dREmployees = value;
+        }
+    }
+    /// <summary>
+    /// 地图实体
+    /// </summary>
+    public DefaultMap _defaultMap;
     /// <summary>
     /// 主角
     /// </summary>
@@ -101,9 +124,9 @@ public class GameManager : GameFrameworkComponent
     /// <summary>
     /// 在指定地方创建敌人
     /// </summary>
-    public void TryCreationEnemy(string id,Vector3 v3)
+    public void TryCreationEnemy(int id,Vector3 v3)
     {
-        DREnemy dREnemy = DREnemies.GetDataRow(1);
+        DREnemy dREnemy = DREnemies.GetDataRow(id);
         GameEntry.Entity.ShowEntity<EnemyEntity_JW>(
             GameEntry.EntityIdPool.Acquire(),
             dREnemy.PrefabPath,
@@ -120,15 +143,17 @@ public class GameManager : GameFrameworkComponent
     /// </summary>
     /// <param name="prefabPath">员工预制体路径</param>
     /// <param name="pos">生成位置</param>
-    public void CreateEmployee(string prefabPath, Vector3 pos)
+    public void CreateEmployee(int id, Vector3 pos)
     {
-        GameEntry.Entity.ShowEntity<EmployeeEntity>(
+        DREmployee dREmployee = DREmployees.GetDataRow(id);
+        GameEntry.Entity.ShowEntity<EmployeeBaseEntity>(
             GameEntry.EntityIdPool.Acquire(),
-            prefabPath,
-            "Employee",
+            dREmployee.PrefabPath,
+            "Character",
             new object[]
             {
-                pos
+                pos,
+                dREmployee
             });
     }
 

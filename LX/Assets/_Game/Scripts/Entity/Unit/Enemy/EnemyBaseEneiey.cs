@@ -381,6 +381,9 @@ public class EnemyBaseEneiey : UnitBaseEntity
                 _lastTargetPosition = currentTargetPosition;
             }
         }
+
+        base.OnUpdate(elapseSeconds, realElapseSeconds);
+        _isAttackTarget = _targetTransform != null && IsTargetInAttackRange(_targetTransform);
     }
 
     /// <summary>
@@ -721,4 +724,16 @@ public class EnemyBaseEneiey : UnitBaseEntity
         }
     }
 
+    protected override void OnAttackBefore()
+    {
+        base.OnAttackBefore();
+
+    }
+
+    protected override void OnAttackDuring()
+    {
+        UnitBaseEntity target = UnitBaseEntity.GetCachedEntity(_targetTransform.gameObject);
+        target.OnInjuried(CurrentDRUnit.Attack);
+        base.OnAttackDuring();
+    }
 }

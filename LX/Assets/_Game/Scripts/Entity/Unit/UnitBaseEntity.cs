@@ -210,7 +210,6 @@ public class UnitBaseEntity : EntityLogic
 	{
 		base.OnUpdate(elapseSeconds, realElapseSeconds);
         
-        _rigidbody2D.velocity = _moveInput.normalized * CurrentDRUnit.MoveSeep;
         if(_isAttacking == false)
         {
             _attackElapsedTime += elapseSeconds;
@@ -269,8 +268,9 @@ public class UnitBaseEntity : EntityLogic
 public enum CAMP
 {
     Protagonist = 1,
-    Enemy = 2,
-    NPC = 3
+    Employee = 2,
+    Enemy = 3,
+    NPC = 4
 }
 
 public enum ATTACKTYPE

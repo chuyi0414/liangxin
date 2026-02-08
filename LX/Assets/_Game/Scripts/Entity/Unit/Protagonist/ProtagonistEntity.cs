@@ -147,6 +147,7 @@ public class ProtagonistEntity : UnitBaseEntity
     {
         base.OnUpdate(elapseSeconds, realElapseSeconds);
 
+        _rigidbody2D.velocity = _moveInput.normalized * CurrentDRUnit.MoveSeep;
     }
 
     /// <summary>
@@ -165,5 +166,10 @@ public class ProtagonistEntity : UnitBaseEntity
         follow.ClearTarget();
     }
 
+    public override void OnInjuried(float damage)
+    {
+        base.OnInjuried(damage);
+        Log.Info("我是主角");
+    }
    
 }

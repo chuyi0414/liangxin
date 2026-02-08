@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityGameFramework.Runtime;
 
 /// <summary>
-/// Main¡˜≥Ã
+/// MainÊµÅÁ®ã
 /// </summary>
 public class MainProcedure : ProcedureBase
 {
@@ -21,7 +21,7 @@ public class MainProcedure : ProcedureBase
     protected override void OnEnter(IFsm<IProcedureManager> procedureOwner)
     {
         base.OnEnter(procedureOwner);
-        _mainUIFormId = GameEntry.UI.OpenUIForm("UI/Main/MainUIForm", "Normal");
+        _mainUIFormId = GameEntry.UI.OpenUIForm("Prefabs/UI/Main/MainUIForm", "Normal");
     }
 
     protected override void OnUpdate(IFsm<IProcedureManager> procedureOwner, float elapseSeconds, float realElapseSeconds)
