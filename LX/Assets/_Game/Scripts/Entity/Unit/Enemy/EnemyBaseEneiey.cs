@@ -732,8 +732,18 @@ public class EnemyBaseEneiey : UnitBaseEntity
 
     protected override void OnAttackDuring()
     {
-        UnitBaseEntity target = UnitBaseEntity.GetCachedEntity(_targetTransform.gameObject);
-        target.OnInjuried(CurrentDRUnit.Attack);
+        if(GameEntry.GameManager.CompanyEntity == _targetTransform.gameObject)
+        {
+            GameEntry.Event.Fire(
+                 this,
+                 PollutionAttackEventArgs.Create(new object[] { (int)CurrentDRUnit.Attack })
+             );
+        }
+        else
+        {
+            UnitBaseEntity target = UnitBaseEntity.GetCachedEntity(_targetTransform.gameObject);
+            target.OnInjuried(CurrentDRUnit.Attack);
+        }
         base.OnAttackDuring();
     }
 }
