@@ -79,8 +79,8 @@ GameObject:
   - component: {fileID: 5228934948509910677}
   - component: {fileID: 6072421720516237284}
   - component: {fileID: 7914133984607366391}
-  - component: {fileID: 8861079297314209440}
   - component: {fileID: 8743669973011612788}
+  - component: {fileID: 8861079297314209440}
   m_Layer: 7
   m_Name: EnemyEntity_JW
   m_TagString: Untagged
@@ -229,22 +229,6 @@ MonoBehaviour:
   slowWhenNotFacingTarget: 1
   preventMovingBackwards: 0
   constrainInsideGraph: 0
---- !u!114 &8861079297314209440
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2352017446963717418}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 56ed5d8e26d01404c8575739d35b97e1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _rigidbody2D: {fileID: 898929606012073393}
-  _hurtBoxCollider: {fileID: 2064593335454149909}
-  _visualScopeDataCollider: {fileID: 8524188829812127971}
-  _attackRangeDataCollider: {fileID: 5030657356245912699}
 --- !u!114 &8743669973011612788
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -267,6 +251,22 @@ MonoBehaviour:
   bezierTangentLength: 0.4
   offset: 0.2
   factor: 0.1
+--- !u!114 &8861079297314209440
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2352017446963717418}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56ed5d8e26d01404c8575739d35b97e1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _rigidbody2D: {fileID: 898929606012073393}
+  _hurtBoxCollider: {fileID: 2064593335454149909}
+  _visualScopeDataCollider: {fileID: 8524188829812127971}
+  _attackRangeDataCollider: {fileID: 5030657356245912699}
 --- !u!1 &4660549165988012134
 GameObject:
   m_ObjectHideFlags: 0

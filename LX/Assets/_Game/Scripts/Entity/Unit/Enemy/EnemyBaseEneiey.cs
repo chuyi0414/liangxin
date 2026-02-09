@@ -732,7 +732,7 @@ public class EnemyBaseEneiey : UnitBaseEntity
 
     protected override void OnAttackDuring()
     {
-        if(GameEntry.GameManager.CompanyEntity == _targetTransform.gameObject)
+        if(GameEntry.GameManager.CompanyEntity.gameObject == _targetTransform.gameObject)
         {
             GameEntry.Event.Fire(
                  this,

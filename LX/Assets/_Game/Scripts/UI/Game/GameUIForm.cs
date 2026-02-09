@@ -141,11 +141,11 @@ public class GameUIForm : UIFormLogic
         int attack = (int)os[0];
 
         _currentCompanyPollutionDamagePerPoint += attack;
-        if(_currentCompanyPollutionDamagePerPoint >= _companyPollutionDamagePerPoint)
+        while (_companyPollutionDamagePerPoint > 0 && _currentCompanyPollutionDamagePerPoint >= _companyPollutionDamagePerPoint)
         {
             _currentCompanyPollutionDamagePerPoint -= _companyPollutionDamagePerPoint;
             _companyPollutionPercentage++;
-            if(_companyPollutionPercentage >= _companyPollution)
+            while (_companyPollution > 0 && _companyPollutionPercentage >= _companyPollution)
             {
                 _companyPollutionPercentage -= _companyPollution;
                 //发送污染事件
